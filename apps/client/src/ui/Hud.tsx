@@ -7,6 +7,7 @@ import { useStore } from '../state/store';
 import { fmt, formatDuration } from './components';
 import { ElevationProfile } from './ElevationProfile';
 import { WorkoutHud } from './WorkoutHud';
+import { ActiveSegments, SegmentToast } from './SegmentHud';
 
 function gradeColor(g: number): string {
   if (g >= 8) return '#ef4444';
@@ -99,7 +100,10 @@ export function Hud({
         {s.draft > 0.03 && <div className="hud-chip draft">Windschatten −{Math.round(s.draft * 100)} %</div>}
         <div className="hud-chip">Ø {Math.round(s.avgPower)} W · NP {Math.round(s.normalizedPower)} W</div>
         <div className="hud-chip">{Math.round(s.kilojoules)} kJ</div>
+        <ActiveSegments snapshot={s} />
       </div>
+
+      <SegmentToast result={s.lastResult} />
 
       {s.workout && (
         <div className="hud-center">

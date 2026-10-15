@@ -11,6 +11,7 @@ export interface StoredActivity {
   summary: Omit<ActivitySummary, 'laps'> & { lapCount: number };
   simulated: boolean;
   fit: Uint8Array;
+  segments?: Array<{ id: string; name: string; type: string; timeS: number; isPb: boolean }>;
 }
 
 const DB = 'velo-sim';
@@ -64,6 +65,7 @@ export async function saveActivity(result: RideResult, simulated: boolean, title
     summary: { ...rest, lapCount: laps.length },
     simulated,
     fit: encodeFitActivity(result.samples, result.summary),
+    segments: result.segments.map((r) => ({ id: r.segment.id, name: r.segment.name, type: r.segment.type, timeS: r.timeS, isPb: r.saved })),
   };
   try {
     await tx('readwrite', (s) => s.put(activity));

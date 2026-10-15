@@ -64,6 +64,25 @@ export function RideSummary({ result, activity, onClose }: { result: RideResult;
             </button>
           </div>
         )}
+        {result.segments.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <div className="muted small" style={{ marginBottom: 4 }}>
+              Segmente & Runden
+            </div>
+            <table className="segments-table">
+              <tbody>
+                {result.segments.map((r, i) => (
+                  <tr key={i}>
+                    <td>{r.segment.name}</td>
+                    <td>{formatDuration(r.timeS)}</td>
+                    <td className="muted">{r.previousBestS !== undefined ? `PB ${formatDuration(r.previousBestS)}` : ''}</td>
+                    <td>{r.isPb ? (r.saved ? '🏆 Bestzeit' : '🏆 (Simulator)') : ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
         {s.durationS < 60 && <div className="notice" style={{ marginTop: 12 }}>Sehr kurze Fahrt – Strava ignoriert Aktivitäten unter einer Minute.</div>}
         <div className="row" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
           <button onClick={() => exportFile(fitFileName(activity), activity.fit)}>FIT-Datei exportieren</button>

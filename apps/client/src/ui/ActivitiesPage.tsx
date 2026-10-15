@@ -1,4 +1,6 @@
 import { useEffect } from 'react';
+import { ROUTES } from '@velo/routes';
+import { recordKey, recordsStore } from '../state/records';
 import { exportFile } from '../devices/files';
 import { activitiesStore, deleteActivity, fitFileName, loadActivities } from '../state/activities';
 import { useStore } from '../state/store';
@@ -6,6 +8,7 @@ import { fmt, formatDuration } from './components';
 
 export function ActivitiesPage() {
   const activities = useStore(activitiesStore);
+  const records = useStore(recordsStore);
   useEffect(() => {
     void loadActivities();
   }, []);
@@ -25,6 +28,33 @@ export function ActivitiesPage() {
               {activities.length} Fahrten · {totals.km.toFixed(0)} km · {formatDuration(totals.s)} · {fmt(totals.tss)} TSS
             </span>
           )}
+        </div>
+        <div className="card">
+          <h2>Persönliche Bestzeiten</h2>
+          <div className="grid cols-3">
+            {ROUTES.map((r) => (
+              <div key={r.id}>
+                <strong>{r.name}</strong>
+                <table className="segments-table">
+                  <tbody>
+                    {[{ id: 'lap', name: 'Runde' }, ...r.segments].map((seg) => {
+                      const pb = records[recordKey(r.id, seg.id)];
+                      return (
+                        <tr key={seg.id}>
+                          <td>{seg.name}</td>
+                          <td>{pb ? formatDuration(pb.timeS) : '–'}</td>
+                          <td className="muted small">{pb ? new Date(pb.date).toLocaleDateString('de-DE') : ''}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+          <div className="muted small" style={{ marginTop: 8 }}>
+            Fahrten mit dem Simulator zählen nicht für Bestzeiten.
+          </div>
         </div>
         {activities.length === 0 && <div className="card muted">Noch keine Fahrten. Unter „Fahren“ geht’s los.</div>}
         {activities.map((a) => (

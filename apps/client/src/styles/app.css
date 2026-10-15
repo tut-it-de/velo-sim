@@ -793,3 +793,74 @@ button.icon {
 .workout-done {
   font-weight: 700;
 }
+
+/* ---------- Segments ---------- */
+.segment-live {
+  background: rgba(13, 17, 23, 0.78);
+  border-left: 4px solid;
+  border-radius: 8px;
+  padding: 6px 10px;
+  width: 230px;
+  margin-top: 4px;
+}
+.segment-head {
+  font-weight: 700;
+  font-size: 14px;
+}
+.segment-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  margin: 5px 0;
+  overflow: hidden;
+}
+.segment-bar div {
+  height: 100%;
+}
+.segment-meta {
+  display: flex;
+  gap: 10px;
+  font-size: 13px;
+}
+.segment-meta .ahead {
+  color: var(--ok);
+  font-weight: 700;
+}
+.segment-meta .behind {
+  color: var(--warn);
+  font-weight: 700;
+}
+.segment-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 120px;
+  transform: translateX(-50%);
+  background: rgba(13, 17, 23, 0.88);
+  border: 2px solid;
+  border-radius: 14px;
+  padding: 10px 22px;
+  text-align: center;
+  animation: toast-in 0.35s ease-out;
+}
+.segment-toast.pb {
+  box-shadow: 0 0 0 4px rgba(255, 196, 0, 0.35);
+}
+.segment-toast-time {
+  font-size: 34px;
+  font-weight: 800;
+}
+@keyframes toast-in {
+  from {
+    transform: translate(-50%, 20px);
+    opacity: 0;
+  }
+}
+.segments-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.segments-table td {
+  padding: 3px 6px 3px 0;
+  border-bottom: 1px solid var(--border);
+}

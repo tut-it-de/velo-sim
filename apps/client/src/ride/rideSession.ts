@@ -9,11 +9,12 @@ import {
   type RiderSetup,
   type RiderState,
 } from '@velo/physics';
-import { getTrack, type Track } from '@velo/routes';
+import { SegmentTracker, getTrack, type ActiveSegment, type RouteSegment, type Track } from '@velo/routes';
 import { WorkoutPlayer, ftpFromRampTest, type PlayerState, type Workout } from '@velo/workouts';
 import { deviceManager } from '../devices/deviceManager';
 import type { RiderLook } from '../game/rider';
 import type { RiderFrame } from '../game/world';
+import { getBest, submitResult } from '../state/records';
 import type { Settings } from '../state/settings';
 import { Store } from '../state/store';
 
@@ -52,6 +53,19 @@ export interface RideSnapshot {
   noTrainerData: boolean;
   bots: Array<{ id: string; name: string; wkg: number; gapM: number }>;
   workout?: PlayerState & { name: string };
+  activeSegments: Array<ActiveSegment & { bestS?: number }>;
+  lastResult?: SegmentOutcome;
+}
+
+export interface SegmentOutcome {
+  /** 'lap' for a full lap, otherwise the route segment. */
+  segment: RouteSegment | { id: 'lap'; name: string; type: 'lap' };
+  timeS: number;
+  previousBestS?: number;
+  isPb: boolean;
+  saved: boolean;
+  /** ms timestamp, used by the HUD to show the result for a few seconds */
+  at: number;
 }
 
 export interface RideResult {
@@ -60,6 +74,7 @@ export interface RideResult {
   summary: ActivitySummary;
   samples: ActivitySample[];
   workout?: { id: string; name: string; compliance: number; completed: boolean; rampTestFtp?: number };
+  segments: SegmentOutcome[];
 }
 
 const TICK_MS = 100;
@@ -124,6 +139,9 @@ export class RideSession {
   /** Actual power per recorded second against workout time, for the chart overlay. */
   readonly workoutTrace: Array<[number, number]> = [];
   readonly player?: WorkoutPlayer;
+  private readonly segmentTracker: SegmentTracker;
+  readonly segmentResults: SegmentOutcome[] = [];
+  private lastResult?: SegmentOutcome;
 
   constructor(
     readonly routeId: string,
@@ -135,6 +153,7 @@ export class RideSession {
     this.recorder = new ActivityRecorder(settings.ftp);
     this.lastElevation = this.track.sample(0).y;
     if (options.workout) this.player = new WorkoutPlayer(options.workout, settings.ftp);
+    this.segmentTracker = new SegmentTracker(this.track.segments, this.track.length);
     if (options.bots) {
       BOT_PRESETS.forEach((b, i) => {
         this.bots.push({
@@ -203,6 +222,7 @@ export class RideSession {
       routeName: this.track.name,
       summary,
       samples: this.recorder.samples,
+      segments: [...this.segmentResults],
       workout: p && {
         id: p.workout.id,
         name: p.workout.name,
@@ -282,16 +302,28 @@ export class RideSession {
       }
     }
 
+    for (const r of this.segmentTracker.update(this.state.distanceM, this.movingMs / 1000)) {
+      this.addOutcome(r.segment, r.timeS);
+    }
+
     const lap = Math.floor(this.state.distanceM / this.track.length) + 1;
     if (lap > this.lapTimes.length + 1) {
       const movingS = this.movingMs / 1000;
       this.lapTimes.push(movingS - this.lapStartMovingS);
+      this.addOutcome({ id: 'lap', name: `Runde ${this.lapTimes.length}`, type: 'lap' }, movingS - this.lapStartMovingS);
       this.lapStartMovingS = movingS;
       // In a workout the FIT laps follow the workout blocks instead of the route.
       if (!this.player) this.recorder.lap();
     }
 
     this.snapshot.set(this.buildSnapshot(power, m.power3s, cadence, m.heartRate, m.stale));
+  }
+
+  private addOutcome(segment: SegmentOutcome['segment'], timeS: number): void {
+    const res = submitResult(this.routeId, segment.id, timeS, this.settings.useSimulator);
+    const outcome: SegmentOutcome = { segment, timeS, previousBestS: res.previous?.timeS, isPb: res.isPb, saved: res.saved, at: Date.now() };
+    this.segmentResults.push(outcome);
+    this.lastResult = outcome;
   }
 
   private gapAhead(myDistance: number): number {
@@ -375,6 +407,10 @@ export class RideSession {
       noTrainerData: stale,
       bots: this.bots.map((b) => ({ id: b.id, name: b.name, wkg: b.wkg, gapM: b.state.distanceM - this.state.distanceM })),
       workout: this.player ? { ...this.player.state, name: this.player.workout.name } : undefined,
+      activeSegments: this.segmentTracker
+        ? this.segmentTracker.current().map((a) => ({ ...a, bestS: getBest(this.routeId, a.segment.id)?.timeS }))
+        : [],
+      lastResult: this.lastResult,
     };
   }
 
