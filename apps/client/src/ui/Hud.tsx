@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { formatCoins } from '@velo/equipment';
 import { powerZone } from '@velo/metrics';
+import { MAX_DRAFT_REDUCTION } from '@velo/physics';
 import { CAMERA_MODES, type CameraMode } from '../game/world';
 import type { RideSession } from '../ride/rideSession';
 import { settingsStore } from '../state/settings';
@@ -63,6 +64,7 @@ export function Hud({
           </div>
         </div>
 
+        <div className="hud-top-center">
         <div className="hud-metrics">
           <Metric
             label="Leistung"
@@ -74,6 +76,8 @@ export function Hud({
           <Metric label="Speed" value={fmt(s.speedMps * 3.6, 1)} unit="km/h" />
           <Metric label="Kadenz" value={fmt(s.cadence)} unit="rpm" />
           <Metric label="Herzfrequenz" value={fmt(s.heartRate)} unit="bpm" />
+        </div>
+        <DraftBar draft={s.draft} />
         </div>
 
         <div className="hud-controls">
@@ -98,7 +102,6 @@ export function Hud({
           <span>%</span>
         </div>
         {s.trainerGrade !== undefined && <div className="hud-chip">Trainer {s.trainerGrade.toFixed(1)} %</div>}
-        {s.draft > 0.03 && <div className="hud-chip draft">Windschatten −{Math.round(s.draft * 100)} %</div>}
         <div className="hud-chip">Ø {Math.round(s.avgPower)} W · NP {Math.round(s.normalizedPower)} W</div>
         <div className="hud-chip">{Math.round(s.kilojoules)} kJ</div>
         <div className={`hud-chip coins ${s.coinsDisabled ? 'disabled' : ''}`} title={s.coinsDisabled ? 'Mit dem Simulator gibt es keine Watt-Taler' : 'Watt-Taler dieser Fahrt'}>
@@ -213,4 +216,22 @@ function RideOnToast({ session }: { session: RideSession }) {
   }, [net.lastRideOn?.at]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!visible || !net.lastRideOn) return null;
   return <div className="rideon-toast">👋 {net.lastRideOn.name} gibt dir Kudos!</div>;
+}
+
+/** Fills up the closer you ride behind someone (full = maximum drag reduction). */
+function DraftBar({ draft }: { draft: number }) {
+  const fill = Math.min(1, Math.max(0, draft / MAX_DRAFT_REDUCTION));
+  const active = fill > 0.02;
+  return (
+    <div className={`draft-bar ${active ? 'active' : ''}`} title="Windschatten: je voller, desto weniger Luftwiderstand">
+      <span className="draft-label">Windschatten</span>
+      <div className="draft-track" role="meter" aria-label="Windschatten" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fill * 100)}>
+        <div className="draft-fill" style={{ width: `${fill * 100}%` }} />
+        {[0.25, 0.5, 0.75].map((t) => (
+          <span key={t} className="draft-tick" style={{ left: `${t * 100}%` }} />
+        ))}
+      </div>
+      <span className="draft-value">{active ? `−${Math.round(draft * 100)} % Luft` : '–'}</span>
+    </div>
+  );
 }

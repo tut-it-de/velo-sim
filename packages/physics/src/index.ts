@@ -137,10 +137,12 @@ export function steadySpeed(powerW: number, setup: RiderSetup, env: Environment)
  * Drag reduction from riding behind someone. `gapM` is the distance from my
  * front wheel to the rear wheel of the rider in front.
  */
+export const MAX_DRAFT_REDUCTION = 0.32;
+
 export function draftReduction(gapM: number): number {
   if (gapM < 0 || gapM > 15) return 0;
-  if (gapM <= 1.5) return 0.32;
-  return 0.32 * Math.exp(-(gapM - 1.5) / 3.5);
+  if (gapM <= 1.5) return MAX_DRAFT_REDUCTION;
+  return MAX_DRAFT_REDUCTION * Math.exp(-(gapM - 1.5) / 3.5);
 }
 
 export const msToKmh = (v: number) => v * 3.6;
