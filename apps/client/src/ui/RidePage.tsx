@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ROUTES, getTrack } from '@velo/routes';
+import { workoutStats, type Workout } from '@velo/workouts';
 import { deviceManager } from '../devices/deviceManager';
 import { keepAwake } from '../devices/files';
 import { CAMERA_MODES, GameWorld, type CameraMode } from '../game/world';
@@ -11,8 +12,13 @@ import { uiStore } from '../state/ui';
 import { ElevationProfile } from './ElevationProfile';
 import { Hud } from './Hud';
 import { RideSummary } from './RideSummary';
+import { WorkoutSelect } from './WorkoutSelect';
+import { formatDuration } from './components';
 
-type Phase = { kind: 'select' } | { kind: 'ride'; routeId: string; bots: boolean } | { kind: 'summary'; result: RideResult; activity: StoredActivity };
+type Phase =
+  | { kind: 'select' }
+  | { kind: 'ride'; routeId: string; bots: boolean; workout?: Workout }
+  | { kind: 'summary'; result: RideResult; activity: StoredActivity };
 
 export function RidePage() {
   const [phase, setPhase] = useState<Phase>({ kind: 'select' });
@@ -27,8 +33,9 @@ export function RidePage() {
       <RideView
         routeId={phase.routeId}
         bots={phase.bots}
+        workout={phase.workout}
         onFinish={async (result) => {
-          const activity = await saveActivity(result, settingsStore.get().useSimulator);
+          const activity = await saveActivity(result, settingsStore.get().useSimulator, result.workout ? `Workout „${result.workout.name}“` : undefined);
           setPhase({ kind: 'summary', result, activity });
         }}
         onCancel={() => setPhase({ kind: 'select' })}
@@ -37,17 +44,19 @@ export function RidePage() {
   }
   return (
     <>
-      <RouteSelect onStart={(routeId, bots) => setPhase({ kind: 'ride', routeId, bots })} />
+      <RouteSelect onStart={(routeId, bots, workout) => setPhase({ kind: 'ride', routeId, bots, workout })} />
       {phase.kind === 'summary' && <RideSummary result={phase.result} activity={phase.activity} onClose={() => setPhase({ kind: 'select' })} />}
     </>
   );
 }
 
-function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean) => void }) {
+function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean, workout?: Workout) => void }) {
   const slots = useStore(deviceManager.slots);
   const settings = useStore(settingsStore);
   const [routeId, setRouteId] = useState(ROUTES[0]!.id);
   const [bots, setBots] = useState(true);
+  const [mode, setMode] = useState<'free' | 'workout'>('free');
+  const [workout, setWorkout] = useState<Workout | undefined>();
   const trainerReady = slots.trainer.state === 'connected';
 
   const useSimulator = async () => {
@@ -59,7 +68,17 @@ function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean) =>
   return (
     <div className="page">
       <div className="page-inner">
-        <h1>Freie Fahrt</h1>
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <h1>Fahren</h1>
+          <div className="segmented">
+            <button className={mode === 'free' ? 'active' : ''} onClick={() => setMode('free')}>
+              Freie Fahrt
+            </button>
+            <button className={mode === 'workout' ? 'active' : ''} onClick={() => setMode('workout')}>
+              Workout
+            </button>
+          </div>
+        </div>
         {!trainerReady && (
           <div className="notice row" style={{ justifyContent: 'space-between' }}>
             <span>Kein Trainer verbunden. Verbinde deinen KICKR unter „Geräte“ – oder teste mit dem Simulator.</span>
@@ -68,6 +87,8 @@ function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean) =>
             ) : null}
           </div>
         )}
+        {mode === 'workout' && <WorkoutSelect selectedId={workout?.id} onSelect={setWorkout} />}
+        {mode === 'workout' && <h2 style={{ margin: '4px 0 -6px' }}>Strecke für das Workout</h2>}
         <div className="grid cols-3">
           {ROUTES.map((r) => {
             const t = getTrack(r.id);
@@ -99,9 +120,17 @@ function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean) =>
             Pacer-Bots (2,0 / 2,8 / 3,5 W/kg) – zum Mitfahren im Windschatten
           </label>
           <div className="row">
-            <span className="muted small">Trainer-Schwierigkeit {Math.round(settings.trainerDifficulty * 100)} %</span>
-            <button className="primary" onClick={() => onStart(routeId, bots)}>
-              Los geht’s
+            <span className="muted small">
+              {mode === 'workout' && workout
+                ? `${workout.name} · ${formatDuration(workoutStats(workout).durationS)} · FTP ${settings.ftp} W`
+                : `Trainer-Schwierigkeit ${Math.round(settings.trainerDifficulty * 100)} %`}
+            </span>
+            <button
+              className="primary"
+              disabled={mode === 'workout' && !workout}
+              onClick={() => onStart(routeId, bots, mode === 'workout' ? workout : undefined)}
+            >
+              {mode === 'workout' ? (workout ? 'Workout starten' : 'Workout wählen') : 'Los geht’s'}
             </button>
           </div>
         </div>
@@ -110,7 +139,19 @@ function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean) =>
   );
 }
 
-function RideView({ routeId, bots, onFinish, onCancel }: { routeId: string; bots: boolean; onFinish: (r: RideResult) => void; onCancel: () => void }) {
+function RideView({
+  routeId,
+  bots,
+  workout,
+  onFinish,
+  onCancel,
+}: {
+  routeId: string;
+  bots: boolean;
+  workout?: Workout;
+  onFinish: (r: RideResult) => void;
+  onCancel: () => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [session, setSession] = useState<RideSession | null>(null);
   const [world, setWorld] = useState<GameWorld | null>(null);
@@ -121,8 +162,7 @@ function RideView({ routeId, bots, onFinish, onCancel }: { routeId: string; bots
   useEffect(() => {
     let cancelled = false;
     let w: GameWorld | null = null;
-    const s = new RideSession(routeId, settingsStore.get(), { bots });
-    const s2 = settingsStore.get();
+    const s = new RideSession(routeId, settingsStore.get(), { bots, workout });
     GameWorld.create(canvasRef.current!, routeId, { jersey: '#ff7a1a', frame: '#20232a', helmet: '#ffffff', rim: '#ff7a1a' }, setProgress)
       .then((created) => {
         if (cancelled) {
@@ -139,14 +179,13 @@ function RideView({ routeId, bots, onFinish, onCancel }: { routeId: string; bots
         void keepAwake(true);
       })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
-    void s2;
     return () => {
       cancelled = true;
       s.dispose();
       w?.dispose();
       void keepAwake(false);
     };
-  }, [routeId, bots]);
+  }, [routeId, bots, workout]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

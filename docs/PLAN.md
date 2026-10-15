@@ -37,9 +37,9 @@ Gemeinsamer Code: TypeScript, React (UI/HUD), Babylon.js (3D), Vite. Backend sp�
 
 | | Küstenrunde (flach) | Hügelrunde (wellig) | Bergrunde (bergig) |
 |---|---|---|---|
-| Länge | ~16 km | ~13 km | ~18 km |
-| Höhenmeter | ~50 hm | ~220 hm | ~500 hm |
-| Charakter | lange Geraden, max. 3 % | 4–5 kurze Anstiege 4–8 % | Hauptanstieg ~5 km Ø 7 % (bis 12 %) |
+| Länge | 16 km | 13 km | 18 km |
+| Höhenmeter | 41 hm | 202 hm | 472 hm |
+| Charakter | lange Geraden, max. 1,6 % | 4 Anstiege bis 7,5 % | Passo Alto 5 km Ø 7 % (Rampe 12 %), Abfahrt bis −9 % |
 | Ausrüstung | Aero zählt | gemischt | Gewicht zählt |
 
 ## Ausrüstung
@@ -67,8 +67,8 @@ CdA   = (CdA_Basis + ΔCdA_Rad + ΔCdA_Laufräder + ΔCdA_Trikot) · (1 − Wind
 | Phase | Inhalt | Status |
 |---|---|---|
 | 0 – KICKR-Spike | BLE-Paket (FTMS, Wahoo, CPS, HRM, CSC), Simulator, Geräte-Seite, Electron, iPad-Projekt | ✅ Code fertig – Test am echten KICKR offen |
-| 1 – Single-Player-MVP | Physik, Küstenrunde, 3D-Szene, HUD, freie Fahrt (SIM), FIT-Export | in Arbeit |
-| 2 – Workouts | ERG-Engine, `.zwo`, Bibliothek, FTP/Zonen/NP/IF/TSS, Streckenwahl | offen |
+| 1 – Single-Player-MVP | Physik, alle 3 Strecken, 3D-Szene, HUD, freie Fahrt (SIM), Pacer-Bots, Aktivitäten, FIT-Export | ✅ |
+| 2 – Workouts | ERG-Engine, `.zwo` Import/Export, Bibliothek (9), Editor, Rampentest → FTP, Zonen/NP/IF/TSS | ✅ |
 | 3 – Hügel- & Bergrunde | zwei weitere Strecken, Segmente, Bestzeiten | offen |
 | 4 – Ausrüstung & Währung | Accounts, API, Ledger, Garage, Shop, Wertungen, Zeitvergleich | offen |
 | 5 – Multiplayer | Colyseus, andere Fahrer, Windschatten, Chat, Kudos, Bots | offen |

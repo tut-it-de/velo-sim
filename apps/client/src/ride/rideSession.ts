@@ -10,6 +10,7 @@ import {
   type RiderState,
 } from '@velo/physics';
 import { getTrack, type Track } from '@velo/routes';
+import { WorkoutPlayer, ftpFromRampTest, type PlayerState, type Workout } from '@velo/workouts';
 import { deviceManager } from '../devices/deviceManager';
 import type { RiderLook } from '../game/rider';
 import type { RiderFrame } from '../game/world';
@@ -50,6 +51,7 @@ export interface RideSnapshot {
   trainerGrade?: number;
   noTrainerData: boolean;
   bots: Array<{ id: string; name: string; wkg: number; gapM: number }>;
+  workout?: PlayerState & { name: string };
 }
 
 export interface RideResult {
@@ -57,6 +59,7 @@ export interface RideResult {
   routeName: string;
   summary: ActivitySummary;
   samples: ActivitySample[];
+  workout?: { id: string; name: string; compliance: number; completed: boolean; rampTestFtp?: number };
 }
 
 const TICK_MS = 100;
@@ -116,17 +119,22 @@ export class RideSession {
   private runState: RideState = 'riding';
   private powerSum = 0;
   private np = 0;
+  private lastErgTarget?: number;
+  private lastErgSent = 0;
+  /** Actual power per recorded second against workout time, for the chart overlay. */
+  readonly workoutTrace: Array<[number, number]> = [];
+  readonly player?: WorkoutPlayer;
 
   constructor(
     readonly routeId: string,
     private readonly settings: Settings,
-    options: { bots?: boolean; mode?: 'free' | 'erg' } = {},
+    options: { bots?: boolean; workout?: Workout } = {},
   ) {
     this.track = getTrack(routeId);
     this.setup = defaultSetup(settings);
     this.recorder = new ActivityRecorder(settings.ftp);
     this.lastElevation = this.track.sample(0).y;
-    this.mode = options.mode ?? 'free';
+    if (options.workout) this.player = new WorkoutPlayer(options.workout, settings.ftp);
     if (options.bots) {
       BOT_PRESETS.forEach((b, i) => {
         this.bots.push({
@@ -144,8 +152,20 @@ export class RideSession {
     this.snapshot = new Store<RideSnapshot>(this.buildSnapshot(0, 0, 0, undefined, false));
   }
 
-  /** 'free' = SIM mode (grade to trainer); 'erg' = a workout controls the trainer. */
-  mode: 'free' | 'erg';
+  /** 'free' = SIM mode (grade to trainer); 'erg' = the workout holds a target power. */
+  get mode(): 'free' | 'erg' {
+    const w = this.player?.state;
+    return w && !w.finished && w.mode === 'erg' ? 'erg' : 'free';
+  }
+
+  skipSegment(): void {
+    this.player?.skip();
+    this.lastErgTarget = undefined;
+  }
+
+  setIntensity(value: number): void {
+    this.player?.setIntensity(value);
+  }
 
   get riderLateral(): number {
     return RIDER_LATERAL;
@@ -176,11 +196,20 @@ export class RideSession {
     clearInterval(this.timer);
     this.runState = 'finished';
     this.snapshot.set({ ...this.snapshot.get(), state: 'finished' });
+    const summary = this.recorder.summary();
+    const p = this.player;
     return {
       routeId: this.routeId,
       routeName: this.track.name,
-      summary: this.recorder.summary(),
+      summary,
       samples: this.recorder.samples,
+      workout: p && {
+        id: p.workout.id,
+        name: p.workout.name,
+        compliance: p.state.compliance,
+        completed: p.state.finished,
+        rampTestFtp: p.workout.test === 'ramp' && summary.best1min > 0 ? ftpFromRampTest(summary.best1min) : undefined,
+      },
     };
   }
 
@@ -203,13 +232,21 @@ export class RideSession {
     this.draft = draftReduction(this.gapAhead(this.state.distanceM) - BIKE_LENGTH);
     this.state = step(this.state, power, this.setup, { gradePercent: sample.gradePercent, draftReduction: this.draft }, dt);
     this.stepBots(dt);
-    this.updateTrainer(sample.gradePercent, now);
+
+    const moving = this.state.speedMps > 0.3 || power > 0;
+    if (this.player && moving && !this.player.state.finished) {
+      const { state: ws, segmentChanged } = this.player.advance(dt, { power, cadence });
+      if (segmentChanged && this.recorder.samples.length > 0) this.recorder.lap();
+      if (segmentChanged) this.lastErgTarget = undefined;
+      if (ws.finished) this.lastTrainerGrade = undefined; // hand control back to SIM immediately
+    }
+    if (this.mode === 'erg') this.updateErg(now);
+    else this.updateTrainer(sample.gradePercent, now);
 
     const elev = this.track.sample(this.state.distanceM).y;
     if (elev > this.lastElevation) this.ascent += elev - this.lastElevation;
     this.lastElevation = elev;
 
-    const moving = this.state.speedMps > 0.3 || power > 0;
     if (moving) {
       this.movingMs += dt * 1000;
       const acc = this.secondAcc;
@@ -241,6 +278,7 @@ export class RideSession {
         this.secondAcc = { ms: acc.ms - 1000, power: 0, cadence: 0, cadenceN: 0, hr: 0, hrN: 0 };
         const n = this.recorder.samples.length;
         if (n < 60 || n % 10 === 0) this.np = normalizedPower(this.recorder.samples.map((x) => x.power));
+        if (this.player) this.workoutTrace.push([this.player.state.elapsedS, avg]);
       }
     }
 
@@ -249,7 +287,8 @@ export class RideSession {
       const movingS = this.movingMs / 1000;
       this.lapTimes.push(movingS - this.lapStartMovingS);
       this.lapStartMovingS = movingS;
-      this.recorder.lap();
+      // In a workout the FIT laps follow the workout blocks instead of the route.
+      if (!this.player) this.recorder.lap();
     }
 
     this.snapshot.set(this.buildSnapshot(power, m.power3s, cadence, m.heartRate, m.stale));
@@ -281,8 +320,21 @@ export class RideSession {
     }
   }
 
+  private updateErg(now: number): void {
+    const target = this.player?.state.targetWatts;
+    if (target === undefined || !deviceManager.canErg) return;
+    const changed = this.lastErgTarget === undefined || Math.abs(target - this.lastErgTarget) >= 1;
+    // New blocks are sent at once; ramps at most once per second.
+    if (!changed || (this.lastErgTarget !== undefined && now - this.lastErgSent < 1000)) return;
+    this.lastErgTarget = target;
+    this.lastErgSent = now;
+    this.lastTrainerGrade = undefined;
+    void deviceManager.setErg(target);
+  }
+
   private updateTrainer(gradePercent: number, now: number): void {
-    if (this.mode !== 'free' || !deviceManager.canSim) return;
+    if (!deviceManager.canSim) return;
+    this.lastErgTarget = undefined;
     const scaled = Math.round(gradePercent * this.settings.trainerDifficulty * 10) / 10;
     const changed = this.lastTrainerGrade === undefined || Math.abs(scaled - this.lastTrainerGrade) >= 0.2;
     if (now - this.lastTrainerUpdate < 1000 || (!changed && now - this.lastTrainerUpdate < 5000)) return;
@@ -322,6 +374,7 @@ export class RideSession {
       trainerGrade: this.lastTrainerGrade,
       noTrainerData: stale,
       bots: this.bots.map((b) => ({ id: b.id, name: b.name, wkg: b.wkg, gapM: b.state.distanceM - this.state.distanceM })),
+      workout: this.player ? { ...this.player.state, name: this.player.workout.name } : undefined,
     };
   }
 

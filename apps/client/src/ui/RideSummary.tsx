@@ -1,10 +1,14 @@
+import { useState } from 'react';
 import { exportFile } from '../devices/files';
+import { settingsStore, updateSettings } from '../state/settings';
 import type { RideResult } from '../ride/rideSession';
 import { fitFileName, type StoredActivity } from '../state/activities';
 import { fmt, formatDuration } from './components';
 
 export function RideSummary({ result, activity, onClose }: { result: RideResult; activity: StoredActivity; onClose: () => void }) {
   const s = result.summary;
+  const [ftpApplied, setFtpApplied] = useState(false);
+  const newFtp = result.workout?.rampTestFtp;
   const rows: Array<[string, string]> = [
     ['Zeit (in Bewegung)', formatDuration(s.durationS)],
     ['Distanz', `${(s.distanceM / 1000).toFixed(2)} km`],
@@ -37,6 +41,29 @@ export function RideSummary({ result, activity, onClose }: { result: RideResult;
             </div>
           ))}
         </div>
+        {result.workout && (
+          <div className="notice info" style={{ marginTop: 12 }}>
+            Workout „{result.workout.name}“ {result.workout.completed ? 'komplett geschafft' : 'vorzeitig beendet'} · Treffer{' '}
+            {Math.round(result.workout.compliance * 100)} % der ERG-Zeit im Zielbereich
+          </div>
+        )}
+        {newFtp !== undefined && (
+          <div className="notice row" style={{ marginTop: 12, justifyContent: 'space-between' }}>
+            <span>
+              Rampentest: beste Minute {Math.round(s.best1min)} W → <strong>neue FTP {newFtp} W</strong> (bisher {settingsStore.get().ftp} W)
+            </span>
+            <button
+              className="primary"
+              disabled={ftpApplied}
+              onClick={() => {
+                updateSettings({ ftp: newFtp });
+                setFtpApplied(true);
+              }}
+            >
+              {ftpApplied ? 'Übernommen ✓' : 'FTP übernehmen'}
+            </button>
+          </div>
+        )}
         {s.durationS < 60 && <div className="notice" style={{ marginTop: 12 }}>Sehr kurze Fahrt – Strava ignoriert Aktivitäten unter einer Minute.</div>}
         <div className="row" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
           <button onClick={() => exportFile(fitFileName(activity), activity.fit)}>FIT-Datei exportieren</button>

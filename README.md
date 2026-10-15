@@ -50,7 +50,19 @@ apps/
   desktop/    Electron-Hülle für Windows/macOS inkl. Bluetooth-Geräteauswahl
 packages/
   ble/        Bluetooth: FTMS, Wahoo-Protokoll, Cycling Power, Herzfrequenz, CSC, Simulator
+  physics/    Fahrphysik (Leistung → Geschwindigkeit), Windschatten, CdA
+  routes/     Die drei Rundkurse (Spline + Höhenprofil + Segmente)
+  metrics/    NP, IF, TSS, Zonen, Aufzeichnung, FIT-Export
+  workouts/   Workout-Modell, .zwo Import/Export, ERG-Player, Bibliothek
 ```
+
+## Bedienung
+
+- **Fahren → Freie Fahrt:** Strecke wählen, optional Pacer-Bots, los. Die Steigung geht (gedämpft durch die Trainer-Schwierigkeit) an den KICKR.
+- **Fahren → Workout:** Workout aus der Bibliothek wählen, `.zwo` importieren oder im Editor bauen, dann eine Strecke wählen.
+  Im Workout hält der Trainer die Watt (ERG), freie Abschnitte laufen im SIM-Modus.
+- Tasten während der Fahrt: **C** Kamera wechseln, **P** Pause; im Simulator ↑/↓ Watt, ←/→ Kadenz.
+- **Aktivitäten:** gespeicherte Fahrten, FIT-Export für Strava, Garmin Connect, intervals.icu.
 
 ## Tests
 

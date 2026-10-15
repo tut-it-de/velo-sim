@@ -6,6 +6,7 @@ import { settingsStore } from '../state/settings';
 import { useStore } from '../state/store';
 import { fmt, formatDuration } from './components';
 import { ElevationProfile } from './ElevationProfile';
+import { WorkoutHud } from './WorkoutHud';
 
 function gradeColor(g: number): string {
   if (g >= 8) return '#ef4444';
@@ -99,6 +100,12 @@ export function Hud({
         <div className="hud-chip">Ø {Math.round(s.avgPower)} W · NP {Math.round(s.normalizedPower)} W</div>
         <div className="hud-chip">{Math.round(s.kilojoules)} kJ</div>
       </div>
+
+      {s.workout && (
+        <div className="hud-center">
+          <WorkoutHud session={session} snapshot={s} ftp={settings.ftp} />
+        </div>
+      )}
 
       {s.bots.length > 0 && (
         <div className="hud-right hud-panel">
