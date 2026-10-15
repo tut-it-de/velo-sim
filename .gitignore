@@ -1,0 +1,21 @@
+node_modules/
+dist/
+dist-electron/
+release/
+.turbo/
+coverage/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Capacitor / Xcode
+apps/client/ios/App/Pods/
+apps/client/ios/App/App/public/
+apps/client/ios/DerivedData/
+xcuserdata/
+
+# Playwright
+test-results/
+playwright-report/

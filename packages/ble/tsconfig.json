@@ -1,0 +1,7 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["web-bluetooth"]
+  },
+  "include": ["src", "test"]
+}
