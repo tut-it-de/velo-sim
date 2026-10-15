@@ -1,0 +1,58 @@
+{
+  "name": "@velo/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Velo Sim – Desktop-App (Windows/macOS)",
+  "main": "main.cjs",
+  "author": "tut-it-de",
+  "scripts": {
+    "start": "electron .",
+    "dev": "cross-env VELO_DEV_URL=http://localhost:5173 electron .",
+    "dist:win": "npm run build -w @velo/client --prefix ../.. && electron-builder --win",
+    "dist:mac": "npm run build -w @velo/client --prefix ../.. && electron-builder --mac"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "de.tutit.velosim",
+    "productName": "Velo Sim",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../client/dist",
+        "to": "client"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.healthcare-fitness",
+      "target": [
+        "dmg"
+      ],
+      "extendInfo": {
+        "NSBluetoothAlwaysUsageDescription": "Velo Sim verbindet sich per Bluetooth mit deinem Smart-Trainer, Herzfrequenz- und Kadenzsensor.",
+        "NSBluetoothPeripheralUsageDescription": "Velo Sim verbindet sich per Bluetooth mit deinem Smart-Trainer, Herzfrequenz- und Kadenzsensor."
+      }
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "electronVersion": "44.7.2",
+    "npmRebuild": false
+  }
+}
