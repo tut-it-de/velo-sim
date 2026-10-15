@@ -53,6 +53,9 @@ export class MultiplayerClient extends Emitter<NetEvents> {
   private clockOffset = 0;
   private lastSent = 0;
   private summaryWaiter?: (s: RideSummaryDTO | undefined) => void;
+  private closing = false;
+  private attempts = 0;
+  private reconnectTimer?: ReturnType<typeof setTimeout>;
 
   constructor(
     private readonly serverUrl: string,
@@ -80,11 +83,20 @@ export class MultiplayerClient extends Emitter<NetEvents> {
       }
     };
     ws.onerror = () => this.patch({ status: 'error', error: 'Verbindung zum Server fehlgeschlagen' });
-    ws.onclose = () => {
-      if (this.state.get().status !== 'error') this.patch({ status: 'offline' });
+    ws.onclose = (ev) => {
       for (const id of [...this.riders.keys()]) this.emit('left', id);
       this.riders.clear();
+      this.myId = undefined;
       this.summaryWaiter?.(undefined);
+      // Reconnect after network hiccups (not after bye or a protocol rejection).
+      const rejected = ev.code >= 4000 && ev.code < 5000;
+      if (!this.closing && !rejected && this.attempts < 6) {
+        const delay = Math.min(15_000, 1000 * 2 ** this.attempts++);
+        this.patch({ status: 'connecting', error: `Verbindung verloren – neuer Versuch in ${Math.round(delay / 1000)} s` });
+        this.reconnectTimer = setTimeout(() => this.connect(), delay);
+      } else if (this.state.get().status !== 'error') {
+        this.patch({ status: 'offline' });
+      }
     };
   }
 
@@ -95,13 +107,14 @@ export class MultiplayerClient extends Emitter<NetEvents> {
   private onMessage(m: ServerMessage): void {
     switch (m.type) {
       case 'welcome':
+        this.attempts = 0;
         this.myId = m.id;
         this.clockOffset = m.serverTime - Date.now();
         for (const info of m.riders) {
           this.riders.set(info.id, { info, samples: [] });
           this.emit('joined', info);
         }
-        this.patch({ status: 'online', authenticated: m.authenticated, riderCount: this.riders.size + 1 });
+        this.patch({ status: 'online', error: undefined, authenticated: m.authenticated, riderCount: this.riders.size + 1 });
         break;
       case 'joined':
         this.riders.set(m.rider.id, { info: m.rider, samples: [] });
@@ -180,6 +193,7 @@ export class MultiplayerClient extends Emitter<NetEvents> {
       this.summaryWaiter = resolve;
       setTimeout(() => resolve(undefined), timeoutMs);
     });
+    this.closing = true;
     ws.send(JSON.stringify({ type: 'bye' }));
     const summary = await result;
     ws.close();
@@ -187,6 +201,8 @@ export class MultiplayerClient extends Emitter<NetEvents> {
   }
 
   close(): void {
+    this.closing = true;
+    clearTimeout(this.reconnectTimer);
     this.ws?.close();
   }
 }
