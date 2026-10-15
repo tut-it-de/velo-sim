@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { refreshAccount } from '../net/api';
+import { refreshStravaStatus } from '../net/strava';
 import { deviceManager } from '../devices/deviceManager';
 import { useStore } from '../state/store';
 import { uiStore } from '../state/ui';
@@ -29,6 +31,13 @@ export function App() {
   const { immersive } = useStore(uiStore);
   const garage = useStore(garageStore);
   useSimulatorKeys();
+
+  useEffect(() => {
+    // Sync wallet/garage and Strava link from the server when logged in.
+    void refreshAccount()
+      .catch(() => undefined)
+      .then(() => refreshStravaStatus());
+  }, []);
 
   return (
     <div className="app">

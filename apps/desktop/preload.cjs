@@ -14,4 +14,7 @@ contextBridge.exposeInMainWorld('veloDesktop', {
   cancelBluetoothRequest() {
     ipcRenderer.send('bluetooth-cancel');
   },
+  openExternal(url) {
+    ipcRenderer.send('open-external', String(url));
+  },
 });

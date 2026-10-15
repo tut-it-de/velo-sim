@@ -43,6 +43,25 @@ velo.deine-domain.de {
 ```
 
 Die iPad-App braucht HTTPS (App Transport Security); im lokalen Netz ist `http://` erlaubt.
+
+### Automatischer Strava-Upload
+
+Der Upload läuft über den Server, damit das Strava-Geheimnis nicht in der App steckt.
+
+1. Auf https://www.strava.com/settings/api eine API-App anlegen.
+   *Authorization Callback Domain* = Domain deines Servers (z. B. `velo.deine-domain.de`, lokal `localhost`).
+2. In die `.env` neben `docker-compose.server.yml` eintragen und Server neu starten:
+   ```
+   STRAVA_CLIENT_ID=12345
+   STRAVA_CLIENT_SECRET=…
+   PUBLIC_URL=https://velo.deine-domain.de
+   ```
+3. In der App: **Profil → Strava → Mit Strava verbinden**, im Browser „Autorisieren“.
+   Danach wird jede echte Fahrt ab 1 Minute nach dem Beenden als *Virtual Ride* hochgeladen
+   (abschaltbar; ältere Fahrten unter *Aktivitäten → Zu Strava*). Simulator-Fahrten werden nie hochgeladen.
+
+Neue Strava-API-Apps erlauben zunächst nur **einen** verbundenen Athleten (im API-Dashboard selbst auf 10 erhöhbar,
+darüber prüft Strava die App). Für dich allein reicht das.
 Last-Test: `npm run bots -w @velo/server -- --count 100 --route bergrunde --url http://localhost:8080`
 
 ## Desktop-App (Windows / macOS)

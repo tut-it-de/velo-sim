@@ -1,6 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { CATALOG, STARTER_LOADOUT, type Loadout } from '@velo/equipment';
-import { DuplicateEmailError, type Garage, type LedgerEntry, type RideRecord, type Storage, type User } from './types';
+import {
+  DuplicateEmailError,
+  type Garage,
+  type LedgerEntry,
+  type RideRecord,
+  type Storage,
+  type StravaConnectionRecord,
+  type User,
+} from './types';
 
 interface UserData {
   user: User;
@@ -16,6 +24,7 @@ const STARTER_ITEMS = CATALOG.filter((i) => i.price === 0).map((i) => i.id);
 /** In-memory storage for development and tests (data is lost on restart). */
 export class MemoryStorage implements Storage {
   private users = new Map<string, UserData>();
+  private strava = new Map<string, StravaConnectionRecord>();
 
   private data(userId: string): UserData {
     const d = this.users.get(userId);
@@ -81,6 +90,19 @@ export class MemoryStorage implements Storage {
 
   async listRides(userId: string, limit: number): Promise<RideRecord[]> {
     return [...this.data(userId).rides].reverse().slice(0, limit);
+  }
+
+  async getStrava(userId: string): Promise<StravaConnectionRecord | undefined> {
+    const r = this.strava.get(userId);
+    return r && { ...r };
+  }
+
+  async saveStrava(record: StravaConnectionRecord): Promise<void> {
+    this.strava.set(record.userId, { ...record });
+  }
+
+  async deleteStrava(userId: string): Promise<void> {
+    this.strava.delete(userId);
   }
 
   async close(): Promise<void> {}

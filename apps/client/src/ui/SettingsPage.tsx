@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { connectStrava, disconnectStrava, refreshStravaStatus, setStravaAutoUpload, stravaStore } from '../net/strava';
 import { accountStore, fetchOnline, login, logout, refreshAccount, register } from '../net/api';
 import { settingsStore, updateSettings, type Settings } from '../state/settings';
 import { useStore } from '../state/store';
@@ -44,6 +45,7 @@ export function SettingsPage() {
           </div>
         </div>
         <AccountCard />
+        <StravaCard />
         <div className="card">
           <h2>Trainer</h2>
           <div className="form">
@@ -163,6 +165,77 @@ function AccountCard() {
         Ohne Server fährst du offline, Garage und Taler liegen dann nur auf diesem Gerät. Mit Konto bucht der Server die Taler aus deinen Leistungsdaten,
         und du siehst andere Fahrer auf der Strecke.
       </p>
+    </div>
+  );
+}
+
+function StravaCard() {
+  const account = useStore(accountStore);
+  const strava = useStore(stravaStore);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    void refreshStravaStatus();
+  }, [account.token]);
+
+  const run = async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await fn();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card">
+      <h2>
+        <span className="strava-mark">Strava</span>
+      </h2>
+      {!account.user ? (
+        <div className="muted small">Melde dich oben mit deinem Server-Konto an – der Strava-Upload läuft über den Server.</div>
+      ) : !strava.configured ? (
+        <div className="muted small">
+          Auf deinem Server ist Strava noch nicht eingerichtet (STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET und PUBLIC_URL setzen – siehe README).
+        </div>
+      ) : strava.connected ? (
+        <div className="form">
+          <label>Verbunden</label>
+          <div className="row">
+            <strong>{strava.athleteName}</strong>
+            <button disabled={busy} onClick={() => run(disconnectStrava)}>
+              Trennen
+            </button>
+          </div>
+          <label>Automatisch hochladen</label>
+          <label className="row" style={{ color: 'var(--text)' }}>
+            <input type="checkbox" checked={!!strava.autoUpload} disabled={busy} onChange={(e) => run(() => setStravaAutoUpload(e.target.checked))} />
+            Jede Fahrt ab 1 Minute nach dem Beenden zu Strava hochladen (Simulator-Fahrten nie)
+          </label>
+        </div>
+      ) : (
+        <div className="row">
+          <button
+            className="strava-button"
+            disabled={busy}
+            onClick={() =>
+              run(async () => {
+                setMessage('Bitte im Browser bei Strava anmelden und „Autorisieren“ tippen …');
+                const ok = await connectStrava();
+                setMessage(ok ? 'Strava verbunden ✓' : 'Keine Bestätigung von Strava erhalten – bitte erneut versuchen.');
+              })
+            }
+          >
+            Mit Strava verbinden
+          </button>
+          <span className="muted small">Fahrten landen als „Virtual Ride“ mit Leistung, Kadenz und Herzfrequenz in deinem Strava-Profil.</span>
+        </div>
+      )}
+      {message && <div className="small" style={{ marginTop: 8 }}>{message}</div>}
     </div>
   );
 }

@@ -12,6 +12,13 @@ export interface StoredActivity {
   simulated: boolean;
   fit: Uint8Array;
   segments?: Array<{ id: string; name: string; type: string; timeS: number; isPb: boolean }>;
+  strava?: {
+    status: 'uploading' | 'processing' | 'ready' | 'duplicate' | 'error' | 'skipped';
+    uploadId?: number;
+    activityId?: number;
+    url?: string;
+    error?: string;
+  };
 }
 
 const DB = 'velo-sim';
@@ -74,6 +81,20 @@ export async function saveActivity(result: RideResult, simulated: boolean, title
   }
   activitiesStore.set([activity, ...activitiesStore.get().filter((a) => a.id !== activity.id)]);
   return activity;
+}
+
+/** Merges a patch into a stored activity (e.g. its Strava upload status). */
+export async function updateActivity(id: string, patch: Partial<StoredActivity>): Promise<StoredActivity | undefined> {
+  const current = activitiesStore.get().find((a) => a.id === id);
+  if (!current) return undefined;
+  const next = { ...current, ...patch };
+  activitiesStore.set(activitiesStore.get().map((a) => (a.id === id ? next : a)));
+  try {
+    await tx('readwrite', (s) => s.put(next));
+  } catch {
+    // keep in memory even if IndexedDB is unavailable
+  }
+  return next;
 }
 
 export async function deleteActivity(id: string): Promise<void> {

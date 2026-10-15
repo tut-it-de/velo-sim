@@ -26,7 +26,18 @@ if (databaseUrl) {
   console.warn('⚠ DATABASE_URL nicht gesetzt – Daten nur im Speicher (Entwicklung).');
 }
 
-const server = await startServer({ storage, secret, port });
+const strava =
+  process.env.STRAVA_CLIENT_ID && process.env.STRAVA_CLIENT_SECRET
+    ? {
+        clientId: process.env.STRAVA_CLIENT_ID,
+        clientSecret: process.env.STRAVA_CLIENT_SECRET,
+        publicUrl: process.env.PUBLIC_URL ?? `http://localhost:${port}`,
+        apiBase: process.env.STRAVA_API_BASE,
+      }
+    : undefined;
+console.log(strava ? `Strava: aktiv (Callback ${strava.publicUrl}/api/strava/callback)` : 'Strava: nicht eingerichtet (STRAVA_CLIENT_ID/SECRET fehlen)');
+
+const server = await startServer({ storage, secret, port, strava });
 console.log(`Velo-Sim-Server läuft auf ${server.url} (API /api, WebSocket /ws)`);
 
 const shutdown = async () => {

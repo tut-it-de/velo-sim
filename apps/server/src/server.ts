@@ -6,12 +6,15 @@ import { verifyToken } from './auth';
 import { handleHttp } from './http';
 import { Game, type Connection, type Rider, type Room } from './rooms';
 import type { Storage } from './storage/types';
+import type { StravaConfig } from './strava';
+import { StravaService } from './stravaService';
 
 export interface VeloServerOptions {
   storage: Storage;
   secret: string;
   port?: number;
   host?: string;
+  strava?: StravaConfig & { pollIntervalMs?: number; pollAttempts?: number };
 }
 
 export interface VeloServer {
@@ -38,7 +41,8 @@ function wsConnection(ws: WebSocket): Connection {
 /** HTTP API on /api/*, game WebSocket on /ws. */
 export async function startServer(opts: VeloServerOptions): Promise<VeloServer> {
   const game = new Game({ storage: opts.storage });
-  const ctx = { storage: opts.storage, secret: opts.secret, game };
+  const strava = opts.strava ? new StravaService(opts.strava, opts.storage, opts.secret) : undefined;
+  const ctx = { storage: opts.storage, secret: opts.secret, game, strava };
   const http = createServer((req, res) => void handleHttp(ctx, req, res));
   const wss = new WebSocketServer({ server: http, path: '/ws', maxPayload: 8 * 1024 });
 

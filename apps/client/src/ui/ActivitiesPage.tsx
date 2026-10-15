@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { ROUTES } from '@velo/routes';
 import { recordKey, recordsStore } from '../state/records';
+import { refreshStravaStatus, stravaStore, uploadToStrava } from '../net/strava';
+import { StravaStatusLine } from './StravaStatusLine';
 import { exportFile } from '../devices/files';
 import { activitiesStore, deleteActivity, fitFileName, loadActivities } from '../state/activities';
 import { useStore } from '../state/store';
@@ -9,8 +11,10 @@ import { fmt, formatDuration } from './components';
 export function ActivitiesPage() {
   const activities = useStore(activitiesStore);
   const records = useStore(recordsStore);
+  const strava = useStore(stravaStore);
   useEffect(() => {
     void loadActivities();
+    void refreshStravaStatus();
   }, []);
 
   const totals = activities.reduce(
@@ -68,6 +72,16 @@ export function ActivitiesPage() {
               </div>
             </div>
             <div className="row">
+              {a.strava && a.strava.status !== 'error' ? (
+                <StravaStatusLine activity={a} compact />
+              ) : (
+                strava.connected &&
+                !a.simulated && (
+                  <button className="strava-button small" onClick={() => void uploadToStrava(a)} title={a.strava?.error}>
+                    {a.strava?.status === 'error' ? 'Strava erneut' : 'Zu Strava'}
+                  </button>
+                )
+              )}
               <button onClick={() => exportFile(fitFileName(a), a.fit)}>FIT</button>
               <button
                 className="danger"

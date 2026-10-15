@@ -27,6 +27,10 @@ services:
       PORT: 8080
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET fehlt}
       DATABASE_URL: postgres://velo:${POSTGRES_PASSWORD}@postgres:5432/velo
+      # Optional: automatic Strava upload (https://www.strava.com/settings/api)
+      STRAVA_CLIENT_ID: ${STRAVA_CLIENT_ID:-}
+      STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET:-}
+      PUBLIC_URL: ${PUBLIC_URL:-}
     ports:
       - '8080:8080'
 

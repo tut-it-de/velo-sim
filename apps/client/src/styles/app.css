@@ -1119,3 +1119,33 @@ button.rideon {
 .draft-bar.active .draft-value {
   color: #a5d6ff;
 }
+
+/* ---------- Strava ---------- */
+.strava-mark {
+  color: #fc4c02;
+  font-weight: 800;
+}
+button.strava-button {
+  background: #fc4c02;
+  border-color: #fc4c02;
+  color: #fff;
+  font-weight: 700;
+}
+button.strava-button.small {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.strava-status {
+  font-size: 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.strava-status.error {
+  border-color: var(--err);
+}
+button.strava-link {
+  color: #fc4c02;
+  font-weight: 700;
+}

@@ -6,6 +6,9 @@ import { fitFileName, type StoredActivity } from '../state/activities';
 import { fmt, formatDuration } from './components';
 import { formatCoins, total } from '@velo/equipment';
 import { balance, garageStore } from '../state/garage';
+import { activitiesStore } from '../state/activities';
+import { StravaStatusLine } from './StravaStatusLine';
+import { isLoggedIn } from '../net/api';
 import { useStore } from '../state/store';
 
 export function RideSummary({ result, activity, onClose }: { result: RideResult; activity: StoredActivity; onClose: () => void }) {
@@ -13,6 +16,7 @@ export function RideSummary({ result, activity, onClose }: { result: RideResult;
   const [ftpApplied, setFtpApplied] = useState(false);
   const newFtp = result.workout?.rampTestFtp;
   const garage = useStore(garageStore);
+  const live = useStore(activitiesStore).find((a) => a.id === activity.id) ?? activity;
   const earned = total(result.earnings);
   const rows: Array<[string, string]> = [
     ['Zeit (in Bewegung)', formatDuration(s.durationS)],
@@ -55,7 +59,13 @@ export function RideSummary({ result, activity, onClose }: { result: RideResult;
                 : `🌐 Vom Server gebucht: +${formatCoins(result.server.coins)} Watt-Taler für ${Math.round(result.server.kilojoules)} kJ und ${result.server.laps} Runde(n). Kontostand ${formatCoins(result.server.balance ?? 0)}.`}
           </div>
         )}
-        <div className="earnings" hidden={!!result.server}>
+        {!result.server && isLoggedIn() && !result.simulated && (
+          <div className="notice" style={{ marginTop: 12 }}>
+            🪙 Mit Konto bucht der Server die Watt-Taler – diese Fahrt lief ohne Online-Verbindung, deshalb gibt es dafür keine Taler.
+            Aktiviere beim Start „Online mit anderen fahren“.
+          </div>
+        )}
+        <div className="earnings" hidden={!!result.server || (isLoggedIn() && !result.simulated)}>
           {result.simulated ? (
             <span className="muted">🪙 Mit dem Simulator gibt es keine Watt-Taler.</span>
           ) : (
@@ -115,7 +125,12 @@ export function RideSummary({ result, activity, onClose }: { result: RideResult;
             </table>
           </div>
         )}
-        {s.durationS < 60 && <div className="notice" style={{ marginTop: 12 }}>Sehr kurze Fahrt – Strava ignoriert Aktivitäten unter einer Minute.</div>}
+        {s.durationS < 60 && <div className="notice" style={{ marginTop: 12 }}>Sehr kurze Fahrt – wird nicht automatisch zu Strava hochgeladen.</div>}
+        {live.strava && (
+          <div style={{ marginTop: 12 }}>
+            <StravaStatusLine activity={live} />
+          </div>
+        )}
         <div className="row" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
           <button onClick={() => exportFile(fitFileName(activity), activity.fit)}>FIT-Datei exportieren</button>
           <button className="primary" onClick={onClose}>

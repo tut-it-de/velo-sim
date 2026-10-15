@@ -6,6 +6,7 @@ export interface DesktopBridge {
   onBluetoothDevices(cb: (devices: Array<{ deviceId: string; deviceName: string }>) => void): () => void;
   selectBluetoothDevice(deviceId: string): void;
   cancelBluetoothRequest(): void;
+  openExternal?(url: string): void;
 }
 
 declare global {

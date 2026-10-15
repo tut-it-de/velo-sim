@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { CATALOG, STARTER_LOADOUT, type Loadout } from '@velo/equipment';
-import { DuplicateEmailError, type Garage, type RideRecord, type Storage, type User } from './types';
+import { DuplicateEmailError, type Garage, type RideRecord, type Storage, type StravaConnectionRecord, type User } from './types';
 
 const STARTER_ITEMS = CATALOG.filter((i) => i.price === 0).map((i) => i.id);
 
@@ -51,6 +51,17 @@ CREATE TABLE IF NOT EXISTS rides (
   reason text
 );
 CREATE INDEX IF NOT EXISTS rides_user_idx ON rides(user_id, started_at DESC);
+CREATE TABLE IF NOT EXISTS strava_connections (
+  user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  athlete_id bigint NOT NULL,
+  athlete_name text NOT NULL,
+  access_token text NOT NULL,
+  refresh_token text NOT NULL,
+  expires_at bigint NOT NULL,
+  scope text NOT NULL,
+  auto_upload boolean NOT NULL DEFAULT true,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
 `;
 
 /** PostgreSQL storage. The wallet balance is always the SUM of the ledger. */
@@ -199,6 +210,37 @@ export class PostgresStorage implements Storage {
       flagged: r.flagged,
       reason: r.reason ?? undefined,
     }));
+  }
+
+  async getStrava(userId: string): Promise<StravaConnectionRecord | undefined> {
+    const res = await this.pool.query('SELECT * FROM strava_connections WHERE user_id = $1', [userId]);
+    const r = res.rows[0];
+    if (!r) return undefined;
+    return {
+      userId: r.user_id,
+      athleteId: Number(r.athlete_id),
+      athleteName: r.athlete_name,
+      accessToken: r.access_token,
+      refreshToken: r.refresh_token,
+      expiresAt: Number(r.expires_at),
+      scope: r.scope,
+      autoUpload: r.auto_upload,
+    };
+  }
+
+  async saveStrava(c: StravaConnectionRecord): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO strava_connections (user_id, athlete_id, athlete_name, access_token, refresh_token, expires_at, scope, auto_upload, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+       ON CONFLICT (user_id) DO UPDATE SET athlete_id = EXCLUDED.athlete_id, athlete_name = EXCLUDED.athlete_name,
+         access_token = EXCLUDED.access_token, refresh_token = EXCLUDED.refresh_token, expires_at = EXCLUDED.expires_at,
+         scope = EXCLUDED.scope, auto_upload = EXCLUDED.auto_upload, updated_at = now()`,
+      [c.userId, c.athleteId, c.athleteName, c.accessToken, c.refreshToken, c.expiresAt, c.scope, c.autoUpload],
+    );
+  }
+
+  async deleteStrava(userId: string): Promise<void> {
+    await this.pool.query('DELETE FROM strava_connections WHERE user_id = $1', [userId]);
   }
 
   async close(): Promise<void> {

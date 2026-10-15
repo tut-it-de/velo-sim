@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { accountStore, fetchOnline, isLoggedIn, refreshAccount, serverBase } from '../net/api';
 import { MultiplayerClient } from '../net/multiplayer';
+import { maybeAutoUpload } from '../net/strava';
 import { ROUTES, getTrack } from '@velo/routes';
 import { workoutStats, type Workout } from '@velo/workouts';
 import { deviceManager } from '../devices/deviceManager';
@@ -39,13 +40,14 @@ export function RidePage() {
         bots={phase.bots}
         workout={phase.workout}
         onFinish={async (result) => {
-          const activity = await saveActivity(result, settingsStore.get().useSimulator, result.workout ? `Workout „${result.workout.name}“` : undefined);
+          const activity = await saveActivity(result, result.simulated, result.workout ? `Workout „${result.workout.name}“` : undefined);
           if (isLoggedIn()) {
             // Online + logged in: the server books from its own telemetry.
             await refreshAccount().catch(() => undefined);
           } else if (!result.simulated) {
             creditRide(result.earnings, result.routeId, result.lapsCompleted, activity.title);
           }
+          void maybeAutoUpload(activity.id);
           setPhase({ kind: 'summary', result, activity });
         }}
         onCancel={() => setPhase({ kind: 'select' })}

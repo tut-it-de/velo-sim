@@ -72,4 +72,5 @@ CdA   = (CdA_Basis + ΔCdA_Rad + ΔCdA_Laufräder + ΔCdA_Trikot) · (1 − Wind
 | 3 – Segmente & Bestzeiten | Zeitmessung für Bergwertungen, Sprints, Abfahrten und Runden, Live-Vergleich, Bestzeiten-Übersicht | ✅ |
 | 4 – Ausrüstung & Währung | Katalog (15 Räder, 7 Laufräder, 11 Trikots), Wertungen, Zeitvergleich, Garage/Shop, Watt-Taler mit Ledger, Avatar zeigt Ausrüstung | ✅ lokal – Server-Buchung folgt mit Phase 5 |
 | 5 – Multiplayer | Eigener WebSocket-Server (statt Colyseus), Konten (scrypt/JWT), Ledger in PostgreSQL, Taler-Buchung aus Server-Telemetrie mit Plausibilitätsprüfung, Räume pro Strecke (300er-Shards), Interpolation, Windschatten hinter echten Fahrern, Chat, Kudos, Last-Bots, Docker | ✅ |
-| 6 – Später | Helme, Level, Trainingspläne, Strava, Gruppenfahrten, Rennen | offen |
+| + | Windschatten-Leiste im HUD, automatischer Strava-Upload (OAuth über den Server, Tokens verschlüsselt, Auto-Refresh, Duplikat-Erkennung) | ✅ |
+| 6 – Später | Helme, Level, Trainingspläne, Gruppenfahrten, Rennen | offen |

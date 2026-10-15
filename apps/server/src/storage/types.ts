@@ -36,6 +36,19 @@ export interface RideRecord {
   reason?: string;
 }
 
+/** Strava link of a user. Tokens are stored encrypted (see TokenCipher). */
+export interface StravaConnectionRecord {
+  userId: string;
+  athleteId: number;
+  athleteName: string;
+  accessToken: string;
+  refreshToken: string;
+  /** Unix seconds */
+  expiresAt: number;
+  scope: string;
+  autoUpload: boolean;
+}
+
 export class DuplicateEmailError extends Error {
   override name = 'DuplicateEmailError';
 }
@@ -54,5 +67,8 @@ export interface Storage {
   markRouteLap(userId: string, routeId: string): Promise<void>;
   saveRide(ride: RideRecord): Promise<void>;
   listRides(userId: string, limit: number): Promise<RideRecord[]>;
+  getStrava(userId: string): Promise<StravaConnectionRecord | undefined>;
+  saveStrava(record: StravaConnectionRecord): Promise<void>;
+  deleteStrava(userId: string): Promise<void>;
   close(): Promise<void>;
 }

@@ -2,12 +2,16 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { getItem, itemName } from '@velo/equipment';
 import { hashPassword, signToken, verifyPassword, verifyToken } from './auth';
 import type { Game } from './rooms';
+import { StravaError } from './strava';
+import { callbackPage, type StravaService } from './stravaService';
 import { DuplicateEmailError, type Storage, type User } from './storage/types';
 
 export interface ApiContext {
   storage: Storage;
   secret: string;
   game: Game;
+  /** Undefined when STRAVA_CLIENT_ID/SECRET are not configured. */
+  strava?: StravaService;
 }
 
 class HttpError extends Error {
@@ -22,12 +26,12 @@ class HttpError extends Error {
 const MAX_BODY = 16 * 1024;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+async function readJson(req: IncomingMessage, maxBytes = MAX_BODY): Promise<Record<string, unknown>> {
   let size = 0;
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > MAX_BODY) throw new HttpError(413, 'Anfrage zu groß');
+    if (size > maxBytes) throw new HttpError(413, 'Anfrage zu groß');
     chunks.push(chunk as Buffer);
   }
   if (!chunks.length) return {};
@@ -78,6 +82,8 @@ export async function handleHttp(ctx: ApiContext, req: IncomingMessage, res: Ser
     const url = new URL(req.url ?? '/', 'http://localhost');
     const route = `${req.method} ${url.pathname}`;
     const ip = req.socket.remoteAddress ?? 'unknown';
+
+    if (url.pathname.startsWith('/api/strava/')) return await handleStrava(ctx, req, res, url);
 
     switch (route) {
       case 'GET /api/health':
@@ -145,7 +151,58 @@ export async function handleHttp(ctx: ApiContext, req: IncomingMessage, res: Ser
     }
   } catch (err) {
     if (err instanceof HttpError) return send(res, err.status, { error: err.message });
+    if (err instanceof StravaError) return send(res, err.status === 401 || err.status === 409 ? 409 : 502, { error: err.message });
     console.error('[http]', err);
     return send(res, 500, { error: 'Interner Fehler' });
+  }
+}
+
+const MAX_FIT_BYTES = 6 * 1024 * 1024;
+
+async function handleStrava(ctx: ApiContext, req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+  const strava = ctx.strava;
+  const route = `${req.method} ${url.pathname}`;
+
+  if (route === 'GET /api/strava/callback') {
+    const result = strava ? await strava.handleCallback(url.searchParams) : { ok: false, message: 'Strava ist auf diesem Server nicht eingerichtet.' };
+    res.writeHead(result.ok ? 200 : 400, { 'content-type': 'text/html; charset=utf-8' });
+    res.end(callbackPage(result.ok, result.message));
+    return;
+  }
+
+  const user = await requireUser(ctx, req);
+  if (route === 'GET /api/strava/status') {
+    return send(res, 200, strava ? await strava.status(user.id) : { configured: false, connected: false });
+  }
+  if (!strava) throw new HttpError(501, 'Strava ist auf diesem Server nicht eingerichtet (STRAVA_CLIENT_ID/SECRET fehlen).');
+
+  switch (route) {
+    case 'POST /api/strava/connect':
+      return send(res, 200, { url: strava.connectUrl(user.id) });
+    case 'POST /api/strava/settings': {
+      const b = await readJson(req);
+      await strava.setAutoUpload(user.id, b.autoUpload === true);
+      return send(res, 200, await strava.status(user.id));
+    }
+    case 'POST /api/strava/disconnect':
+      await strava.disconnect(user.id);
+      return send(res, 200, await strava.status(user.id));
+    case 'POST /api/strava/upload': {
+      const b = await readJson(req, Math.ceil(MAX_FIT_BYTES * 1.4));
+      const fit = Buffer.from(String(b.fit ?? ''), 'base64');
+      if (fit.length < 14 || fit.subarray(8, 12).toString('latin1') !== '.FIT') throw new HttpError(400, 'Keine gültige FIT-Datei');
+      const externalId = String(b.externalId ?? '').replace(/[^\w.-]/g, '').slice(0, 80) || `velo-sim-${Date.now()}`;
+      const result = await strava.upload(user.id, new Uint8Array(fit), {
+        name: String(b.name ?? 'Velo Sim Fahrt').slice(0, 120),
+        description: b.description ? String(b.description).slice(0, 2000) : undefined,
+        externalId,
+      });
+      return send(res, 200, result);
+    }
+    default: {
+      const m = /^GET \/api\/strava\/upload\/(\d+)$/.exec(route);
+      if (m) return send(res, 200, await strava.uploadStatus(user.id, Number(m[1])));
+      throw new HttpError(404, 'Nicht gefunden');
+    }
   }
 }

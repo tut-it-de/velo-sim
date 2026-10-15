@@ -1,6 +1,6 @@
 // Electron main process: hosts the shared web client and provides the
 // Web Bluetooth device chooser that Chrome normally shows itself.
-const { app, BrowserWindow, ipcMain, net, protocol, session } = require('electron');
+const { app, BrowserWindow, ipcMain, net, protocol, session, shell } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
@@ -50,6 +50,12 @@ function createWindow() {
     win.webContents.send('bluetooth-devices', devices);
   });
 
+  // Links that open a new window (e.g. Strava login) go to the system browser.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
   if (DEV_URL) {
     win.loadURL(DEV_URL);
   } else {
@@ -63,6 +69,10 @@ ipcMain.on('bluetooth-select', (_event, deviceId) => {
     pendingBluetoothCallback(String(deviceId));
     pendingBluetoothCallback = null;
   }
+});
+
+ipcMain.on('open-external', (_event, url) => {
+  if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
 });
 
 ipcMain.on('bluetooth-cancel', () => {
