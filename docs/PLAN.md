@@ -70,6 +70,6 @@ CdA   = (CdA_Basis + ΔCdA_Rad + ΔCdA_Laufräder + ΔCdA_Trikot) · (1 − Wind
 | 1 – Single-Player-MVP | Physik, alle 3 Strecken, 3D-Szene, HUD, freie Fahrt (SIM), Pacer-Bots, Aktivitäten, FIT-Export | ✅ |
 | 2 – Workouts | ERG-Engine, `.zwo` Import/Export, Bibliothek (9), Editor, Rampentest → FTP, Zonen/NP/IF/TSS | ✅ |
 | 3 – Segmente & Bestzeiten | Zeitmessung für Bergwertungen, Sprints, Abfahrten und Runden, Live-Vergleich, Bestzeiten-Übersicht | ✅ |
-| 4 – Ausrüstung & Währung | Accounts, API, Ledger, Garage, Shop, Wertungen, Zeitvergleich | offen |
+| 4 – Ausrüstung & Währung | Katalog (15 Räder, 7 Laufräder, 11 Trikots), Wertungen, Zeitvergleich, Garage/Shop, Watt-Taler mit Ledger, Avatar zeigt Ausrüstung | ✅ lokal – Server-Buchung folgt mit Phase 5 |
 | 5 – Multiplayer | Colyseus, andere Fahrer, Windschatten, Chat, Kudos, Bots | offen |
 | 6 – Später | Helme, Level, Trainingspläne, Strava, Gruppenfahrten, Rennen | offen |

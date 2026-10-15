@@ -21,6 +21,7 @@
     "@capacitor/ios": "^8.5.3",
     "@capacitor/share": "^8.0.3",
     "@velo/ble": "*",
+    "@velo/equipment": "*",
     "@velo/metrics": "*",
     "@velo/physics": "*",
     "@velo/routes": "*",

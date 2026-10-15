@@ -6,6 +6,8 @@ import { keepAwake } from '../devices/files';
 import { CAMERA_MODES, GameWorld, type CameraMode } from '../game/world';
 import { RideSession, type RideResult } from '../ride/rideSession';
 import { saveActivity, type StoredActivity } from '../state/activities';
+import { creditRide, garageStore } from '../state/garage';
+import { lookFromLoadout } from '../game/look';
 import { settingsStore, updateSettings } from '../state/settings';
 import { useStore } from '../state/store';
 import { uiStore } from '../state/ui';
@@ -36,6 +38,7 @@ export function RidePage() {
         workout={phase.workout}
         onFinish={async (result) => {
           const activity = await saveActivity(result, settingsStore.get().useSimulator, result.workout ? `Workout „${result.workout.name}“` : undefined);
+          if (!result.simulated) creditRide(result.earnings, result.routeId, result.lapsCompleted, activity.title);
           setPhase({ kind: 'summary', result, activity });
         }}
         onCancel={() => setPhase({ kind: 'select' })}
@@ -162,8 +165,9 @@ function RideView({
   useEffect(() => {
     let cancelled = false;
     let w: GameWorld | null = null;
-    const s = new RideSession(routeId, settingsStore.get(), { bots, workout });
-    GameWorld.create(canvasRef.current!, routeId, { jersey: '#ff7a1a', frame: '#20232a', helmet: '#ffffff', rim: '#ff7a1a' }, setProgress)
+    const garage = garageStore.get();
+    const s = new RideSession(routeId, settingsStore.get(), { bots, workout, loadout: garage.loadout, routesWithLap: garage.routesWithLap });
+    GameWorld.create(canvasRef.current!, routeId, lookFromLoadout(garage.loadout), setProgress)
       .then((created) => {
         if (cancelled) {
           created.dispose();

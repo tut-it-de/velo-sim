@@ -1,7 +1,6 @@
+import { STARTER_LOADOUT, rideEarnings, setupFor, total, type EarningLine, type Loadout } from '@velo/equipment';
 import { ActivityRecorder, normalizedPower, type ActivitySample, type ActivitySummary } from '@velo/metrics';
 import {
-  DEFAULT_CRR,
-  baseCdA,
   draftReduction,
   step,
   totalMass,
@@ -55,6 +54,9 @@ export interface RideSnapshot {
   workout?: PlayerState & { name: string };
   activeSegments: Array<ActiveSegment & { bestS?: number }>;
   lastResult?: SegmentOutcome;
+  /** Watt-Taler earned so far (0 with the simulator). */
+  coins: number;
+  coinsDisabled: boolean;
 }
 
 export interface SegmentOutcome {
@@ -75,21 +77,21 @@ export interface RideResult {
   samples: ActivitySample[];
   workout?: { id: string; name: string; compliance: number; completed: boolean; rampTestFtp?: number };
   segments: SegmentOutcome[];
+  earnings: EarningLine[];
+  simulated: boolean;
+  lapsCompleted: number;
 }
 
 const TICK_MS = 100;
 const BIKE_LENGTH = 1.8;
 const RIDER_LATERAL = 1.4;
 
-/** Phase 1 default equipment until the garage exists (mid-range bike, alloy wheels, club jersey). */
-export function defaultSetup(settings: Settings): RiderSetup {
-  return {
-    riderMassKg: settings.weightKg,
-    bikeMassKg: 7.6,
-    wheelsMassKg: 1.8,
-    cda: baseCdA(settings.heightCm, settings.weightKg) + 0.012,
-    crr: DEFAULT_CRR,
-  };
+export interface RideOptions {
+  bots?: boolean;
+  workout?: Workout;
+  loadout?: Loadout;
+  /** Route ids on which the first-lap bonus has already been paid. */
+  routesWithLap?: string[];
 }
 
 interface Bot extends BotInfo {
@@ -142,14 +144,17 @@ export class RideSession {
   private readonly segmentTracker: SegmentTracker;
   readonly segmentResults: SegmentOutcome[] = [];
   private lastResult?: SegmentOutcome;
+  private workoutKj = 0;
+  private readonly firstLapOnRoute: boolean;
 
   constructor(
     readonly routeId: string,
     private readonly settings: Settings,
-    options: { bots?: boolean; workout?: Workout } = {},
+    options: RideOptions = {},
   ) {
     this.track = getTrack(routeId);
-    this.setup = defaultSetup(settings);
+    this.setup = setupFor(settings, options.loadout ?? STARTER_LOADOUT);
+    this.firstLapOnRoute = !(options.routesWithLap ?? []).includes(routeId);
     this.recorder = new ActivityRecorder(settings.ftp);
     this.lastElevation = this.track.sample(0).y;
     if (options.workout) this.player = new WorkoutPlayer(options.workout, settings.ftp);
@@ -223,6 +228,9 @@ export class RideSession {
       summary,
       samples: this.recorder.samples,
       segments: [...this.segmentResults],
+      earnings: this.earningLines(),
+      simulated: this.settings.useSimulator,
+      lapsCompleted: this.lapTimes.length,
       workout: p && {
         id: p.workout.id,
         name: p.workout.name,
@@ -298,7 +306,10 @@ export class RideSession {
         this.secondAcc = { ms: acc.ms - 1000, power: 0, cadence: 0, cadenceN: 0, hr: 0, hrN: 0 };
         const n = this.recorder.samples.length;
         if (n < 60 || n % 10 === 0) this.np = normalizedPower(this.recorder.samples.map((x) => x.power));
-        if (this.player) this.workoutTrace.push([this.player.state.elapsedS, avg]);
+        if (this.player) {
+          this.workoutTrace.push([this.player.state.elapsedS, avg]);
+          if (!this.player.state.finished) this.workoutKj += avg / 1000;
+        }
       }
     }
 
@@ -317,6 +328,19 @@ export class RideSession {
     }
 
     this.snapshot.set(this.buildSnapshot(power, m.power3s, cadence, m.heartRate, m.stale));
+  }
+
+  /** Itemised Watt-Taler for this ride; nothing in the simulator. */
+  earningLines(): EarningLine[] {
+    if (this.settings.useSimulator) return [];
+    return rideEarnings({
+      kilojoules: this.powerSum / 1000,
+      workoutKilojoules: this.workoutKj,
+      workoutCompleted: !!this.player?.state.finished,
+      lapsCompleted: this.lapTimes.length,
+      firstLapOnRoute: this.firstLapOnRoute,
+      personalBests: this.segmentResults.filter((r) => r.saved).length,
+    });
   }
 
   private addOutcome(segment: SegmentOutcome['segment'], timeS: number): void {
@@ -411,6 +435,8 @@ export class RideSession {
         ? this.segmentTracker.current().map((a) => ({ ...a, bestS: getBest(this.routeId, a.segment.id)?.timeS }))
         : [],
       lastResult: this.lastResult,
+      coins: total(this.earningLines()),
+      coinsDisabled: this.settings.useSimulator,
     };
   }
 

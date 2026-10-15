@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { formatCoins } from '@velo/equipment';
 import { powerZone } from '@velo/metrics';
 import { CAMERA_MODES, type CameraMode } from '../game/world';
 import type { RideSession } from '../ride/rideSession';
@@ -100,6 +101,9 @@ export function Hud({
         {s.draft > 0.03 && <div className="hud-chip draft">Windschatten −{Math.round(s.draft * 100)} %</div>}
         <div className="hud-chip">Ø {Math.round(s.avgPower)} W · NP {Math.round(s.normalizedPower)} W</div>
         <div className="hud-chip">{Math.round(s.kilojoules)} kJ</div>
+        <div className={`hud-chip coins ${s.coinsDisabled ? 'disabled' : ''}`} title={s.coinsDisabled ? 'Mit dem Simulator gibt es keine Watt-Taler' : 'Watt-Taler dieser Fahrt'}>
+          🪙 {s.coinsDisabled ? 'Simulator – keine Taler' : formatCoins(s.coins)}
+        </div>
         <ActiveSegments snapshot={s} />
       </div>
 

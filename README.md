@@ -54,6 +54,7 @@ packages/
   routes/     Die drei Rundkurse (Spline + Höhenprofil + Segmente)
   metrics/    NP, IF, TSS, Zonen, Aufzeichnung, FIT-Export
   workouts/   Workout-Modell, .zwo Import/Export, ERG-Player, Bibliothek
+  equipment/  Ausrüstungskatalog, Wertungen, Zeitvergleich, Watt-Taler-Regeln
 ```
 
 ## Bedienung

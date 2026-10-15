@@ -864,3 +864,138 @@ button.icon {
   padding: 3px 6px 3px 0;
   border-bottom: 1px solid var(--border);
 }
+
+/* ---------- Garage ---------- */
+.wallet {
+  font-size: 20px;
+  font-weight: 800;
+}
+.wallet-chip {
+  background: transparent;
+  border-color: var(--border);
+  font-weight: 700;
+  margin-right: 10px;
+}
+.garage-current {
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.garage-loadout {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-weight: 700;
+  margin: 4px 0;
+}
+.garage-times {
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+}
+.comparison {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.comparison .faster {
+  color: var(--ok);
+  font-weight: 700;
+}
+.comparison .slower {
+  color: var(--warn);
+  font-weight: 700;
+}
+.item-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+.item-card {
+  background: var(--bg-elev);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+}
+.item-card.selected {
+  border-color: var(--info);
+}
+.item-card.equipped {
+  border-color: var(--accent);
+}
+.swatch {
+  display: flex;
+  gap: 4px;
+}
+.swatch span {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.badge.tier-top {
+  color: #ffd166;
+  border-color: #8a6d1d;
+}
+.badge.tier-mid {
+  color: #9ecbff;
+}
+.rating {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.rating-bar {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 3px;
+}
+.rating-seg {
+  height: 7px;
+  border-radius: 2px;
+  background: var(--bg-elev-2);
+  overflow: hidden;
+}
+.rating-seg div {
+  height: 100%;
+  background: var(--accent);
+}
+.item-action {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+.equipped-label {
+  color: var(--accent);
+  font-weight: 700;
+}
+.hud-chip.coins {
+  background: rgba(255, 196, 0, 0.88);
+  color: #2a1d00;
+  font-weight: 700;
+}
+.hud-chip.coins.disabled {
+  background: rgba(13, 17, 23, 0.72);
+  color: var(--text-dim);
+  font-weight: 500;
+}
+.earnings {
+  margin-top: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}

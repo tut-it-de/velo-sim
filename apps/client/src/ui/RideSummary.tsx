@@ -4,11 +4,16 @@ import { settingsStore, updateSettings } from '../state/settings';
 import type { RideResult } from '../ride/rideSession';
 import { fitFileName, type StoredActivity } from '../state/activities';
 import { fmt, formatDuration } from './components';
+import { formatCoins, total } from '@velo/equipment';
+import { balance, garageStore } from '../state/garage';
+import { useStore } from '../state/store';
 
 export function RideSummary({ result, activity, onClose }: { result: RideResult; activity: StoredActivity; onClose: () => void }) {
   const s = result.summary;
   const [ftpApplied, setFtpApplied] = useState(false);
   const newFtp = result.workout?.rampTestFtp;
+  const garage = useStore(garageStore);
+  const earned = total(result.earnings);
   const rows: Array<[string, string]> = [
     ['Zeit (in Bewegung)', formatDuration(s.durationS)],
     ['Distanz', `${(s.distanceM / 1000).toFixed(2)} km`],
@@ -40,6 +45,24 @@ export function RideSummary({ result, activity, onClose }: { result: RideResult;
               <div className="summary-value">{v}</div>
             </div>
           ))}
+        </div>
+        <div className="earnings">
+          {result.simulated ? (
+            <span className="muted">🪙 Mit dem Simulator gibt es keine Watt-Taler.</span>
+          ) : (
+            <>
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <strong>🪙 +{formatCoins(earned)} Watt-Taler</strong>
+                <span className="muted small">Kontostand {formatCoins(balance(garage))}</span>
+              </div>
+              {result.earnings.map((l) => (
+                <div key={l.reason} className="row small muted" style={{ justifyContent: 'space-between' }}>
+                  <span>{l.label}</span>
+                  <span>+{formatCoins(l.amount)}</span>
+                </div>
+              ))}
+            </>
+          )}
         </div>
         {result.workout && (
           <div className="notice info" style={{ marginTop: 12 }}>

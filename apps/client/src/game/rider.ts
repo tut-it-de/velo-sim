@@ -12,10 +12,18 @@ import {
 export interface RiderLook {
   jersey: string;
   frame: string;
+  frameAccent?: string;
+  frameStyle?: 'aero' | 'allround' | 'climber' | 'endurance';
   rim?: string;
+  rimDepthMm?: number;
   helmet?: string;
+  jerseyAccent?: string;
+  /** One-piece suit: shorts in jersey colour. */
+  skinsuit?: boolean;
   skin?: string;
 }
+
+const TUBE_SCALE: Record<NonNullable<RiderLook['frameStyle']>, number> = { aero: 1.75, allround: 1.2, climber: 1.0, endurance: 1.1 };
 
 const WHEEL_RADIUS = 0.34;
 const CRANK = 0.17;
@@ -81,10 +89,14 @@ export class RiderAvatar {
   ) {
     this.root = new TransformNode(name, scene);
     const jersey = material(scene, `${name}-jersey`, look.jersey);
-    const shorts = material(scene, `${name}-shorts`, '#16181c');
+    const sleeves = material(scene, `${name}-sleeves`, look.jerseyAccent ?? look.jersey);
+    const shorts = material(scene, `${name}-shorts`, look.skinsuit ? look.jersey : '#16181c');
     const skin = material(scene, `${name}-skin`, look.skin ?? '#e0ac8a');
     const helmet = material(scene, `${name}-helmet`, look.helmet ?? '#f2f2f2', 0.3);
     const frameMat = material(scene, `${name}-frame`, look.frame, 0.4);
+    const accentMat = material(scene, `${name}-frame-accent`, look.frameAccent ?? look.frame, 0.4);
+    const tubeScale = TUBE_SCALE[look.frameStyle ?? 'allround'];
+    const rimDepth = Math.min(0.08, Math.max(0.018, (look.rimDepthMm ?? 25) / 1000));
     const tire = material(scene, `${name}-tire`, '#141414');
     const rim = material(scene, `${name}-rim`, look.rim ?? '#2a2d33', 0.4);
     const metal = material(scene, `${name}-metal`, '#9aa0a6', 0.5);
@@ -106,15 +118,36 @@ export class RiderAvatar {
       t.rotation.z = Math.PI / 2;
       t.material = tire;
       t.parent = node;
-      const r = MeshBuilder.CreateCylinder('rim', { height: 0.02, diameter: WHEEL_RADIUS * 2 - 0.08, tessellation: 20 }, scene);
+      // Rim as a lathed ring: its radial depth shows the rim height (22 mm alloy … 65 mm deep carbon).
+      const outer = WHEEL_RADIUS - 0.03;
+      const inner = outer - rimDepth;
+      const w = 0.012;
+      const r = MeshBuilder.CreateLathe(
+        'rim',
+        {
+          shape: [new Vector3(inner, -w, 0), new Vector3(outer, -w * 1.4, 0), new Vector3(outer, w * 1.4, 0), new Vector3(inner, w, 0), new Vector3(inner, -w, 0)],
+          tessellation: 32,
+          sideOrientation: Mesh.DOUBLESIDE,
+        },
+        scene,
+      );
       r.rotation.z = Math.PI / 2;
       r.material = rim;
       r.parent = node;
-      // a single bright marker makes the rotation visible
-      const marker = MeshBuilder.CreateBox('marker', { width: 0.025, height: 0.08, depth: 0.03 }, scene);
-      marker.position.y = WHEEL_RADIUS - 0.07;
-      marker.material = metal;
-      marker.parent = node;
+      const spokes: Mesh[] = [];
+      for (let k = 0; k < 16; k++) {
+        const a = (k / 16) * Math.PI * 2;
+        const sp = MeshBuilder.CreateCylinder('spoke', { height: inner - 0.03, diameter: 0.004, tessellation: 3 }, scene);
+        sp.position.set(0, Math.cos(a) * (inner / 2 + 0.015), Math.sin(a) * (inner / 2 + 0.015));
+        sp.rotation.x = a;
+        spokes.push(sp);
+      }
+      const hub = MeshBuilder.CreateCylinder('hub', { height: 0.09, diameter: 0.04, tessellation: 10 }, scene);
+      hub.rotation.z = Math.PI / 2;
+      spokes.push(hub);
+      const spokeMesh = Mesh.MergeMeshes(spokes, true, true)!;
+      spokeMesh.material = metal;
+      spokeMesh.parent = node;
       this.wheels.push(node);
     }
 
@@ -122,16 +155,18 @@ export class RiderAvatar {
     const rearAxle = new Vector3(0, WHEEL_RADIUS, -0.5);
     const frontAxle = new Vector3(0, WHEEL_RADIUS, 0.5);
     const seatCluster = new Vector3(0, 0.82, -0.25);
-    const headTop = new Vector3(0, 0.85, 0.36);
+    const headTop = new Vector3(0, look.frameStyle === 'endurance' ? 0.9 : 0.85, 0.36);
     const headBottom = new Vector3(0, 0.68, 0.41);
-    span(tube('toptube', 0.04, frameMat), seatCluster, headTop);
-    span(tube('downtube', 0.05, frameMat), this.bb, headBottom);
-    span(tube('seattube', 0.04, frameMat), this.bb, seatCluster);
-    span(tube('headtube', 0.045, frameMat), headBottom, headTop);
-    span(tube('fork', 0.03, frameMat), headBottom, frontAxle);
+    span(tube('toptube', 0.04 * tubeScale, frameMat), seatCluster, headTop);
+    span(tube('downtube', 0.05 * tubeScale, frameMat), this.bb, headBottom);
+    span(tube('seattube', 0.04 * tubeScale, accentMat), this.bb, seatCluster);
+    span(tube('headtube', 0.045 * tubeScale, frameMat), headBottom, headTop);
+    span(tube('fork', 0.03 * tubeScale, frameMat), headBottom, frontAxle);
+    // Aero frames have dropped seat stays.
+    const stayTop = look.frameStyle === 'aero' ? seatCluster.add(new Vector3(0, -0.14, 0.02)) : seatCluster.add(new Vector3(0, -0.03, 0));
     for (const x of [-0.055, 0.055]) {
-      span(tube('chainstay', 0.025, frameMat), this.bb.add(new Vector3(x, 0, 0)), rearAxle.add(new Vector3(x, 0, 0)));
-      span(tube('seatstay', 0.02, frameMat), seatCluster.add(new Vector3(x, -0.03, 0)), rearAxle.add(new Vector3(x, 0, 0)));
+      span(tube('chainstay', 0.025 * tubeScale, frameMat), this.bb.add(new Vector3(x, 0, 0)), rearAxle.add(new Vector3(x, 0, 0)));
+      span(tube('seatstay', 0.02 * tubeScale, frameMat), stayTop.add(new Vector3(x, 0, 0)), rearAxle.add(new Vector3(x, 0, 0)));
     }
     span(tube('seatpost', 0.028, metal), seatCluster, new Vector3(0, 0.93, -0.29));
     const saddle = MeshBuilder.CreateBox('saddle', { width: 0.12, height: 0.04, depth: 0.26 }, scene);
@@ -170,7 +205,7 @@ export class RiderAvatar {
       const e = new Vector3(x * 1.1, 1.1, 0.33);
       const h = new Vector3(x * 1.2, 0.89, 0.46);
       const upper = MeshBuilder.CreateCapsule('upperarm', { height: 1, radius: 0.045, tessellation: 8 }, scene);
-      upper.material = jersey;
+      upper.material = sleeves;
       upper.parent = this.root;
       span(upper, s, e);
       const fore = MeshBuilder.CreateCapsule('forearm', { height: 1, radius: 0.038, tessellation: 8 }, scene);
