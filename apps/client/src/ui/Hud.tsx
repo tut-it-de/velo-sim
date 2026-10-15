@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { formatCoins } from '@velo/equipment';
 import { powerZone } from '@velo/metrics';
 import { CAMERA_MODES, type CameraMode } from '../game/world';
@@ -40,7 +40,7 @@ export function Hud({
   session: RideSession;
   camera: CameraMode;
   onCamera: (m: CameraMode) => void;
-  onFinish: () => void;
+  onFinish: () => void | Promise<void>;
 }) {
   const s = useStore(session.snapshot);
   const settings = useStore(settingsStore);
@@ -115,25 +115,39 @@ export function Hud({
         </div>
       )}
 
-      {s.bots.length > 0 && (
+      {(s.others.length > 0 || session.net) && (
         <div className="hud-right hud-panel">
-          <div className="hud-label" style={{ marginBottom: 6 }}>
-            Mitfahrer
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+            <span className="hud-label">Mitfahrer</span>
+            {session.net && <NetBadge session={session} />}
           </div>
-          {[...s.bots]
+          {[...s.others]
+            .sort((a, b) => Math.abs(a.gapM) - Math.abs(b.gapM))
+            .slice(0, 8)
             .sort((a, b) => b.gapM - a.gapM)
             .map((b) => (
               <div key={b.id} className="hud-bot">
-                <span>{b.name}</span>
-                <span className="muted">{b.wkg.toFixed(1)} W/kg</span>
+                <span>
+                  {b.remote ? '🌐 ' : ''}
+                  {b.name}
+                </span>
+                <span className="muted">{b.wkg !== undefined ? `${b.wkg.toFixed(1)} W/kg` : b.power !== undefined ? `${Math.round(b.power)} W` : ''}</span>
                 <span className={b.gapM >= 0 ? 'ahead' : 'behind'}>
                   {b.gapM >= 0 ? '+' : '−'}
                   {Math.abs(b.gapM) >= 1000 ? `${(Math.abs(b.gapM) / 1000).toFixed(1)} km` : `${Math.round(Math.abs(b.gapM))} m`}
                 </span>
+                {b.remote && (
+                  <button className="rideon" title="Kudos geben" onClick={() => session.net?.sendRideOn(b.id)}>
+                    👋
+                  </button>
+                )}
               </div>
             ))}
         </div>
       )}
+
+      {session.net && <ChatBox session={session} />}
+      {session.net && <RideOnToast session={session} />}
 
       {s.noTrainerData && !paused && <div className="hud-warning">Keine Leistungsdaten – ist der Trainer verbunden? (Geräte-Seite)</div>}
       {paused && <div className="hud-warning paused">Pausiert – „Weiter“ oder Taste P</div>}
@@ -143,9 +157,60 @@ export function Hud({
           track={track}
           positionM={s.lapDistanceM}
           height={78}
-          markers={s.bots.map((b) => ({ id: b.id, positionM: track.wrap(s.lapDistanceM + b.gapM), color: '#58a6ff' }))}
+          markers={s.others.map((b) => ({ id: b.id, positionM: track.wrap(s.lapDistanceM + b.gapM), color: b.remote ? '#3fb950' : '#58a6ff' }))}
         />
       </div>
     </div>
   );
+}
+
+function NetBadge({ session }: { session: RideSession }) {
+  const net = useStore(session.net!.state);
+  const label = net.status === 'online' ? `online · ${net.riderCount}` : net.status === 'connecting' ? 'verbinde …' : net.status === 'error' ? 'Fehler' : 'offline';
+  return (
+    <span className={`net-badge ${net.status}`} title={net.error ?? (net.authenticated ? 'angemeldet – Taler bucht der Server' : 'Gast – keine Taler auf dem Server')}>
+      ● {label}
+    </span>
+  );
+}
+
+function ChatBox({ session }: { session: RideSession }) {
+  const net = useStore(session.net!.state);
+  const [text, setText] = useState('');
+  const recent = net.chat.filter((c) => Date.now() - c.at < 60_000).slice(-5);
+  return (
+    <div className="hud-chat">
+      {recent.map((c, i) => (
+        <div key={i} className="hud-chat-line">
+          <strong>{c.name}:</strong> {c.text}
+        </div>
+      ))}
+      <input
+        value={text}
+        placeholder="Nachricht … (Enter)"
+        maxLength={280}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter' && text.trim()) {
+            session.net?.sendChat(text);
+            setText('');
+          }
+        }}
+      />
+    </div>
+  );
+}
+
+function RideOnToast({ session }: { session: RideSession }) {
+  const net = useStore(session.net!.state);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (!net.lastRideOn) return;
+    setVisible(true);
+    const id = setTimeout(() => setVisible(false), 4000);
+    return () => clearTimeout(id);
+  }, [net.lastRideOn?.at]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!visible || !net.lastRideOn) return null;
+  return <div className="rideon-toast">👋 {net.lastRideOn.name} gibt dir Kudos!</div>;
 }

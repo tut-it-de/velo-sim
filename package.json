@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "dev": "npm run dev -w @velo/client",
+    "server": "npm run dev -w @velo/server",
     "build": "turbo build",
     "test": "turbo test",
     "type-check": "turbo type-check",

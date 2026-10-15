@@ -24,6 +24,13 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Velo Sim verbindet sich mit deinem Spielserver im lokalen Netzwerk.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Velo Sim verbindet sich per Bluetooth mit deinem Smart-Trainer, Herzfrequenz- und Kadenzsensor.</string>
 	<key>UIBackgroundModes</key>

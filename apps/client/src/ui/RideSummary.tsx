@@ -46,7 +46,16 @@ export function RideSummary({ result, activity, onClose }: { result: RideResult;
             </div>
           ))}
         </div>
-        <div className="earnings">
+        {result.server && (
+          <div className={`notice ${result.server.flagged ? '' : 'info'}`} style={{ marginTop: 12 }}>
+            {result.server.flagged
+              ? `⚠ Der Server hat die Fahrt markiert (${result.server.reason}) – keine Taler gebucht.`
+              : result.server.reason
+                ? `🌐 ${result.server.reason}`
+                : `🌐 Vom Server gebucht: +${formatCoins(result.server.coins)} Watt-Taler für ${Math.round(result.server.kilojoules)} kJ und ${result.server.laps} Runde(n). Kontostand ${formatCoins(result.server.balance ?? 0)}.`}
+          </div>
+        )}
+        <div className="earnings" hidden={!!result.server}>
           {result.simulated ? (
             <span className="muted">🪙 Mit dem Simulator gibt es keine Watt-Taler.</span>
           ) : (

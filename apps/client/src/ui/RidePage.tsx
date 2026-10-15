@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { accountStore, fetchOnline, isLoggedIn, refreshAccount, serverBase } from '../net/api';
+import { MultiplayerClient } from '../net/multiplayer';
 import { ROUTES, getTrack } from '@velo/routes';
 import { workoutStats, type Workout } from '@velo/workouts';
 import { deviceManager } from '../devices/deviceManager';
@@ -38,7 +40,12 @@ export function RidePage() {
         workout={phase.workout}
         onFinish={async (result) => {
           const activity = await saveActivity(result, settingsStore.get().useSimulator, result.workout ? `Workout „${result.workout.name}“` : undefined);
-          if (!result.simulated) creditRide(result.earnings, result.routeId, result.lapsCompleted, activity.title);
+          if (isLoggedIn()) {
+            // Online + logged in: the server books from its own telemetry.
+            await refreshAccount().catch(() => undefined);
+          } else if (!result.simulated) {
+            creditRide(result.earnings, result.routeId, result.lapsCompleted, activity.title);
+          }
           setPhase({ kind: 'summary', result, activity });
         }}
         onCancel={() => setPhase({ kind: 'select' })}
@@ -60,6 +67,20 @@ function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean, wo
   const [bots, setBots] = useState(true);
   const [mode, setMode] = useState<'free' | 'workout'>('free');
   const [workout, setWorkout] = useState<Workout | undefined>();
+  const [online, setOnline] = useState<Record<string, number> | null>(null);
+  const hasServer = !!settings.serverUrl.trim();
+
+  useEffect(() => {
+    if (!hasServer) return;
+    let alive = true;
+    const load = () => fetchOnline().then((o) => alive && setOnline(o));
+    void load();
+    const id = setInterval(load, 15_000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [hasServer, settings.serverUrl]);
   const trainerReady = slots.trainer.state === 'connected';
 
   const useSimulator = async () => {
@@ -108,6 +129,7 @@ function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean, wo
                   <span>{(t.length / 1000).toFixed(1)} km</span>
                   <span>{Math.round(t.elevationGain)} hm</span>
                   <span>max. {t.maxGrade.toFixed(0)} %</span>
+                  {online && <span className="online-count">🌐 {online[r.id] ?? 0} online</span>}
                 </div>
                 <ElevationProfile track={t} height={70} />
                 <div className="muted small" style={{ marginTop: 8, textAlign: 'left' }}>
@@ -118,10 +140,18 @@ function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean, wo
           })}
         </div>
         <div className="card row" style={{ justifyContent: 'space-between' }}>
-          <label className="row">
-            <input type="checkbox" checked={bots} onChange={(e) => setBots(e.target.checked)} />
-            Pacer-Bots (2,0 / 2,8 / 3,5 W/kg) – zum Mitfahren im Windschatten
-          </label>
+          <div className="row" style={{ gap: 18 }}>
+            <label className="row">
+              <input type="checkbox" checked={bots} onChange={(e) => setBots(e.target.checked)} />
+              Pacer-Bots (2,0 / 2,8 / 3,5 W/kg)
+            </label>
+            {hasServer && (
+              <label className="row" title={online ? '' : 'Server nicht erreichbar'}>
+                <input type="checkbox" checked={settings.rideOnline} onChange={(e) => updateSettings({ rideOnline: e.target.checked })} />
+                Online mit anderen fahren {online ? '' : '(Server nicht erreichbar)'}
+              </label>
+            )}
+          </div>
           <div className="row">
             <span className="muted small">
               {mode === 'workout' && workout
@@ -166,7 +196,19 @@ function RideView({
     let cancelled = false;
     let w: GameWorld | null = null;
     const garage = garageStore.get();
-    const s = new RideSession(routeId, settingsStore.get(), { bots, workout, loadout: garage.loadout, routesWithLap: garage.routesWithLap });
+    const st = settingsStore.get();
+    const net =
+      st.rideOnline && serverBase()
+        ? new MultiplayerClient(serverBase(), {
+            name: accountStore.get().user?.name ?? st.riderName,
+            routeId,
+            loadout: garage.loadout,
+            weightKg: st.weightKg,
+            token: accountStore.get().token,
+            simulated: st.useSimulator,
+          })
+        : undefined;
+    const s = new RideSession(routeId, st, { bots, workout, loadout: garage.loadout, routesWithLap: garage.routesWithLap, net });
     GameWorld.create(canvasRef.current!, routeId, lookFromLoadout(garage.loadout), setProgress)
       .then((created) => {
         if (cancelled) {
@@ -175,6 +217,11 @@ function RideView({
         }
         w = created;
         for (const b of s.bots) created.ensureRider(b.id, b.look);
+        if (net) {
+          net.on('joined', (info) => created.ensureRider(info.id, lookFromLoadout(info.loadout)));
+          net.on('left', (id) => created.removeRider(id));
+          net.connect();
+        }
         created.setFrameProvider((dt) => s.frame(dt));
         s.start();
         setWorld(created);
@@ -185,6 +232,7 @@ function RideView({
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
     return () => {
       cancelled = true;
+      net?.close();
       s.dispose();
       w?.dispose();
       void keepAwake(false);
@@ -194,6 +242,7 @@ function RideView({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!world || !session) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === 'c' || e.key === 'C') {
         const idx = CAMERA_MODES.findIndex((m) => m.id === world.cameraMode);
         const next = CAMERA_MODES[(idx + 1) % CAMERA_MODES.length]!.id;
@@ -235,7 +284,11 @@ function RideView({
             world.setCameraMode(mode);
             setCamera(mode);
           }}
-          onFinish={() => onFinish(session.finish())}
+          onFinish={async () => {
+            const result = session.finish();
+            if (session.net) result.server = await session.net.finish();
+            onFinish(result);
+          }}
         />
       )}
     </div>

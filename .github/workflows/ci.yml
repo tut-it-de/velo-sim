@@ -7,8 +7,20 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: velo
+          POSTGRES_PASSWORD: velo
+          POSTGRES_DB: velo_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U velo" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      PG_TEST_URL: postgres://velo:velo@localhost:5432/velo_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

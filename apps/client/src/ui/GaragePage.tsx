@@ -18,6 +18,7 @@ import {
 import { totalMass } from '@velo/physics';
 import { ROUTES, getTrack } from '@velo/routes';
 import { balance, buy, equip, garageStore } from '../state/garage';
+import { accountStore, isLoggedIn, serverBuy, serverEquip } from '../net/api';
 import { settingsStore } from '../state/settings';
 import { useStore } from '../state/store';
 import { formatDuration } from './components';
@@ -63,6 +64,7 @@ function signedTime(s: number): string {
 
 export function GaragePage() {
   const garage = useStore(garageStore);
+  const account = useStore(accountStore);
   const settings = useStore(settingsStore);
   const [tab, setTab] = useState<ItemType>('bike');
   const [selected, setSelected] = useState<string | null>(null);
@@ -91,7 +93,10 @@ export function GaragePage() {
       <div className="page-inner">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <h1>Garage</h1>
-          <div className="wallet">🪙 {formatCoins(coins)} Watt-Taler</div>
+          <div className="row">
+            <span className="muted small">{account.user ? `Konto: ${account.user.name} (Server)` : 'lokal – unter Profil mit einem Server verbinden'}</span>
+            <div className="wallet">🪙 {formatCoins(coins)} Watt-Taler</div>
+          </div>
         </div>
 
         <div className="card garage-current">
@@ -177,9 +182,14 @@ export function GaragePage() {
                     <span className="equipped-label">✓ Ausgerüstet</span>
                   ) : owned ? (
                     <button
-                      onClick={() => {
-                        equip(item.id);
-                        setMessage(`${itemName(item)} ausgerüstet`);
+                      onClick={async () => {
+                        try {
+                          if (isLoggedIn()) await serverEquip(item.id);
+                          else equip(item.id);
+                          setMessage(`${itemName(item)} ausgerüstet`);
+                        } catch (err) {
+                          setMessage(err instanceof Error ? err.message : String(err));
+                        }
                       }}
                     >
                       Ausrüsten
@@ -189,12 +199,20 @@ export function GaragePage() {
                       className="primary"
                       disabled={!affordable}
                       title={affordable ? '' : `Noch ${formatCoins(item.price - coins)} Taler`}
-                      onClick={() => {
-                        const res = buy(item.id);
-                        if (res.ok) {
-                          equip(item.id);
+                      onClick={async () => {
+                        try {
+                          if (isLoggedIn()) {
+                            await serverBuy(item.id);
+                            await serverEquip(item.id);
+                          } else {
+                            const res = buy(item.id);
+                            if (!res.ok) throw new Error(res.error);
+                            equip(item.id);
+                          }
                           setMessage(`${itemName(item)} gekauft und ausgerüstet`);
-                        } else setMessage(res.error);
+                        } catch (err) {
+                          setMessage(err instanceof Error ? err.message : String(err));
+                        }
                       }}
                     >
                       🪙 {formatCoins(item.price)}

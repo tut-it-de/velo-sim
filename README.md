@@ -17,6 +17,34 @@ npm run dev          # http://localhost:5173 in Chrome oder Edge öffnen
 - **Mit KICKR:** Geräte → Smart-Trainer → *Verbinden*. Web Bluetooth funktioniert in Chrome/Edge unter Windows und macOS.
 - **Ohne Hardware:** Geräte → *Simulator statt Bluetooth* aktivieren. Steuerung mit ↑/↓ (Watt), ←/→ (Kadenz), Leertaste (Pause).
 
+## Spielserver (Multiplayer, Konten, Watt-Taler)
+
+```bash
+npm run server       # Entwicklung: http://localhost:8080, Daten nur im Speicher
+```
+
+In der App unter **Profil → Online & Konto** die Server-Adresse eintragen (z. B. `http://localhost:8080`), Konto anlegen – fertig.
+Ohne Server läuft alles offline (Garage und Taler dann nur lokal).
+
+**Produktion** (z. B. auf deinem VPS, neben Caddy):
+
+```bash
+echo "JWT_SECRET=$(openssl rand -hex 32)" >  .env
+echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)" >> .env
+docker compose -f docker-compose.server.yml up -d --build
+```
+
+Caddy als HTTPS-Proxy (WebSockets gehen automatisch durch):
+
+```
+velo.deine-domain.de {
+  reverse_proxy localhost:8080
+}
+```
+
+Die iPad-App braucht HTTPS (App Transport Security); im lokalen Netz ist `http://` erlaubt.
+Last-Test: `npm run bots -w @velo/server -- --count 100 --route bergrunde --url http://localhost:8080`
+
 ## Desktop-App (Windows / macOS)
 
 ```bash
@@ -48,6 +76,7 @@ Bluetooth-Berechtigung und Querformat sind in `ios/App/App/Info.plist` bereits e
 apps/
   client/     React + Babylon.js – die eigentliche App (Browser, Electron, iPad)
   desktop/    Electron-Hülle für Windows/macOS inkl. Bluetooth-Geräteauswahl
+  server/     Spielserver: Konten, Garage/Ledger (PostgreSQL), Räume pro Strecke, Chat, Kudos
 packages/
   ble/        Bluetooth: FTMS, Wahoo-Protokoll, Cycling Power, Herzfrequenz, CSC, Simulator
   physics/    Fahrphysik (Leistung → Geschwindigkeit), Windschatten, CdA
@@ -55,6 +84,7 @@ packages/
   metrics/    NP, IF, TSS, Zonen, Aufzeichnung, FIT-Export
   workouts/   Workout-Modell, .zwo Import/Export, ERG-Player, Bibliothek
   equipment/  Ausrüstungskatalog, Wertungen, Zeitvergleich, Watt-Taler-Regeln
+  protocol/   Nachrichten zwischen App und Spielserver
 ```
 
 ## Bedienung

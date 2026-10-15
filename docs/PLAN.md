@@ -71,5 +71,5 @@ CdA   = (CdA_Basis + ΔCdA_Rad + ΔCdA_Laufräder + ΔCdA_Trikot) · (1 − Wind
 | 2 – Workouts | ERG-Engine, `.zwo` Import/Export, Bibliothek (9), Editor, Rampentest → FTP, Zonen/NP/IF/TSS | ✅ |
 | 3 – Segmente & Bestzeiten | Zeitmessung für Bergwertungen, Sprints, Abfahrten und Runden, Live-Vergleich, Bestzeiten-Übersicht | ✅ |
 | 4 – Ausrüstung & Währung | Katalog (15 Räder, 7 Laufräder, 11 Trikots), Wertungen, Zeitvergleich, Garage/Shop, Watt-Taler mit Ledger, Avatar zeigt Ausrüstung | ✅ lokal – Server-Buchung folgt mit Phase 5 |
-| 5 – Multiplayer | Colyseus, andere Fahrer, Windschatten, Chat, Kudos, Bots | offen |
+| 5 – Multiplayer | Eigener WebSocket-Server (statt Colyseus), Konten (scrypt/JWT), Ledger in PostgreSQL, Taler-Buchung aus Server-Telemetrie mit Plausibilitätsprüfung, Räume pro Strecke (300er-Shards), Interpolation, Windschatten hinter echten Fahrern, Chat, Kudos, Last-Bots, Docker | ✅ |
 | 6 – Später | Helme, Level, Trainingspläne, Strava, Gruppenfahrten, Rennen | offen |

@@ -1,0 +1,34 @@
+# Game server + PostgreSQL. Start: docker compose -f docker-compose.server.yml up -d
+# Put JWT_SECRET (long random string) and POSTGRES_PASSWORD into a .env file next to this file.
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: velo
+      POSTGRES_USER: velo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt}
+    volumes:
+      - velo-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U velo']
+      interval: 5s
+      retries: 10
+
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 8080
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET fehlt}
+      DATABASE_URL: postgres://velo:${POSTGRES_PASSWORD}@postgres:5432/velo
+    ports:
+      - '8080:8080'
+
+volumes:
+  velo-db:

@@ -12,6 +12,10 @@ export interface Settings {
   useSimulator: boolean;
   /** Prefer a dedicated cadence sensor over the trainer's estimated cadence. */
   preferCadenceSensor: boolean;
+  /** Game server, e.g. https://velo.example.de — empty = offline only. */
+  serverUrl: string;
+  /** Join the multiplayer room when starting a ride (if a server is configured). */
+  rideOnline: boolean;
 }
 
 const KEY = 'velo.settings.v1';
@@ -24,6 +28,8 @@ export const DEFAULT_SETTINGS: Settings = {
   trainerDifficulty: 0.5,
   useSimulator: false,
   preferCadenceSensor: true,
+  serverUrl: '',
+  rideOnline: true,
 };
 
 export const settingsStore = new Store<Settings>(loadJson(KEY, DEFAULT_SETTINGS));

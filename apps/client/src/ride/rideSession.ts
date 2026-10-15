@@ -11,6 +11,8 @@ import {
 import { SegmentTracker, getTrack, type ActiveSegment, type RouteSegment, type Track } from '@velo/routes';
 import { WorkoutPlayer, ftpFromRampTest, type PlayerState, type Workout } from '@velo/workouts';
 import { deviceManager } from '../devices/deviceManager';
+import type { MultiplayerClient } from '../net/multiplayer';
+import type { RideSummaryDTO } from '@velo/protocol';
 import type { RiderLook } from '../game/rider';
 import type { RiderFrame } from '../game/world';
 import { getBest, submitResult } from '../state/records';
@@ -50,7 +52,8 @@ export interface RideSnapshot {
   /** Grade last sent to the trainer (after difficulty scaling). */
   trainerGrade?: number;
   noTrainerData: boolean;
-  bots: Array<{ id: string; name: string; wkg: number; gapM: number }>;
+  /** Pacer bots and other online riders, with the gap to me along the loop (+ = ahead). */
+  others: Array<{ id: string; name: string; wkg?: number; gapM: number; remote: boolean; power?: number }>;
   workout?: PlayerState & { name: string };
   activeSegments: Array<ActiveSegment & { bestS?: number }>;
   lastResult?: SegmentOutcome;
@@ -80,6 +83,8 @@ export interface RideResult {
   earnings: EarningLine[];
   simulated: boolean;
   lapsCompleted: number;
+  /** Booking by the game server (online rides while logged in). */
+  server?: RideSummaryDTO;
 }
 
 const TICK_MS = 100;
@@ -92,6 +97,20 @@ export interface RideOptions {
   loadout?: Loadout;
   /** Route ids on which the first-lap bonus has already been paid. */
   routesWithLap?: string[];
+  /** Online room connection (multiplayer). */
+  net?: MultiplayerClient;
+}
+
+/** Shortest signed distance between two lap positions on a loop. */
+export function wrapGap(gap: number, length: number): number {
+  const g = ((gap % length) + length) % length;
+  return g > length / 2 ? g - length : g;
+}
+
+function lateralFor(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return 0.4 + (h % 100) / 100 * 2.6;
 }
 
 interface Bot extends BotInfo {
@@ -146,6 +165,7 @@ export class RideSession {
   private lastResult?: SegmentOutcome;
   private workoutKj = 0;
   private readonly firstLapOnRoute: boolean;
+  readonly net?: MultiplayerClient;
 
   constructor(
     readonly routeId: string,
@@ -155,6 +175,7 @@ export class RideSession {
     this.track = getTrack(routeId);
     this.setup = setupFor(settings, options.loadout ?? STARTER_LOADOUT);
     this.firstLapOnRoute = !(options.routesWithLap ?? []).includes(routeId);
+    this.net = options.net;
     this.recorder = new ActivityRecorder(settings.ftp);
     this.lastElevation = this.track.sample(0).y;
     if (options.workout) this.player = new WorkoutPlayer(options.workout, settings.ftp);
@@ -260,6 +281,7 @@ export class RideSession {
     this.draft = draftReduction(this.gapAhead(this.state.distanceM) - BIKE_LENGTH);
     this.state = step(this.state, power, this.setup, { gradePercent: sample.gradePercent, draftReduction: this.draft }, dt);
     this.stepBots(dt);
+    this.net?.sendState(this.state.distanceM, this.state.speedMps, power, cadence, RIDER_LATERAL);
 
     const moving = this.state.speedMps > 0.3 || power > 0;
     if (this.player && moving && !this.player.state.finished) {
@@ -356,6 +378,14 @@ export class RideSession {
       const gap = b.state.distanceM - myDistance;
       if (gap > 0 && gap < best) best = gap;
     }
+    if (this.net) {
+      for (const id of this.net.riders.keys()) {
+        const pos = this.net.position(id);
+        if (!pos) continue;
+        const gap = wrapGap(pos.d - myDistance, this.track.length);
+        if (gap > 0 && gap < best) best = gap;
+      }
+    }
     return best;
   }
 
@@ -429,7 +459,13 @@ export class RideSession {
       draft: this.draft,
       trainerGrade: this.lastTrainerGrade,
       noTrainerData: stale,
-      bots: this.bots.map((b) => ({ id: b.id, name: b.name, wkg: b.wkg, gapM: b.state.distanceM - this.state.distanceM })),
+      others: [
+        ...this.bots.map((b) => ({ id: b.id, name: b.name, wkg: b.wkg, gapM: b.state.distanceM - this.state.distanceM, remote: false })),
+        ...[...(this.net?.riders.values() ?? [])].flatMap((r) => {
+          const pos = this.net!.position(r.info.id);
+          return pos ? [{ id: r.info.id, name: r.info.name, gapM: wrapGap(pos.d - this.state.distanceM, this.track.length), remote: true, power: pos.p }] : [];
+        }),
+      ],
       workout: this.player ? { ...this.player.state, name: this.player.workout.name } : undefined,
       activeSegments: this.segmentTracker
         ? this.segmentTracker.current().map((a) => ({ ...a, bestS: getBest(this.routeId, a.segment.id)?.timeS }))
@@ -438,6 +474,16 @@ export class RideSession {
       coins: total(this.earningLines()),
       coinsDisabled: this.settings.useSimulator,
     };
+  }
+
+  private remoteFrames(): Array<RiderFrame & { id: string }> {
+    if (!this.net) return [];
+    const out: Array<RiderFrame & { id: string }> = [];
+    for (const id of this.net.riders.keys()) {
+      const pos = this.net.position(id);
+      if (pos) out.push({ id, distanceM: pos.d, lateralM: lateralFor(id), speedMps: pos.v, cadence: pos.v > 0.3 ? pos.c : 0 });
+    }
+    return out;
   }
 
   /** Smoothed positions for rendering (physics runs at 10 Hz, rendering at 60 Hz). */
@@ -462,7 +508,7 @@ export class RideSession {
         speedMps: b.state.speedMps,
         cadence: b.state.speedMps > 0.3 ? b.cadence : 0,
         };
-      }),
+      }).concat(this.remoteFrames()),
     };
   }
 }

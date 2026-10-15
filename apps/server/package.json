@@ -1,0 +1,29 @@
+{
+  "name": "@velo/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "bots": "tsx scripts/bots.ts",
+    "test": "vitest run",
+    "type-check": "tsc -p tsconfig.json",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/server.mjs --external:pg-native --external:bufferutil --external:utf-8-validate --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\""
+  },
+  "dependencies": {
+    "@velo/equipment": "*",
+    "@velo/physics": "*",
+    "@velo/protocol": "*",
+    "@velo/routes": "*",
+    "pg": "^8.23.1",
+    "tsx": "^4.23.15",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "@types/ws": "^8.18.2",
+    "esbuild": "^0.28.2"
+  }
+}
