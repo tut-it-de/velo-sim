@@ -1,4 +1,4 @@
-import type { RouteDefinition, RouteSegment } from './types';
+import type { RouteDefinition, RoutePath, RouteSegment } from './types';
 
 export interface TrackSample {
   /** Distance along the lap in metres, wrapped into [0, length). */
@@ -17,9 +17,10 @@ export interface TrackSample {
 const STEP = 2; // metres between samples
 
 /**
- * A closed loop sampled every 2 m: horizontal path from a periodic
- * Catmull-Rom spline (rescaled to the exact target length), elevation from
- * linear keyframes smoothed with a circular moving average.
+ * A closed loop sampled every 2 m. Parametric routes: horizontal path from a
+ * periodic Catmull-Rom spline (rescaled to the exact target length), elevation
+ * from linear keyframes. Real-world routes: the given polyline as is. Either
+ * way the elevation is smoothed with a circular moving average.
  */
 export class Track {
   readonly definition: RouteDefinition;
@@ -40,21 +41,35 @@ export class Track {
 
   constructor(def: RouteDefinition) {
     this.definition = def;
-    const dense = sampleClosedCatmullRom(def.shape, 64);
-    const rawLength = polylineLength(dense, true);
-    const scale = def.lengthM / rawLength;
-    const scaled = dense.map(([x, z]) => [x * scale, z * scale] as [number, number]);
-
-    this.count = Math.round(def.lengthM / STEP);
-    this.length = this.count * STEP;
-    const { xs, zs } = resampleClosed(scaled, this.count, this.length);
-    this.xs = xs;
-    this.zs = zs;
-
-    // Elevation: keyframes → per-sample → circular moving average.
-    const raw = new Float64Array(this.count);
-    for (let i = 0; i < this.count; i++) raw[i] = interpolateKeyframes(def.elevation, (i * STEP * def.lengthM) / this.length, def.lengthM);
-    this.ys = circularMovingAverage(raw, Math.max(1, Math.round((def.smoothingM ?? 120) / STEP / 2)));
+    let raw: Float64Array;
+    if (def.path) {
+      const { pts, elev } = polylineFromPath(def.path);
+      this.count = Math.round(polylineLength(pts, true) / STEP);
+      this.length = this.count * STEP;
+      const res = resampleClosed(pts, this.count, this.length, elev);
+      this.xs = res.xs;
+      this.zs = res.zs;
+      raw = res.ys!;
+    } else {
+      if (!def.shape || !def.elevation) throw new Error(`Strecke ${def.id}: Form oder Höhenprofil fehlt`);
+      const dense = sampleClosedCatmullRom(def.shape, 64);
+      const rawLength = polylineLength(dense, true);
+      const scale = def.lengthM / rawLength;
+      const scaled = dense.map(([x, z]) => [x * scale, z * scale] as [number, number]);
+      this.count = Math.round(def.lengthM / STEP);
+      this.length = this.count * STEP;
+      const res = resampleClosed(scaled, this.count, this.length);
+      this.xs = res.xs;
+      this.zs = res.zs;
+      // Elevation: keyframes → per-sample.
+      const keys = def.elevation;
+      raw = new Float64Array(this.count);
+      for (let i = 0; i < this.count; i++) raw[i] = interpolateKeyframes(keys, (i * STEP * def.lengthM) / this.length, def.lengthM);
+    }
+    const xs = this.xs;
+    const zs = this.zs;
+    const smoothing = def.smoothingM ?? (def.path ? 8 : 120);
+    this.ys = circularMovingAverage(raw, Math.max(1, Math.round(smoothing / STEP / 2)));
 
     this.grades = new Float64Array(this.count);
     this.headings = new Float64Array(this.count);
@@ -189,7 +204,29 @@ function polylineLength(pts: Array<[number, number]>, closed: boolean): number {
   return len;
 }
 
-function resampleClosed(pts: Array<[number, number]>, count: number, length: number): { xs: Float64Array; zs: Float64Array } {
+/** Decodes a real-world path into points + elevations (duplicate closing point removed). */
+function polylineFromPath(path: RoutePath): { pts: Array<[number, number]>; elev: number[] } {
+  const pts: Array<[number, number]> = [];
+  const elev: number[] = [];
+  for (let i = 0; i < path.x.length; i++) {
+    pts.push([path.x[i]!, path.z[i]!]);
+    elev.push(path.y[i]!);
+  }
+  const first = pts[0]!;
+  const last = pts[pts.length - 1]!;
+  if (pts.length > 1 && Math.hypot(first[0] - last[0], first[1] - last[1]) < 1e-6) {
+    pts.pop();
+    elev.pop();
+  }
+  return { pts, elev };
+}
+
+function resampleClosed(
+  pts: Array<[number, number]>,
+  count: number,
+  length: number,
+  values?: number[],
+): { xs: Float64Array; zs: Float64Array; ys?: Float64Array } {
   const n = pts.length;
   const cum = new Float64Array(n + 1);
   for (let i = 0; i < n; i++) {
@@ -200,6 +237,7 @@ function resampleClosed(pts: Array<[number, number]>, count: number, length: num
   const total = cum[n]!;
   const xs = new Float64Array(count);
   const zs = new Float64Array(count);
+  const ys = values ? new Float64Array(count) : undefined;
   let seg = 0;
   for (let k = 0; k < count; k++) {
     const target = (k / count) * total;
@@ -210,9 +248,10 @@ function resampleClosed(pts: Array<[number, number]>, count: number, length: num
     const t = segLen > 0 ? (target - cum[seg]!) / segLen : 0;
     xs[k] = lerp(a[0], b[0], t);
     zs[k] = lerp(a[1], b[1], t);
+    if (ys && values) ys[k] = lerp(values[seg]!, values[(seg + 1) % n]!, t);
   }
   void length;
-  return { xs, zs };
+  return { xs, zs, ys };
 }
 
 function interpolateKeyframes(keys: Array<[number, number]>, d: number, lengthM: number): number {

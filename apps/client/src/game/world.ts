@@ -36,6 +36,7 @@ const ATMOSPHERE: Record<RouteStyle, { top: string; horizon: string; fog: number
   coast: { top: '#3d7fd1', horizon: '#cfe3f3', fog: 0.00026, sunDir: [-0.5, -1, 0.35] },
   hills: { top: '#4a86cf', horizon: '#d8e6ef', fog: 0.0003, sunDir: [0.4, -1, 0.3] },
   alpine: { top: '#2f6fc4', horizon: '#dce9f5', fog: 0.00016, sunDir: [-0.3, -1, -0.45] },
+  lake: { top: '#2a64b8', horizon: '#cddcea', fog: 0.0002, sunDir: [0.55, -0.62, 0.55] },
 };
 
 const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));

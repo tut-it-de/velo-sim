@@ -19,3 +19,7 @@ xcuserdata/
 # Playwright
 test-results/
 playwright-report/
+
+# Geodaten-Cache (tools/geo)
+tools/geo/.cache/
+__pycache__/

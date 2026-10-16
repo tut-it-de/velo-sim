@@ -107,6 +107,7 @@ export class TerrainModel {
         return mix(land, -22, sea);
       }
       case 'hills':
+      case 'lake':
         return elev + 12 + n.fbm(x / 700, z / 700, 5) * 45 + smoothstep(150, 800, dist) * 70 * (0.6 + 0.4 * n.fbm(x / 1500, z / 1500, 3));
       case 'alpine': {
         const mountains = smoothstep(120, 1000, dist) * (260 + 760 * n.ridged(x / 2300, z / 2300, 5));
@@ -144,6 +145,7 @@ const PALETTE: Record<RouteStyle, { grass: Color3; grass2: Color3; rock: Color3;
   coast: { grass: new Color3(0.45, 0.6, 0.3), grass2: new Color3(0.6, 0.62, 0.35), rock: new Color3(0.55, 0.52, 0.46), snowLine: Infinity },
   hills: { grass: new Color3(0.34, 0.55, 0.22), grass2: new Color3(0.5, 0.6, 0.26), rock: new Color3(0.5, 0.47, 0.42), snowLine: Infinity },
   alpine: { grass: new Color3(0.3, 0.47, 0.2), grass2: new Color3(0.42, 0.5, 0.28), rock: new Color3(0.47, 0.45, 0.43), snowLine: 1050 },
+  lake: { grass: new Color3(0.32, 0.5, 0.21), grass2: new Color3(0.45, 0.55, 0.26), rock: new Color3(0.5, 0.48, 0.44), snowLine: Infinity },
 };
 
 const SAND = new Color3(0.86, 0.8, 0.6);

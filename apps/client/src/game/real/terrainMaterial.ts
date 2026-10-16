@@ -1,0 +1,147 @@
+import {
+  Color3,
+  MaterialPluginBase,
+  RawTexture,
+  StandardMaterial,
+  Texture,
+  Vector4,
+  type BaseTexture,
+  type Material,
+  type MaterialDefines,
+  type Scene,
+  type UniformBuffer,
+} from '@babylonjs/core';
+import type { WorldGrid } from './worldData';
+
+/** Cheap value noise for shaders (hash after Dave Hoskins, lattice wrapped every 289 cells). */
+export const NOISE_GLSL = /* glsl */ `
+float veloHash(vec2 p) {
+  p = mod(p, 289.0);
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+float veloNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(veloHash(i), veloHash(i + vec2(1.0, 0.0)), u.x),
+             mix(veloHash(i + vec2(0.0, 1.0)), veloHash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+`;
+
+const UPDATE_DIFFUSE = /* glsl */ `
+{
+  vec2 veloUv = ((vPositionW.xz - veloMap.xy) * veloMap.z + 0.5) * veloSize.xy;
+  vec4 veloCm = texture2D(veloColorMap, veloUv);
+  vec3 veloCol = veloCm.rgb;
+  float veloForest = veloCm.a;
+  float veloDist = distance(vPositionW, vEyePosition.xyz);
+  vec2 veloP = vPositionW.xz;
+  float veloUp = normalW.y;
+  veloCol *= 0.9 + 0.2 * veloNoise(veloP * 0.017);
+#ifdef VELO_DETAIL
+  float veloF2 = 1.0 - smoothstep(350.0, 1100.0, veloDist);
+  if (veloF2 > 0.0) {
+    veloCol *= mix(1.0, 0.85 + 0.3 * veloNoise(veloP * 0.11), veloF2);
+    float veloF3 = 1.0 - smoothstep(25.0, 130.0, veloDist);
+    if (veloF3 > 0.0) veloCol *= mix(1.0, 0.86 + 0.28 * veloNoise(veloP * 0.73), veloF3);
+  }
+  float veloFc = veloForest * (1.0 - smoothstep(900.0, 3600.0, veloDist));
+  if (veloFc > 0.02) {
+    vec2 q = veloP * 0.19;
+    float c0 = veloNoise(q) * 0.65 + veloNoise(q * 2.7 + 7.1) * 0.35;
+    float cx = veloNoise(q + vec2(0.3, 0.0)) * 0.65 + veloNoise((q + vec2(0.3, 0.0)) * 2.7 + 7.1) * 0.35;
+    float cz = veloNoise(q + vec2(0.0, 0.3)) * 0.65 + veloNoise((q + vec2(0.0, 0.3)) * 2.7 + 7.1) * 0.35;
+    normalW = normalize(normalW + vec3(c0 - cx, 0.0, c0 - cz) * 2.4 * veloFc);
+    veloCol *= mix(1.0, 0.62 + 0.72 * c0, veloFc);
+  }
+#else
+  veloCol *= mix(1.0, 0.92, veloForest);
+#endif
+  float veloRock = smoothstep(0.3, 0.55, 1.0 - veloUp) * (1.0 - 0.7 * veloForest);
+  veloCol = mix(veloCol, vec3(0.47, 0.45, 0.42) * (0.85 + 0.3 * veloNoise(veloP * 0.05)), veloRock);
+  veloCol *= 1.0 - 0.32 * (1.0 - smoothstep(veloMap.w - 0.6, veloMap.w + 0.35, vPositionW.y));
+  baseColor.rgb = veloCol;
+}
+`;
+
+/**
+ * Colours the terrain from a world-space colour map (one texel per grid vertex: land-cover albedo with
+ * baked mountain shadows, alpha = forest cover) plus procedural detail, canopy relief and rock on
+ * steep slopes. The road verges use the same material so they blend seamlessly into the ground.
+ */
+export class TerrainPlugin extends MaterialPluginBase {
+  private readonly map: Vector4;
+  private readonly size: Vector4;
+
+  constructor(
+    material: Material,
+    private readonly texture: Texture,
+    grid: WorldGrid,
+    waterLevel: number,
+    private readonly detail: boolean,
+  ) {
+    super(material, 'VeloTerrain', 200, { VELO_DETAIL: false });
+    this.map = new Vector4(grid.x0, grid.z0, 1 / grid.step, waterLevel);
+    this.size = new Vector4(1 / grid.nx, 1 / grid.nz, 0, 0);
+    this._enable(true);
+  }
+
+  override getClassName(): string {
+    return 'VeloTerrainPlugin';
+  }
+
+  override prepareDefines(defines: MaterialDefines): void {
+    (defines as unknown as Record<string, boolean>)['VELO_DETAIL'] = this.detail;
+  }
+
+  override getUniforms() {
+    return {
+      ubo: [
+        { name: 'veloMap', size: 4, type: 'vec4' },
+        { name: 'veloSize', size: 4, type: 'vec4' },
+      ],
+      fragment: 'uniform vec4 veloMap;\nuniform vec4 veloSize;\n',
+    };
+  }
+
+  override getSamplers(samplers: string[]): void {
+    samplers.push('veloColorMap');
+  }
+
+  override bindForSubMesh(ubo: UniformBuffer): void {
+    ubo.updateVector4('veloMap', this.map);
+    ubo.updateVector4('veloSize', this.size);
+    ubo.setTexture('veloColorMap', this.texture);
+  }
+
+  override getActiveTextures(active: BaseTexture[]): void {
+    active.push(this.texture);
+  }
+
+  override hasTexture(texture: BaseTexture): boolean {
+    return texture === this.texture;
+  }
+
+  override getCustomCode(shaderType: string) {
+    if (shaderType !== 'fragment') return null;
+    return {
+      CUSTOM_FRAGMENT_DEFINITIONS: `uniform sampler2D veloColorMap;\n${NOISE_GLSL}`,
+      CUSTOM_FRAGMENT_UPDATE_DIFFUSE: UPDATE_DIFFUSE,
+    };
+  }
+}
+
+export function createTerrainMaterial(scene: Scene, name: string, grid: WorldGrid, colors: Uint8Array, waterLevel: number, detail: boolean): StandardMaterial {
+  const tex = RawTexture.CreateRGBATexture(colors, grid.nx, grid.nz, scene, true, false, Texture.TRILINEAR_SAMPLINGMODE);
+  tex.wrapU = Texture.CLAMP_ADDRESSMODE;
+  tex.wrapV = Texture.CLAMP_ADDRESSMODE;
+  tex.anisotropicFilteringLevel = 4;
+  const mat = new StandardMaterial(name, scene);
+  mat.diffuseColor = Color3.White();
+  mat.specularColor = new Color3(0.02, 0.02, 0.02);
+  mat.specularPower = 8;
+  new TerrainPlugin(mat, tex, grid, waterLevel, detail);
+  return mat;
+}

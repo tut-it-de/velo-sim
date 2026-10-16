@@ -10,7 +10,7 @@ describe('route catalogue', () => {
     expect(kueste.length).toBeCloseTo(16000, -1);
     expect(huegel.length).toBeCloseTo(13000, -1);
     expect(berg.length).toBeCloseTo(18000, -1);
-    for (const r of ROUTES) {
+    for (const r of ROUTES.filter((r) => !r.path)) {
       const t = getTrack(r.id);
       expect(t.length).toBeGreaterThanOrEqual(10000);
       expect(t.length).toBeLessThanOrEqual(20000);
@@ -43,7 +43,7 @@ describe('route catalogue', () => {
   });
 
   it('closes the loop smoothly', () => {
-    for (const t of [kueste, huegel, berg]) {
+    for (const t of [kueste, huegel, berg, getTrack('lago-di-como')]) {
       const end = t.sample(t.length - 1);
       const start = t.sample(0);
       expect(Math.hypot(end.x - start.x, end.z - start.z)).toBeLessThan(2);
@@ -91,5 +91,42 @@ describe('route catalogue', () => {
     expect(p).toHaveLength(101);
     expect(p[0]![0]).toBe(0);
     expect(p.at(-1)![0]).toBeCloseTo(kueste.length);
+  });
+});
+
+describe('Lago di Como (real road data)', () => {
+  const como = getTrack('lago-di-como');
+
+  it('is the real Bellagio loop', () => {
+    expect(como.definition.world).toBe('lago-di-como');
+    expect(como.length).toBeGreaterThan(22000);
+    expect(como.length).toBeLessThan(24000);
+    expect(Math.abs(como.length - como.definition.lengthM)).toBeLessThan(100);
+  });
+
+  it('starts at the lake and climbs to Civenna', () => {
+    // lake level is 198 m; Bellagio's lakefront sits just above it
+    expect(como.sample(0).y).toBeGreaterThan(198);
+    expect(como.sample(0).y).toBeLessThan(215);
+    expect(como.minElevation).toBeGreaterThan(198);
+    expect(como.maxElevation).toBeGreaterThan(600);
+    expect(como.maxElevation).toBeLessThan(700);
+    expect(como.elevationGain).toBeGreaterThan(600);
+    expect(como.elevationGain).toBeLessThan(760);
+  });
+
+  it('has no DEM spikes (roofs, trees) in the road profile', () => {
+    expect(como.maxGrade).toBeLessThan(16);
+    expect(como.minGrade).toBeGreaterThan(-16);
+    // a 2 m step never jumps more than half a metre
+    for (let i = 1; i < como.count; i++) expect(Math.abs(como.ys[i]! - como.ys[i - 1]!)).toBeLessThan(0.5);
+  });
+
+  it('the Civenna climb is a proper climb', () => {
+    const climb = como.segments.find((s) => s.type === 'climb')!;
+    const avg = ((como.sample(climb.endM).y - como.sample(climb.startM).y) / (climb.endM - climb.startM)) * 100;
+    expect(climb.endM - climb.startM).toBeGreaterThan(3000);
+    expect(avg).toBeGreaterThan(5);
+    expect(avg).toBeLessThan(9);
   });
 });

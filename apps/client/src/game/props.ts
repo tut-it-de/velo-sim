@@ -98,6 +98,7 @@ const DENSITY = {
   coast: { trees: 2600, rocks: 300 },
   hills: { trees: 7000, rocks: 250 },
   alpine: { trees: 7500, rocks: 1400 },
+  lake: { trees: 7000, rocks: 300 },
 } as const;
 
 /** Scatters trees, rocks and villages over the terrain (deterministic per route). */

@@ -1,5 +1,17 @@
+import { LAGO_DI_COMO_LENGTH_M, LAGO_DI_COMO_PATH, LAGO_DI_COMO_SEGMENTS } from './data/lagoDiComo';
 import { Track } from './track';
-import type { RouteDefinition } from './types';
+import type { RouteDefinition, RoutePath } from './types';
+
+/** Generated paths store delta-encoded decimetres (see tools/geo). */
+function decodePath(p: { step: number; x: number[]; z: number[]; y: number[] }): RoutePath {
+  const decode = (d: number[]) => {
+    const out = new Float64Array(d.length);
+    let acc = 0;
+    for (let i = 0; i < d.length; i++) out[i] = (acc += d[i]!) / 10;
+    return out;
+  };
+  return { step: p.step, x: decode(p.x), z: decode(p.z), y: decode(p.y) };
+}
 
 /**
  * Polar loop r(θ) = 1 + Σ a·sin(kθ + φ). Any curve with r > 0 is a simple
@@ -147,7 +159,20 @@ export const BERGRUNDE: RouteDefinition = {
   ],
 };
 
-export const ROUTES: RouteDefinition[] = [KUESTENRUNDE, HUEGELRUNDE, BERGRUNDE];
+export const LAGO_DI_COMO: RouteDefinition = {
+  id: 'lago-di-como',
+  name: 'Lago di Como – Bellagio Loop',
+  description:
+    'Echte Straßen am Comer See: Start an der Piazza Mazzini in Bellagio, Uferstraße nach Limonta und der Anstieg über Guello nach Civenna.',
+  region: 'Comer See · Italien',
+  style: 'lake',
+  lengthM: LAGO_DI_COMO_LENGTH_M,
+  path: decodePath(LAGO_DI_COMO_PATH),
+  world: 'lago-di-como',
+  segments: LAGO_DI_COMO_SEGMENTS,
+};
+
+export const ROUTES: RouteDefinition[] = [LAGO_DI_COMO, KUESTENRUNDE, HUEGELRUNDE, BERGRUNDE];
 
 const trackCache = new Map<string, Track>();
 
