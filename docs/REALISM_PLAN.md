@@ -774,7 +774,7 @@ Grundlagen aus dem Code:
 | P5.4 | 5B | Segelboote und Fähre auf dem See | fertig |
 | P5.5 | 5C | Balkone und Kamine | fertig |
 | P5.6 | 5D | Fensterlaibungen (Parallax-Fassade) | fertig |
-| P5.7 | 5E | Abnahme-Screenshots + Bildrate | offen |
+| P5.7 | 5E | Abnahme-Screenshots + Bildrate | fertig |
 
 **P5.1 Cumulus mit Lichtrand, hohe Schleierwolken**
 - Datei: `apps/client/src/game/real/sky.ts` (nur `FRAGMENT` und der Doc-Kommentar darüber)
@@ -919,6 +919,14 @@ Grundlagen aus dem Code:
 **P5.7 Abnahme Phase 5** (Orchestrator)
 - Screenshots `wall`, `forest`, `descent` mit `ultra`, `hoch`, `mittel`, dazu Lago 4500/15600 m und
   Alpe d'Huez; Vorher/Nachher-Bilder an den Nutzer. Bildrate im Wald und im Ort messen.
+
+**Ergebnis (Orchestrator, 5A–5E)**
+- Bildrate Ultra (GPU, perf.mjs): Wald 8500 m 15.0 → 14.9 ms, Ort 15600 m 15.8 → 16.1 ms (+0.3 ms, Balkone/Kamine/Parallax).
+- An den drei Vergleichsstellen kaum Änderung (dort kein Gipfel, kein See im Bild); Wirkung an Alpe d'Huez (Schnee,
+  Fels, Schleierwolken), am See (Boote, Fähre, Kräuselung) und in Orten (Kamine, Balkone, Laibungen sehr dezent).
+- P5.4 prüft die Streckennähe direkt über die Track-Stützpunkte statt `corridor.nearest` (20 s → 0.17 s).
+- Bekannter älterer Fehler, nicht aus Phase 5: von erhöhter Stelle sieht man in Richtung ferner Seeteile eine
+  weiße Fläche unter schwebenden Uferbergen (fernes Raster ohne Wasser/Gelände). Kandidat für Phase 6.
 
 ### Phase 6 – Fahrer, Rad, Effekte
 
