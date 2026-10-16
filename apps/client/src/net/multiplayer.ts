@@ -1,6 +1,7 @@
 import { Emitter } from '@velo/ble';
 import { PROTOCOL_VERSION, type LoadoutDTO, type RiderInfo, type RideSummaryDTO, type ServerMessage } from '@velo/protocol';
 import { Store } from '../state/store';
+import { webSocketUrl } from './serverUrl';
 
 interface Sample {
   t: number;
@@ -65,7 +66,7 @@ export class MultiplayerClient extends Emitter<NetEvents> {
   }
 
   connect(): void {
-    const url = this.serverUrl.replace(/^http/, 'ws').replace(/\/+$/, '') + '/ws';
+    const url = webSocketUrl(this.serverUrl);
     let ws: WebSocket;
     try {
       ws = new WebSocket(url);

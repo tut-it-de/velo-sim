@@ -1,0 +1,31 @@
+# Browser version with automatic HTTPS: Caddy in front of the game server (which also serves the app).
+# Needs DOMAIN (DNS A/AAAA record pointing at this machine, ports 80 + 443 open) in the .env next to
+# docker-compose.server.yml, then from the repository root:
+#   docker compose -f docker-compose.server.yml -f deploy/docker-compose.web.yml up -d --build
+# Paths below are relative to the repository root (directory of the first compose file).
+services:
+  server:
+    environment:
+      PUBLIC_URL: ${PUBLIC_URL:-https://${DOMAIN}}
+    # Only reachable through Caddy, not on port 8080 of the host.
+    ports: !reset []
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - server
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN fehlt (z. B. velo.deine-domain.de)}
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  caddy-data:
+  caddy-config:

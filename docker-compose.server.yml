@@ -1,5 +1,7 @@
 # Game server + PostgreSQL. Start: docker compose -f docker-compose.server.yml up -d
 # Put JWT_SECRET (long random string) and POSTGRES_PASSWORD into a .env file next to this file.
+# The server also serves the browser version of the app on http://<host>:8080/.
+# With automatic HTTPS (Caddy, DOMAIN in .env) add: -f deploy/docker-compose.web.yml
 services:
   postgres:
     image: postgres:16-alpine

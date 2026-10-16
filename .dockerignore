@@ -4,3 +4,7 @@
 **/.turbo
 apps/client/ios
 .git
+
+# Geodaten-Cache (tools/geo)
+tools/geo/.cache
+**/__pycache__

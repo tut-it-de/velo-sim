@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { startServer } from './server';
+import { resolveClientDist } from './static';
 import { MemoryStorage } from './storage/memory';
 import { PostgresStorage } from './storage/postgres';
 import type { Storage } from './storage/types';
@@ -31,14 +32,21 @@ const strava =
     ? {
         clientId: process.env.STRAVA_CLIENT_ID,
         clientSecret: process.env.STRAVA_CLIENT_SECRET,
-        publicUrl: process.env.PUBLIC_URL ?? `http://localhost:${port}`,
+        publicUrl: (process.env.PUBLIC_URL || `http://localhost:${port}`).replace(/\/+$/, ''),
         apiBase: process.env.STRAVA_API_BASE,
       }
     : undefined;
 console.log(strava ? `Strava: aktiv (Callback ${strava.publicUrl}/api/strava/callback)` : 'Strava: nicht eingerichtet (STRAVA_CLIENT_ID/SECRET fehlen)');
 
-const server = await startServer({ storage, secret, port, strava });
-console.log(`Velo-Sim-Server läuft auf ${server.url} (API /api, WebSocket /ws)`);
+const clientDir = resolveClientDist();
+console.log(
+  clientDir
+    ? `Web-Client: ${clientDir}`
+    : 'Web-Client: kein Build gefunden (npm run build -w @velo/client oder CLIENT_DIST setzen) – nur API/WebSocket',
+);
+
+const server = await startServer({ storage, secret, port, strava, clientDir });
+console.log(`Velo-Sim-Server läuft auf ${server.url} (${clientDir ? 'App /, ' : ''}API /api, WebSocket /ws)`);
 
 const shutdown = async () => {
   console.log('Fahre herunter …');

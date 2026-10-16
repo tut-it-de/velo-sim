@@ -1,7 +1,7 @@
 # Velo Sim
 
 Indoor-Cycling-Simulator für Smart-Trainer (Referenz: Wahoo KICKR Core v1) – freie Fahrt, Workouts,
-Ausrüstung mit CdA-Werten, Währung und später Multiplayer. Läuft auf **Windows, macOS und iPad**.
+Ausrüstung mit CdA-Werten, Währung und später Multiplayer. Läuft auf **Windows, macOS, iPad und im Browser**.
 
 Den vollständigen Plan gibt es in [`docs/PLAN.md`](docs/PLAN.md).
 
@@ -24,6 +24,7 @@ npm run server       # Entwicklung: http://localhost:8080, Daten nur im Speicher
 ```
 
 In der App unter **Profil → Online & Konto** die Server-Adresse eintragen (z. B. `http://localhost:8080`), Konto anlegen – fertig.
+In der Browser-Version (siehe unten) ist die Adresse schon vorbelegt.
 Ohne Server läuft alles offline (Garage und Taler dann nur lokal).
 
 **Produktion** (z. B. auf deinem VPS, neben Caddy):
@@ -63,6 +64,45 @@ Der Upload läuft über den Server, damit das Strava-Geheimnis nicht in der App 
 Neue Strava-API-Apps erlauben zunächst nur **einen** verbundenen Athleten (im API-Dashboard selbst auf 10 erhöhbar,
 darüber prüft Strava die App). Für dich allein reicht das.
 Last-Test: `npm run bots -w @velo/server -- --count 100 --route bergrunde --url http://localhost:8080`
+
+## Im Browser spielen
+
+Der Spielserver liefert die Web-App gleich mit aus: App (`/`), API (`/api`) und WebSocket (`/ws`) laufen unter
+einer Adresse. Wird die App so geöffnet, ist der Server automatisch eingetragen (`wss://` bei HTTPS).
+
+**Lokal:**
+
+```bash
+npm run build -w @velo/client      # Web-App nach apps/client/dist bauen
+npm run build -w @velo/server      # Server bündeln
+node apps/server/dist/server.mjs   # → http://localhost:8080 (ohne DATABASE_URL: Daten nur im Speicher)
+```
+
+Anderes Verzeichnis für die App: `CLIENT_DIST=/pfad/zu/dist`, abschalten mit `CLIENT_DIST=off`.
+
+**Online mit HTTPS (Docker + Caddy):** Web Bluetooth funktioniert nur über HTTPS (oder `localhost`).
+Domain per DNS auf den Server zeigen lassen, Ports 80 und 443 freigeben, dann im Repository:
+
+```bash
+echo "JWT_SECRET=$(openssl rand -hex 32)" >  .env
+echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)" >> .env
+echo "DOMAIN=velo.deine-domain.de" >> .env
+docker compose -f docker-compose.server.yml -f deploy/docker-compose.web.yml up -d --build
+```
+
+Caddy holt das Zertifikat automatisch, das Spiel läuft unter `https://velo.deine-domain.de`
+(`PUBLIC_URL` für Strava wird aus `DOMAIN` abgeleitet). Nur mit `docker-compose.server.yml` ist die App unter
+`http://<server>:8080/` erreichbar – ohne HTTPS aber ohne Bluetooth.
+
+**Browser und Geräte:**
+
+- **Web Bluetooth** (Smart-Trainer, Pulsgurt): Chrome und Edge unter Windows, macOS und Android.
+- **Safari kann kein Web Bluetooth** – auch nicht auf dem iPad (dort gilt das ebenso für Chrome und Edge, die
+  unter iPadOS Safaris Engine nutzen). Auf dem iPad die [iPad-App](#ipad-app) verwenden oder den Browser
+  **Bluefy** (App Store). Firefox unterstützt Web Bluetooth ebenfalls nicht.
+- **ANT+** ist im Browser nicht verfügbar, nur Bluetooth LE.
+- Ohne Hardware geht überall der Simulator (Geräte → *Simulator statt Bluetooth*).
+- Als App installieren: Chrome/Edge → *App installieren*, Safari → *Teilen → Zum Home-Bildschirm* (Vollbild, Querformat).
 
 ## Desktop-App (Windows / macOS)
 

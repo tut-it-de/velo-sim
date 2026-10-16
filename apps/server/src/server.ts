@@ -5,6 +5,7 @@ import { PROTOCOL_VERSION, parseClientMessage, type ServerMessage } from '@velo/
 import { verifyToken } from './auth';
 import { handleHttp } from './http';
 import { Game, type Connection, type Rider, type Room } from './rooms';
+import { createStaticHandler } from './static';
 import type { Storage } from './storage/types';
 import type { StravaConfig } from './strava';
 import { StravaService } from './stravaService';
@@ -15,6 +16,8 @@ export interface VeloServerOptions {
   port?: number;
   host?: string;
   strava?: StravaConfig & { pollIntervalMs?: number; pollAttempts?: number };
+  /** Built web client (apps/client/dist) to serve on / — omitted: API and WebSocket only. */
+  clientDir?: string;
 }
 
 export interface VeloServer {
@@ -38,12 +41,26 @@ function wsConnection(ws: WebSocket): Connection {
   };
 }
 
-/** HTTP API on /api/*, game WebSocket on /ws. */
+/** API paths stay with the JSON handler (incl. its 404s), everything else may be a client file. */
+const isApiPath = (url = '/') => /^\/(api|ws)(\/|\?|$)/.test(url);
+
+/** HTTP API on /api/*, game WebSocket on /ws, optionally the web client on everything else. */
 export async function startServer(opts: VeloServerOptions): Promise<VeloServer> {
   const game = new Game({ storage: opts.storage });
   const strava = opts.strava ? new StravaService(opts.strava, opts.storage, opts.secret) : undefined;
   const ctx = { storage: opts.storage, secret: opts.secret, game, strava };
-  const http = createServer((req, res) => void handleHttp(ctx, req, res));
+  const client = opts.clientDir ? createStaticHandler(opts.clientDir) : undefined;
+  const http = createServer((req, res) => {
+    if (client && (req.method === 'GET' || req.method === 'HEAD') && !isApiPath(req.url)) {
+      void client.serve(req, res).catch((err) => {
+        console.error('[static]', err);
+        if (!res.headersSent) res.writeHead(500).end();
+        else res.destroy();
+      });
+      return;
+    }
+    void handleHttp(ctx, req, res);
+  });
   const wss = new WebSocketServer({ server: http, path: '/ws', maxPayload: 8 * 1024 });
 
   wss.on('connection', (ws) => {

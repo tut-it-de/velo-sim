@@ -2,6 +2,7 @@ import type { Loadout } from '@velo/equipment';
 import { garageStore, type GarageState } from '../state/garage';
 import { settingsStore } from '../state/settings';
 import { Store, loadJson, saveJson } from '../state/store';
+import { resolveServerBase, sameOriginServer } from './serverUrl';
 
 export interface AccountUser {
   id: string;
@@ -35,8 +36,18 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Browser deployment (app served by the game server): an empty server address means "this
+ * origin". Fill it in so the settings page shows it and allows logging in right away.
+ */
+const sameOrigin = sameOriginServer();
+if (sameOrigin && !settingsStore.get().serverUrl.trim()) {
+  settingsStore.set({ ...settingsStore.get(), serverUrl: sameOrigin });
+}
+
+/** Game server base URL ('' = offline). Empty setting → same origin when served by the game server. */
 export function serverBase(): string {
-  return settingsStore.get().serverUrl.trim().replace(/\/+$/, '');
+  return resolveServerBase(settingsStore.get().serverUrl);
 }
 
 export function isLoggedIn(): boolean {
