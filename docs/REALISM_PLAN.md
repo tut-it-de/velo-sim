@@ -251,10 +251,10 @@ Fassadenfarben erhalten.
 | ID | Gruppe | Aufgabe | Status |
 |---|---|---|---|
 | P2.1 | 2A | Texturgenerator-Grundgerüst | fertig |
-| P2.2 | 2B | Asphalt-Detailmap | offen |
-| P2.3 | 2B | Bruchstein-/Mauer-Detailmap | offen |
-| P2.4 | 2B | Putz- und Ziegel-Detailmaps | offen |
-| P2.5 | 2B | Fels- und Waldboden-Detailmaps | offen |
+| P2.2 | 2B | Asphalt-Detailmap | fertig |
+| P2.3 | 2B | Bruchstein-/Mauer-Detailmap | fertig |
+| P2.4 | 2B | Putz- und Ziegel-Detailmaps | fertig |
+| P2.5 | 2B | Fels- und Waldboden-Detailmaps | fertig |
 | P2.6 | 2C | Detailmaps an Straße, Mauern, Häusern | offen |
 | P2.7 | 2C | Detailmaps im Gelände (Weltkoordinaten) | offen |
 | P2.8 | 2D | Abnahme-Screenshots Phase 2 | offen |
