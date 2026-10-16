@@ -3,32 +3,92 @@ import { SHOULDER, type RouteCorridor } from './corridor';
 import { MeshData } from './meshData';
 import type { QualityProfile } from './quality';
 import { facadeTexture, roofTexture } from './textures';
-import type { Building } from './worldData';
+import type { Architecture, Building } from './worldData';
 
 type RGB = [number, number, number];
 
-/** Lake Como facade paints: cream, ochre, salmon, Pompeian red, pale yellow, white, and grey rubble stone. */
-const PAINTS: RGB[] = [
-  [0.95, 0.89, 0.76],
-  [0.91, 0.74, 0.47],
-  [0.93, 0.68, 0.54],
-  [0.8, 0.49, 0.39],
-  [0.96, 0.87, 0.6],
-  [0.95, 0.94, 0.91],
-  [0.93, 0.8, 0.66],
-  [0.74, 0.71, 0.66],
-];
+interface Style {
+  /** Facade paints (vertex colours over the near-white facade texture). */
+  paints: RGB[];
+  /** Pitched roof colour for a house, from a 0–1 hash. */
+  roof: (r: number) => RGB;
+  flatRoof: RGB;
+  /** Roof rise per metre of half-width (0.45 ≈ 24°, 0.85 ≈ 40°). */
+  pitch: number;
+  /** Roof overhang at the eaves, m. */
+  eaves: number;
+  /** Share of houses with a hip roof; the others get a gable roof. */
+  hipShare: number;
+  church: { wall: RGB; roof: RGB; pitch: number; tower: number; spire: number };
+}
+
 const TERRACOTTA: RGB[] = [
   [0.74, 0.39, 0.26],
   [0.68, 0.35, 0.24],
   [0.78, 0.45, 0.3],
   [0.62, 0.33, 0.25],
 ];
-const STONE_ROOF: RGB = [0.5, 0.49, 0.47];
-const FLAT_ROOF: RGB = [0.58, 0.56, 0.53];
-const CHURCH_STONE: RGB = [0.82, 0.78, 0.7];
+const pick = (list: RGB[], r: number) => list[Math.min(list.length - 1, Math.floor(r * list.length))]!;
+
+const STYLES: Record<Architecture, Style> = {
+  // Lake Como: cream, ochre, salmon, Pompeian red, pale yellow, white and rubble stone; clay hip roofs, campanili
+  italian: {
+    paints: [
+      [0.95, 0.89, 0.76],
+      [0.91, 0.74, 0.47],
+      [0.93, 0.68, 0.54],
+      [0.8, 0.49, 0.39],
+      [0.96, 0.87, 0.6],
+      [0.95, 0.94, 0.91],
+      [0.93, 0.8, 0.66],
+      [0.74, 0.71, 0.66],
+    ],
+    roof: (r) => (r < 0.25 ? [0.5, 0.49, 0.47] : pick(TERRACOTTA, (r - 0.25) / 0.75)),
+    flatRoof: [0.58, 0.56, 0.53],
+    pitch: 0.45,
+    eaves: 0.4,
+    hipShare: 1,
+    church: { wall: [0.82, 0.78, 0.7], roof: TERRACOTTA[0]!, pitch: 0.55, tower: 12, spire: 0.9 },
+  },
+  // German villages: white, cream and pale grey plaster; steep gable roofs in anthracite or red-brown tiles;
+  // white churches with a slate spire
+  german: {
+    paints: [
+      [0.96, 0.96, 0.94],
+      [0.95, 0.92, 0.84],
+      [0.88, 0.88, 0.86],
+      [0.95, 0.91, 0.74],
+      [0.92, 0.87, 0.79],
+      [0.94, 0.85, 0.78],
+      [0.97, 0.97, 0.95],
+    ],
+    roof: (r) =>
+      r < 0.4 ? [0.27, 0.28, 0.3] : r < 0.55 ? [0.38, 0.38, 0.39] : r < 0.8 ? [0.55, 0.26, 0.19] : [0.67, 0.31, 0.21],
+    flatRoof: [0.5, 0.5, 0.5],
+    pitch: 0.85,
+    eaves: 0.5,
+    hipShare: 0.15,
+    church: { wall: [0.95, 0.94, 0.91], roof: [0.3, 0.31, 0.34], pitch: 1.0, tower: 16, spire: 2.6 },
+  },
+  // French Alps: plaster and stone, some timber; low gable roofs with deep eaves in slate, metal or stone slabs
+  alpine: {
+    paints: [
+      [0.95, 0.92, 0.85],
+      [0.96, 0.95, 0.92],
+      [0.9, 0.8, 0.62],
+      [0.72, 0.69, 0.64],
+      [0.93, 0.86, 0.74],
+      [0.58, 0.43, 0.3],
+    ],
+    roof: (r) => (r < 0.35 ? [0.4, 0.41, 0.43] : r < 0.6 ? [0.31, 0.32, 0.33] : r < 0.8 ? [0.43, 0.32, 0.24] : [0.54, 0.52, 0.49]),
+    flatRoof: [0.5, 0.5, 0.5],
+    pitch: 0.55,
+    eaves: 0.9,
+    hipShare: 0.1,
+    church: { wall: [0.76, 0.73, 0.67], roof: [0.36, 0.37, 0.4], pitch: 0.8, tower: 13, spire: 1.8 },
+  },
+};
 const CHUNK = 768;
-const EAVES = 0.4;
 
 function hash(n: number): number {
   let x = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
@@ -180,15 +240,17 @@ function rectPoint(r: Rect, u: number, v: number, y: number): [number, number, n
   return [r.ax * u - r.az * v, y, r.az * u + r.ax * v];
 }
 
-/** Hip roof (or pyramid) over the oriented rectangle, ~24° pitch with eaves. */
-function hipRoof(md: MeshData, r: Rect, eave: number, color: RGB): void {
-  const u0 = r.u0 - EAVES;
-  const u1 = r.u1 + EAVES;
-  const v0 = r.v0 - EAVES;
-  const v1 = r.v1 + EAVES;
+/** Hip roof (or pyramid) over the oriented rectangle with eaves; the roof planes meet the wall tops at `top`. */
+function hipRoof(md: MeshData, r: Rect, top: number, color: RGB, style: Style): void {
+  const e = style.eaves;
+  const eave = top - e * style.pitch + 0.03;
+  const u0 = r.u0 - e;
+  const u1 = r.u1 + e;
+  const v0 = r.v0 - e;
+  const v1 = r.v1 + e;
   const half = (v1 - v0) / 2;
   const vm = (v0 + v1) / 2;
-  const ridgeY = eave + half * 0.45;
+  const ridgeY = eave + half * style.pitch;
   const ra = Math.min(u0 + half, (u0 + u1) / 2);
   const rb = Math.max(u1 - half, (u0 + u1) / 2);
   const A = rectPoint(r, u0, v0, eave);
@@ -208,32 +270,46 @@ function hipRoof(md: MeshData, r: Rect, eave: number, color: RGB): void {
   face(md, [B, C, R2], color, 2, r.az, -r.ax);
 }
 
-function church(chunk: Chunk, ring: Float32Array, base: number, top: number, ground: number, k: number): void {
-  const r = orientedRect(ring);
-  walls(chunk.walls, ring, base, top, ground, CHURCH_STONE);
-  // gable roof along the nave
-  const u0 = r.u0 - 0.3;
-  const u1 = r.u1 + 0.3;
-  const v0 = r.v0 - 0.3;
-  const v1 = r.v1 + 0.3;
-  const vm = (v0 + v1) / 2;
-  const ridge = top + ((v1 - v0) / 2) * 0.55;
-  const roofColor = TERRACOTTA[k % TERRACOTTA.length]!;
-  const A = rectPoint(r, u0, v0, top);
-  const B = rectPoint(r, u1, v0, top);
-  const C = rectPoint(r, u1, v1, top);
-  const D = rectPoint(r, u0, v1, top);
+/**
+ * Gable roof along the long side of the oriented rectangle: two roof planes with eaves and a
+ * smaller overhang at the gables, gable triangles closed with wall.
+ */
+function gableRoof(chunk: Chunk, r: Rect, top: number, color: RGB, wall: RGB, pitch: number, eaves: number): void {
+  const eave = top - eaves * pitch + 0.03;
+  const u0 = r.u0 - eaves * 0.6;
+  const u1 = r.u1 + eaves * 0.6;
+  const v0 = r.v0 - eaves;
+  const v1 = r.v1 + eaves;
+  const vm = (r.v0 + r.v1) / 2;
+  const ridge = eave + ((v1 - v0) / 2) * pitch;
+  const A = rectPoint(r, u0, v0, eave);
+  const B = rectPoint(r, u1, v0, eave);
+  const C = rectPoint(r, u1, v1, eave);
+  const D = rectPoint(r, u0, v1, eave);
   const Ra = rectPoint(r, u0, vm, ridge);
   const Rb = rectPoint(r, u1, vm, ridge);
-  face(chunk.roofs, [A, B, Rb, Ra], roofColor, 2, r.ax, r.az);
-  face(chunk.roofs, [C, D, Ra, Rb], roofColor, 2, r.ax, r.az);
-  face(chunk.walls, [D, A, Ra], CHURCH_STONE, 7.2, r.az, -r.ax, false);
-  face(chunk.walls, [B, C, Rb], CHURCH_STONE, 7.2, r.az, -r.ax, false);
-  // campanile at the back corner of the nave
+  face(chunk.roofs, [A, B, Rb, Ra], color, 2, r.ax, r.az);
+  face(chunk.roofs, [C, D, Ra, Rb], color, 2, r.ax, r.az);
+  // gable walls in the wall plane, up to just under the roof
+  const apex = ridge - 0.05;
+  const wa = rectPoint(r, r.u0, r.v0, top);
+  const wd = rectPoint(r, r.u0, r.v1, top);
+  const wb = rectPoint(r, r.u1, r.v0, top);
+  const wc = rectPoint(r, r.u1, r.v1, top);
+  face(chunk.walls, [wd, wa, rectPoint(r, r.u0, vm, apex)], wall, 7.2, r.az, -r.ax, false);
+  face(chunk.walls, [wb, wc, rectPoint(r, r.u1, vm, apex)], wall, 7.2, r.az, -r.ax, false);
+}
+
+function church(chunk: Chunk, ring: Float32Array, base: number, top: number, ground: number, style: Style): void {
+  const cs = style.church;
+  const r = orientedRect(ring);
+  walls(chunk.walls, ring, base, top, ground, cs.wall);
+  gableRoof(chunk, r, top, cs.roof, cs.wall, cs.pitch, 0.3);
+  // bell tower at the back corner of the nave
   const w = Math.min(5.5, Math.max(3, 0.3 * (r.v1 - r.v0)));
   const tu = r.u1 - w;
   const tv = r.v1 - w;
-  const towerTop = ground + Math.max(top - ground + 12, 22);
+  const towerTop = ground + Math.max(top - ground + cs.tower, 10 + cs.tower);
   const tower = new Float32Array(8);
   const corners: Array<[number, number]> = [
     [tu, tv],
@@ -247,34 +323,41 @@ function church(chunk: Chunk, ring: Float32Array, base: number, top: number, gro
     tower[q * 2 + 1] = p[2];
   });
   // (u, v) is a rotation of (x, z), so this corner order is counter-clockwise like the footprints
-  walls(chunk.walls, tower, base, towerTop, ground, CHURCH_STONE);
+  walls(chunk.walls, tower, base, towerTop, ground, cs.wall);
   const tr = orientedRect(tower);
   const ta = rectPoint(tr, tr.u0 - 0.2, tr.v0 - 0.2, towerTop);
   const tb = rectPoint(tr, tr.u1 + 0.2, tr.v0 - 0.2, towerTop);
   const tc = rectPoint(tr, tr.u1 + 0.2, tr.v1 + 0.2, towerTop);
   const td = rectPoint(tr, tr.u0 - 0.2, tr.v1 + 0.2, towerTop);
-  const apex = rectPoint(tr, (tr.u0 + tr.u1) / 2, (tr.v0 + tr.v1) / 2, towerTop + w * 0.9);
+  const apex = rectPoint(tr, (tr.u0 + tr.u1) / 2, (tr.v0 + tr.v1) / 2, towerTop + w * cs.spire);
   for (const [p, q] of [
     [ta, tb],
     [tb, tc],
     [tc, td],
     [td, ta],
   ] as const) {
-    face(chunk.roofs, [p, q, apex], roofColor, 2, tr.ax, tr.az);
+    face(chunk.roofs, [p, q, apex], cs.roof, 2, tr.ax, tr.az);
   }
 }
 
 /**
- * Buildings from the map footprints: plastered walls in Lake Como colours, hip roofs with clay tiles
- * (some in grey stone), flat roofs where the footprint is irregular, churches with a campanile.
- * Grouped into ~770 m chunks that drop out beyond the quality profile's distance.
+ * Buildings from the map footprints in the region's architecture: plastered walls, pitched roofs
+ * (hip or gable, colours and pitch by region), flat roofs where the footprint is irregular, churches
+ * with a bell tower. Grouped into ~770 m chunks that drop out beyond the quality profile's distance.
  */
-export function buildBuildings(scene: Scene, buildings: Building[], corridor: RouteCorridor, quality: QualityProfile): Mesh[] {
+export function buildBuildings(
+  scene: Scene,
+  buildings: Building[],
+  corridor: RouteCorridor,
+  quality: QualityProfile,
+  architecture: Architecture = 'italian',
+): Mesh[] {
+  const style = STYLES[architecture];
   const wallMat = new StandardMaterial('facade', scene);
-  wallMat.diffuseTexture = facadeTexture(scene);
+  wallMat.diffuseTexture = facadeTexture(scene, architecture);
   wallMat.specularColor = new Color3(0.02, 0.02, 0.02);
   const roofMat = new StandardMaterial('roof', scene);
-  roofMat.diffuseTexture = roofTexture(scene);
+  roofMat.diffuseTexture = roofTexture(scene, architecture);
   roofMat.specularColor = new Color3(0.05, 0.05, 0.05);
   roofMat.backFaceCulling = false;
   roofMat.twoSidedLighting = true;
@@ -319,21 +402,23 @@ export function buildBuildings(scene: Scene, buildings: Building[], corridor: Ro
     let chunk = chunks.get(key);
     if (!chunk) chunks.set(key, (chunk = new Chunk()));
     if (b.kind === 2) {
-      church(chunk, ring, base, top, ground, k);
+      church(chunk, ring, base, top, ground, style);
       return;
     }
-    const paint = PAINTS[Math.floor(hash(k) * PAINTS.length)]!;
+    const paint = pick(style.paints, hash(k));
     const shade = 0.92 + hash(k + 17) * 0.1;
     const color: RGB = [paint[0] * shade, paint[1] * shade, paint[2] * shade];
     walls(chunk.walls, ring, base, top, ground, color);
     if (b.kind === 1) {
-      const roofColor = hash(k + 3) < 0.25 ? STONE_ROOF : TERRACOTTA[Math.floor(hash(k + 5) * TERRACOTTA.length)]!;
-      hipRoof(chunk.roofs, orientedRect(ring), top - 0.15, roofColor);
+      const roofColor = style.roof(hash(k + 3));
+      const rect = orientedRect(ring);
+      if (hash(k + 7) < style.hipShare) hipRoof(chunk.roofs, rect, top, roofColor, style);
+      else gableRoof(chunk, rect, top, roofColor, color, style.pitch, style.eaves);
     } else {
       const tris = earClip(ring);
       const roofs = chunk.roofs;
       const base0 = roofs.vertexCount;
-      for (let i = 0; i < n; i++) roofs.vertex(ring[i * 2]!, top, ring[i * 2 + 1]!, 0, 1, 0, ring[i * 2]! / 2, ring[i * 2 + 1]! / 2, ...FLAT_ROOF);
+      for (let i = 0; i < n; i++) roofs.vertex(ring[i * 2]!, top, ring[i * 2 + 1]!, 0, 1, 0, ring[i * 2]! / 2, ring[i * 2 + 1]! / 2, ...style.flatRoof);
       for (let i = 0; i < tris.length; i += 3) roofs.tri(base0 + tris[i]!, base0 + tris[i + 1]!, base0 + tris[i + 2]!, 0, 1, 0);
     }
   });

@@ -75,4 +75,6 @@ CdA   = (CdA_Basis + ΔCdA_Rad + ΔCdA_Laufräder + ΔCdA_Trikot) · (1 − Wind
 | + | Windschatten-Leiste im HUD, automatischer Strava-Upload (OAuth über den Server, Tokens verschlüsselt, Auto-Refresh, Duplikat-Erkennung) | ✅ |
 | + | Lago di Como – Bellagio Loop aus echten Geodaten (Gelände, OSM-Gebäude, Bäume, Dorfstraßen), Geländemodell ohne Dächer, Mauern/Brüstungen/Leitplanken, See mit Spiegelung, Wolkenhimmel, Schatten, Qualitätsstufen | ✅ |
 | + | HUD nach Vorlage: Streckenkarte, „In der Nähe“ mit Flaggen und Zeitabständen, Minimap mit Nordpfeil, Anstiegs-Panel mit Steigungsprofil, Werte unten links (Speed, Leistung, Kadenz, Puls) und rechts (Distanz, Zeit, Steigung) | ✅ |
+| + | Geo-Pipeline als Bibliothek (`tools/geo/worldgen.py`), Welten ohne See, Flora und Architektur je Region (Satteldächer, Kirchtürme mit Spitzhelm, Buchen/Fichten, Lärchen, Baumgrenze), länderspezifische Mittellinien | ✅ |
+| + | Großer Feldberg (Taunus) ab Hohemark/Waldtraut: Kanonenstraße – Sandplacken – Gipfel, 23,4 km / 596 hm | ✅ |
 | 6 – Später | Helme, Level, Trainingspläne, Gruppenfahrten, Rennen | offen |

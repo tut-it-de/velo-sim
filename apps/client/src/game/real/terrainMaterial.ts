@@ -56,6 +56,12 @@ const UPDATE_DIFFUSE = /* glsl */ `
     normalW = normalize(normalW + vec3(c0 - cx, 0.0, c0 - cz) * 2.4 * veloFc);
     veloCol *= mix(1.0, 0.62 + 0.72 * c0, veloFc);
   }
+  // close up, the ground under the trees is shaded leaf litter, not meadow (from afar the map reads as canopy)
+  float veloLitter = veloForest * (1.0 - smoothstep(40.0, 240.0, veloDist));
+  if (veloLitter > 0.01) {
+    vec3 veloFloor = vec3(0.2, 0.165, 0.105) * (0.75 + 0.5 * veloNoise(veloP * 0.45));
+    veloCol = mix(veloCol, veloFloor, veloLitter * 0.6);
+  }
 #else
   veloCol *= mix(1.0, 0.92, veloForest);
 #endif

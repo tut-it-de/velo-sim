@@ -201,7 +201,11 @@ export class LakeWater {
     quality: QualityProfile,
   ) {
     const wl = data.waterLevel;
-    if (quality.mirror > 0) {
+    const hz = data.horizon;
+    const mask = waterMask(data);
+    // worlds without a lake (mountain roads): no water mesh and no mirror pass
+    const hasWater = mask.some((v) => v !== 0);
+    if (hasWater && quality.mirror > 0) {
       const mirror = new MirrorTexture('lake-mirror', { ratio: quality.mirror }, scene, false, undefined, Texture.BILINEAR_SAMPLINGMODE);
       mirror.mirrorPlane = new Plane(0, -1, 0, wl);
       mirror.refreshRate = quality.level === 'hoch' ? 1 : 2;
@@ -223,8 +227,6 @@ export class LakeWater {
     this.material = mat;
 
     // greedy rectangles over the mask
-    const hz = data.horizon;
-    const mask = waterMask(data);
     const md = new MeshData(false);
     const used = new Uint8Array(mask.length);
     for (let j = 0; j < hz.nz - 1; j++) {

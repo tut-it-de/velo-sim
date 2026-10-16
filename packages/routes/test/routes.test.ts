@@ -43,7 +43,7 @@ describe('route catalogue', () => {
   });
 
   it('closes the loop smoothly', () => {
-    for (const t of [kueste, huegel, berg, getTrack('lago-di-como')]) {
+    for (const t of ROUTES.map((r) => getTrack(r.id))) {
       const end = t.sample(t.length - 1);
       const start = t.sample(0);
       expect(Math.hypot(end.x - start.x, end.z - start.z)).toBeLessThan(2);
@@ -128,5 +128,37 @@ describe('Lago di Como (real road data)', () => {
     expect(climb.endM - climb.startM).toBeGreaterThan(3000);
     expect(avg).toBeGreaterThan(5);
     expect(avg).toBeLessThan(9);
+  });
+});
+
+describe('Großer Feldberg (real road data)', () => {
+  const fb = getTrack('feldberg-taunus');
+
+  it('rides up from the Hohemark and back down', () => {
+    expect(fb.definition.world).toBe('feldberg-taunus');
+    expect(fb.length).toBeGreaterThan(22500);
+    expect(fb.length).toBeLessThan(24500);
+    expect(Math.abs(fb.length - fb.definition.lengthM)).toBeLessThan(100);
+    // Hohemark ~300 m, summit 879 m
+    expect(fb.sample(0).y).toBeGreaterThan(290);
+    expect(fb.sample(0).y).toBeLessThan(330);
+    expect(fb.maxElevation).toBeGreaterThan(860);
+    expect(fb.maxElevation).toBeLessThan(890);
+  });
+
+  it('the climb from the Waldtraut is ~11.5 km at ~5 %', () => {
+    const climb = fb.segments.find((s) => s.id === 'feldberg-waldtraut')!;
+    const len = climb.endM - climb.startM;
+    const avg = ((fb.sample(climb.endM).y - fb.sample(climb.startM).y) / len) * 100;
+    expect(len).toBeGreaterThan(11000);
+    expect(len).toBeLessThan(12000);
+    expect(avg).toBeGreaterThan(4.5);
+    expect(avg).toBeLessThan(5.5);
+  });
+
+  it('has no DEM spikes and stays within the trainer limits', () => {
+    expect(fb.maxGrade).toBeLessThan(15);
+    expect(fb.minGrade).toBeGreaterThan(-15);
+    for (let i = 1; i < fb.count; i++) expect(Math.abs(fb.ys[i]! - fb.ys[i - 1]!)).toBeLessThan(0.5);
   });
 });

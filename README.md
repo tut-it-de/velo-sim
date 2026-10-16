@@ -139,12 +139,41 @@ apps/
 packages/
   ble/        Bluetooth: FTMS, Wahoo-Protokoll, Cycling Power, Herzfrequenz, CSC, Simulator
   physics/    Fahrphysik (Leistung → Geschwindigkeit), Windschatten, CdA
-  routes/     Die drei Rundkurse (Spline + Höhenprofil + Segmente)
+  routes/     Strecken: drei Fantasie-Rundkurse (Spline) und echte Strecken aus Geodaten (Polyline)
+tools/
+  geo/        Erzeugt die echten Strecken und ihre 3D-Welten aus offenen Geodaten (siehe unten)
   metrics/    NP, IF, TSS, Zonen, Aufzeichnung, FIT-Export
   workouts/   Workout-Modell, .zwo Import/Export, ERG-Player, Bibliothek
   equipment/  Ausrüstungskatalog, Wertungen, Zeitvergleich, Watt-Taler-Regeln
   protocol/   Nachrichten zwischen App und Spielserver
 ```
+
+## Echte Strecken (Geodaten)
+
+| Strecke | Region | Länge | Höhenmeter | Charakter |
+|---|---|---|---|---|
+| Lago di Como – Bellagio Loop | Comer See · Italien | 22,8 km | 683 hm | Uferstraße und Anstieg nach Civenna |
+| Großer Feldberg – ab Hohemark | Taunus · Deutschland | 23,4 km | 596 hm | Vom Waldtraut über die Kanonenstraße und den Sandplacken zum Gipfel (879 m), 11,6 km mit Ø 4,9 % |
+
+Jede echte Strecke hat ein eigenes Skript in `tools/geo/` (z. B. `feldberg_taunus.py`) auf Basis der
+gemeinsamen Bibliothek `tools/geo/worldgen.py`. Das Skript beschreibt die Welt (Ausschnitt, See, Flora,
+Architektur), legt die Runde über echte Straßen fest und markiert die Segmente. Die Bibliothek lädt Straßen,
+Gebäude, Landnutzung und Ortsnamen von Overture Maps (OpenStreetMap) sowie das Höhenmodell (AWS Terrain
+Tiles), glättet das Höhenprofil auf die Trainer-Grenzen und schreibt:
+
+- `packages/routes/src/data/<name>.ts`: die Runde (4-m-Polyline mit Höhen) und die Segmente,
+- `apps/client/public/worlds/<id>/world.json` und `terrain.bin`: Gebäude, Bäume, Nebenstraßen, Orte, See
+  und das Gelände in drei Detailstufen.
+
+Der Client wählt nach `look.flora` (mediterran / mitteleuropäisch / alpin) die Baumarten und nach
+`look.architecture` (italienisch / deutsch / alpin) Fassaden, Dachformen, Kirchtürme und Fahrbahnmarkierung.
+
+```bash
+pip install pyarrow shapely networkx numpy pillow
+python3 tools/geo/feldberg_taunus.py   # Downloads landen in tools/geo/.cache/
+```
+
+Danach die Strecke in `packages/routes/src/routes.ts` eintragen.
 
 ## Bedienung
 

@@ -24,7 +24,7 @@ import { SkyDome } from './sky';
 import { RealTerrain } from './terrain';
 import { buildVegetation } from './vegetation';
 import { LakeWater } from './water';
-import { loadWorldData, type Place, type WorldData } from './worldData';
+import { loadWorldData, type Flora, type Place, type WorldData } from './worldData';
 
 export const REAL_CAMERA_MAX_Z = 60000;
 
@@ -34,6 +34,12 @@ export interface MinimapData {
   places: Place[];
   attribution: string;
 }
+
+const FLORA_STEP: Record<Flora, string> = {
+  mediterranean: 'Kastanien, Zypressen und Wälder …',
+  central: 'Buchen, Eichen und Fichtenwälder …',
+  alpine: 'Fichten, Lärchen und Almwiesen …',
+};
 
 const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
 
@@ -97,12 +103,12 @@ export class RealWorld {
     const terrain = await RealTerrain.build(scene, data, field, corridor, quality, step);
 
     await step('Straße, Mauern und Leitplanken …');
-    const ribbon = buildRouteRibbon(scene, corridor, terrain);
+    const ribbon = buildRouteRibbon(scene, corridor, terrain, data.look.architecture);
 
     await step('Häuser und Kirchen …');
-    const buildings = buildBuildings(scene, data.buildings, corridor, quality);
+    const buildings = buildBuildings(scene, data.buildings, corridor, quality, data.look.architecture);
 
-    await step('Kastanien, Zypressen und Wälder …');
+    await step(FLORA_STEP[data.look.flora]);
     const trees = buildVegetation(scene, data, corridor, buildingIndex, quality);
 
     await step('Dorfstraßen und Feldwege …');
@@ -111,7 +117,7 @@ export class RealWorld {
     buildGate(scene, track, 0, 'START · ZIEL', '#ff7a1a');
     buildSegmentGates(scene, track, track.segments);
 
-    await step('See und Himmel …');
+    await step(data.lake.length > 0 ? 'See und Himmel …' : 'Himmel und Wolken …');
     const water = new LakeWater(scene, data, quality);
     // Created last: drawn after the landscape, so the depth test skips most sky pixels.
     const sky = new SkyDome(scene, REAL_CAMERA_MAX_Z * 0.85);

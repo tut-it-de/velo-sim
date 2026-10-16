@@ -5,7 +5,7 @@ import type { BuildingIndex } from './heightField';
 import { MeshData } from './meshData';
 import type { QualityProfile } from './quality';
 import { TREE, TREE_TYPES, treeAtlas } from './textures';
-import { LAND_CLASS, type WorldData } from './worldData';
+import { LAND_CLASS, type Flora, type WorldData } from './worldData';
 
 const CHUNK = 1024;
 /** Trees per 12 m × 12 m cell by land class. */
@@ -21,13 +21,64 @@ const DENSITY: Record<number, number> = {
 };
 /** Width relative to height per sprite. */
 const ASPECT = [0.95, 0.56, 0.26, 0.95];
-/** October: a share of the chestnuts and beeches already turning. */
+/** October: a share of the chestnuts and beeches already turning (share per flora below). */
 const AUTUMN: Array<[number, number, number]> = [
   [1, 1, 1],
   [1.18, 1.08, 0.62],
   [1.3, 0.98, 0.55],
   [1.05, 1.04, 0.8],
 ];
+
+const smoothstep = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+interface FloraRules {
+  /** Share of conifers in forests at a terrain height. */
+  conifer: (h: number) => number;
+  /** Conifer heights (min, spread) in m. */
+  coniferHeight: [number, number];
+  /** Share of cypresses among village, garden and single trees below 320 m. */
+  cypress: number;
+  /** Share of broadleaf trees already turning. */
+  autumn: number;
+  /** Trees thin out and shrink between these heights (tree line), m. */
+  treeLine: [number, number];
+  /** Share of conifers above 1500 m that are larches, golden in October. */
+  larch: number;
+}
+
+const FLORA: Record<Flora, FloraRules> = {
+  // Lake Como: chestnut woods, spruce and larch only higher up, cypresses in the villages
+  mediterranean: {
+    conifer: (h) => (h < 900 ? 0.12 : h < 1300 ? 0.5 : 0.9),
+    coniferHeight: [12, 12],
+    cypress: 0.28,
+    autumn: 0.22,
+    treeLine: [1900, 2200],
+    larch: 0.15,
+  },
+  // German low mountains: beech and oak, spruce stands growing more common towards the ridges
+  central: {
+    conifer: (h) => (h < 350 ? 0.15 : h < 600 ? 0.35 : 0.5),
+    coniferHeight: [14, 14],
+    cypress: 0,
+    autumn: 0.3,
+    treeLine: [1500, 1800],
+    larch: 0,
+  },
+  // Alps: mixed forest in the valleys, spruce and larch above, open alpine meadows past the tree line
+  alpine: {
+    conifer: (h) => (h < 1000 ? 0.45 : h < 1500 ? 0.8 : 0.95),
+    coniferHeight: [14, 16],
+    cypress: 0,
+    autumn: 0.25,
+    treeLine: [1900, 2200],
+    larch: 0.25,
+  },
+};
+const LARCH: [number, number, number] = [1.45, 1.12, 0.42];
 
 /**
  * Billboard trees (two crossed quads each) planted from the land-cover classes within the quality
@@ -41,12 +92,13 @@ export function buildVegetation(scene: Scene, data: WorldData, corridor: RouteCo
   const track = corridor.track;
   const radius = quality.treeRadius;
   const rng = createRng(2024);
+  const flora = FLORA[data.look.flora];
 
   // distance to the road per near-grid cell
   const dist = corridor.routeDistanceGrid();
 
   const chunks = new Map<string, MeshData>();
-  const plant = (x: number, z: number, type: number, height: number, d: number) => {
+  const plant = (x: number, z: number, type: number, height: number, d: number, larch = false) => {
     const hit = corridor.nearest(x, z, 9);
     if (hit && Math.abs(hit.offset) < corridor.hw[hit.offset >= 0 ? 1 : 0][hit.row]! + SHOULDER + 1.6) return;
     if (field.isWater(x, z) || buildings.find(x, z, 1.2) >= 0) return;
@@ -57,7 +109,7 @@ export function buildVegetation(scene: Scene, data: WorldData, corridor: RouteCo
     if (!md) chunks.set(key, (md = new MeshData(true, true)));
     const w = height * ASPECT[type]! * 0.5;
     const yaw = rng() * Math.PI;
-    const tint = type === TREE.broadleaf && rng() < 0.22 ? AUTUMN[1 + Math.floor(rng() * 3)]! : AUTUMN[0]!;
+    const tint = larch ? LARCH : type === TREE.broadleaf && rng() < flora.autumn ? AUTUMN[1 + Math.floor(rng() * 3)]! : AUTUMN[0]!;
     const shade = 0.85 + rng() * 0.25;
     const u0 = type / TREE_TYPES + 0.004;
     const u1 = (type + 1) / TREE_TYPES - 0.004;
@@ -82,23 +134,26 @@ export function buildVegetation(scene: Scene, data: WorldData, corridor: RouteCo
       const d = dist[k]!;
       if (d > radius) continue;
       const cls = g.classes[k]!;
-      const density = (DENSITY[cls] ?? 0) * (1 - 0.45 * Math.max(0, (d - radius * 0.5) / (radius * 0.5)));
+      const h = g.heights[k]!;
+      // towards the tree line the forest opens up and the trees get smaller
+      const alpine = smoothstep(flora.treeLine[0], flora.treeLine[1], h);
+      const density = (DENSITY[cls] ?? 0) * (1 - 0.45 * Math.max(0, (d - radius * 0.5) / (radius * 0.5))) * (1 - alpine);
       let count = Math.floor(density);
       if (rng() < density - count) count++;
-      const h = g.heights[k]!;
       for (let n = 0; n < count; n++) {
         const x = g.x0 + (i - 0.5 + rng()) * g.step;
         const z = g.z0 + (j - 0.5 + rng()) * g.step;
         let type: number = TREE.broadleaf;
         let height = 9 + rng() * 9;
+        let larch = false;
         if (cls === LAND_CLASS.forest) {
-          const coniferShare = h < 900 ? 0.12 : h < 1300 ? 0.5 : 0.9;
-          if (rng() < coniferShare) {
+          if (rng() < flora.conifer(h)) {
             type = TREE.conifer;
-            height = 12 + rng() * 12;
+            height = (flora.coniferHeight[0] + rng() * flora.coniferHeight[1]) * (1 - 0.5 * alpine);
+            larch = h > 1500 && rng() < flora.larch;
           }
         } else if (cls === LAND_CLASS.urban || cls === LAND_CLASS.garden || cls === LAND_CLASS.park) {
-          if (h < 320 && rng() < 0.28) {
+          if (h < 320 && rng() < flora.cypress) {
             type = TREE.cypress;
             height = 8 + rng() * 7;
           } else {
@@ -111,7 +166,7 @@ export function buildVegetation(scene: Scene, data: WorldData, corridor: RouteCo
         } else if (cls === LAND_CLASS.shrub) {
           height = 3 + rng() * 4;
         }
-        plant(x, z, type, height, d);
+        plant(x, z, type, height, d, larch);
       }
     }
   }
@@ -121,7 +176,7 @@ export function buildVegetation(scene: Scene, data: WorldData, corridor: RouteCo
     const z = data.trees[p + 1]!;
     const d = corridor.routeDistance(x, z);
     if (d > radius) continue;
-    const cypress = field.dem(x, z) < 320 && rng() < 0.3;
+    const cypress = field.dem(x, z) < 320 && rng() < flora.cypress * 1.07;
     plant(x, z, cypress ? TREE.cypress : TREE.garden, cypress ? 9 + rng() * 6 : 8 + rng() * 8, d);
   }
 

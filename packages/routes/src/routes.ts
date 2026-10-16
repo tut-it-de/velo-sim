@@ -1,3 +1,4 @@
+import { FELDBERG_TAUNUS_LENGTH_M, FELDBERG_TAUNUS_PATH, FELDBERG_TAUNUS_SEGMENTS } from './data/feldbergTaunus';
 import { LAGO_DI_COMO_LENGTH_M, LAGO_DI_COMO_PATH, LAGO_DI_COMO_SEGMENTS } from './data/lagoDiComo';
 import { Track } from './track';
 import type { RouteDefinition, RoutePath } from './types';
@@ -172,7 +173,20 @@ export const LAGO_DI_COMO: RouteDefinition = {
   segments: LAGO_DI_COMO_SEGMENTS,
 };
 
-export const ROUTES: RouteDefinition[] = [LAGO_DI_COMO, KUESTENRUNDE, HUEGELRUNDE, BERGRUNDE];
+export const FELDBERG_TAUNUS: RouteDefinition = {
+  id: 'feldberg-taunus',
+  name: 'Großer Feldberg – ab Hohemark',
+  description:
+    'Der Taunus-Klassiker auf echten Straßen: vom Waldtraut an der Hohemark die Kanonenstraße durch den Wald hinauf zum Sandplacken, über die Hochtaunusstraße zum Gipfel (879 m), Wende auf dem Gipfelplateau und Abfahrt bis zum Kreisel an der Hohemark.',
+  region: 'Taunus · Deutschland',
+  style: 'hills',
+  lengthM: FELDBERG_TAUNUS_LENGTH_M,
+  path: decodePath(FELDBERG_TAUNUS_PATH),
+  world: 'feldberg-taunus',
+  segments: FELDBERG_TAUNUS_SEGMENTS,
+};
+
+export const ROUTES: RouteDefinition[] = [LAGO_DI_COMO, FELDBERG_TAUNUS, KUESTENRUNDE, HUEGELRUNDE, BERGRUNDE];
 
 const trackCache = new Map<string, Track>();
 

@@ -3,11 +3,11 @@ import { smoothstep } from '../noise';
 import { EDGE, ROW_STRIDE, SHOULDER, VERGE_BLEND, WALL_THICK, type RouteCorridor } from './corridor';
 import { MeshData } from './meshData';
 import type { RealTerrain } from './terrain';
-import { roadTexture, stoneTexture } from './textures';
+import { roadTexture, roadTextureRepeat, stoneTexture } from './textures';
+import type { Architecture } from './worldData';
 
 const CHUNK_ROWS = 96;
 const VERGE_COLS = 12;
-const TEX_REPEAT = 24;
 const STONE_REPEAT = 2.5;
 const PARAPET_H = 0.85;
 const PARAPET_W = 0.42;
@@ -73,7 +73,8 @@ export interface RibbonMeshes {
  * Road surface, verges (cut and fill slopes that blend into the terrain), lake walls with parapets,
  * retaining walls, guardrails and street lamps along the lap.
  */
-export function buildRouteRibbon(scene: Scene, c: RouteCorridor, terrain: RealTerrain): RibbonMeshes {
+export function buildRouteRibbon(scene: Scene, c: RouteCorridor, terrain: RealTerrain, markings: Architecture = 'italian'): RibbonMeshes {
+  const texRepeat = roadTextureRepeat(markings);
   const t = c.track;
   const field = c.field;
   const frame = (r: number): Frame => {
@@ -83,11 +84,13 @@ export function buildRouteRibbon(scene: Scene, c: RouteCorridor, terrain: RealTe
   };
 
   const openMat = new StandardMaterial('road-open', scene);
-  openMat.diffuseTexture = roadTexture(scene, false);
+  openMat.diffuseTexture = roadTexture(scene, false, markings);
   const townMat = new StandardMaterial('road-town', scene);
   townMat.diffuseTexture = roadTexture(scene, true);
   for (const m of [openMat, townMat]) {
+    // across the road the texture ends at the shoulders; along the road it repeats (dynamic textures default to clamp)
     (m.diffuseTexture as Texture).wrapU = Texture.CLAMP_ADDRESSMODE;
+    (m.diffuseTexture as Texture).wrapV = Texture.WRAP_ADDRESSMODE;
     m.specularColor = new Color3(0.07, 0.07, 0.07);
     m.specularPower = 24;
   }
@@ -125,7 +128,7 @@ export function buildRouteRibbon(scene: Scene, c: RouteCorridor, terrain: RealTe
         const dy = [-0.05, 0, 0.035, 0, -0.05];
         const us = [0, 0.06, 0.5, 0.94, 1];
         const base = md.vertexCount;
-        for (let q = 0; q < 5; q++) md.vertex(f.x + f.rx * offs[q]!, f.y + dy[q]!, f.z + f.rz * offs[q]!, 0, 1, 0, us[q]!, rows[k]!.d / TEX_REPEAT);
+        for (let q = 0; q < 5; q++) md.vertex(f.x + f.rx * offs[q]!, f.y + dy[q]!, f.z + f.rz * offs[q]!, 0, 1, 0, us[q]!, rows[k]!.d / texRepeat);
         return base;
       };
       for (let k = 0; k < rows.length - 1; k++) {
