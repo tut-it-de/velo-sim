@@ -62,6 +62,15 @@ const BEFORE_FOG = /* glsl */ `
     float n0 = veloNoise(q);
     veloSlope += vec2(veloNoise(q + vec2(0.4, 0.0)) - n0, veloNoise(q + vec2(0.0, 0.4)) - n0) * 0.35 * veloFine;
   }
+#ifdef VELO_RIPPLES
+  // fine ripples from the baked normal map: two scales, drifting in different directions
+  float veloMid = smoothstep(0.15, 0.6, veloFoot) * (1.0 - smoothstep(6.0, 25.0, veloFoot));
+  if (veloMid > 0.0) {
+    vec2 r1 = texture2D(veloRipples, veloP.xz / 9.0 + vec2(veloT * 0.02, veloT * 0.008)).rg;
+    vec2 r2 = texture2D(veloRipples, veloP.zx / 23.0 - vec2(veloT * 0.011, veloT * 0.017)).rg;
+    veloSlope += (r1 + r2 - 1.0) * 0.12 * veloMid;
+  }
+#endif
   veloSlope *= veloWind;
   vec3 veloN = normalize(vec3(-veloSlope.x, 1.0, -veloSlope.y));
 
@@ -88,6 +97,14 @@ const BEFORE_FOG = /* glsl */ `
   vec3 veloCol = mix(veloDeep, veloRefl, veloF);
   float veloSun = pow(max(dot(veloR, veloSunDir.xyz), 0.0), 600.0) * 5.0 + pow(max(dot(veloR, veloSunDir.xyz), 0.0), 60.0) * 0.12;
   veloCol += ${glslColor(SKY.sun)} * veloSun * (0.4 + 0.6 * veloWind);
+#ifdef VELO_RIPPLES
+  // sun glints: a random subset of small cells lights up where the reflection hits the sun
+  vec2 veloCell = floor(veloP.xz * 1.5) + floor(veloT * 3.0);
+  float veloHash = fract(sin(dot(veloCell, vec2(12.9898, 78.233))) * 43758.5453);
+  float veloSpark = step(0.97, veloHash) * pow(max(dot(veloR, veloSunDir.xyz), 0.0), 25.0)
+    * (1.0 - smoothstep(0.3, 1.5, veloFoot)) * 6.0;
+  veloCol += ${glslColor(SKY.sun)} * veloSpark * veloWind;
+#endif
   color.rgb = veloCol;
   color.a = 1.0;
 }
@@ -100,8 +117,9 @@ class WaterPlugin extends MaterialPluginBase {
   constructor(
     material: Material,
     private readonly mirror: MirrorTexture | null,
+    private readonly ripples: Texture | null,
   ) {
-    super(material, 'VeloWater', 200, { VELO_MIRROR: false });
+    super(material, 'VeloWater', 200, { VELO_MIRROR: false, VELO_RIPPLES: false });
     this._enable(true);
   }
 
@@ -111,6 +129,7 @@ class WaterPlugin extends MaterialPluginBase {
 
   override prepareDefines(defines: MaterialDefines): void {
     (defines as unknown as Record<string, boolean>)['VELO_MIRROR'] = this.mirror !== null;
+    (defines as unknown as Record<string, boolean>)['VELO_RIPPLES'] = this.ripples !== null;
   }
 
   override getUniforms() {
@@ -125,26 +144,29 @@ class WaterPlugin extends MaterialPluginBase {
 
   override getSamplers(samplers: string[]): void {
     if (this.mirror) samplers.push('veloMirror');
+    if (this.ripples) samplers.push('veloRipples');
   }
 
   override bindForSubMesh(ubo: UniformBuffer): void {
     ubo.updateVector4('veloParams', this.params);
     ubo.updateVector4('veloSunDir', this.sun);
     if (this.mirror) ubo.setTexture('veloMirror', this.mirror);
+    if (this.ripples) ubo.setTexture('veloRipples', this.ripples);
   }
 
   override getActiveTextures(active: BaseTexture[]): void {
     if (this.mirror) active.push(this.mirror);
+    if (this.ripples) active.push(this.ripples);
   }
 
   override hasTexture(texture: BaseTexture): boolean {
-    return texture === this.mirror;
+    return texture === this.mirror || texture === this.ripples;
   }
 
   override getCustomCode(shaderType: string) {
     if (shaderType !== 'fragment') return null;
     return {
-      CUSTOM_FRAGMENT_DEFINITIONS: `${this.mirror ? 'uniform sampler2D veloMirror;\n' : ''}${NOISE_GLSL}`,
+      CUSTOM_FRAGMENT_DEFINITIONS: `${this.mirror ? 'uniform sampler2D veloMirror;\n' : ''}${this.ripples ? 'uniform sampler2D veloRipples;\n' : ''}${NOISE_GLSL}`,
       CUSTOM_FRAGMENT_BEFORE_FOG: BEFORE_FOG,
     };
   }
@@ -197,6 +219,7 @@ export class LakeWater {
   readonly mesh: Mesh | null;
   readonly material: StandardMaterial;
   readonly mirror: MirrorTexture | null;
+  private readonly ripples: Texture | null;
   private readonly plugin: WaterPlugin;
   private time = 0;
 
@@ -231,7 +254,17 @@ export class LakeWater {
     mat.specularColor = Color3.Black();
     // Shore terrain that lies within depth-buffer precision of the water wins: a stable shoreline.
     mat.zOffset = 1;
-    this.plugin = new WaterPlugin(mat, this.mirror);
+    // ripple normal map (rg = slope, tileable): only with the detail quality, its own texture per lake
+    let ripples: Texture | null = null;
+    if (hasWater && quality.detail) {
+      ripples = new Texture(`${import.meta.env.BASE_URL}textures/ripples.webp`, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE);
+      ripples.wrapU = Texture.WRAP_ADDRESSMODE;
+      ripples.wrapV = Texture.WRAP_ADDRESSMODE;
+      ripples.anisotropicFilteringLevel = 4;
+      ripples.name = 'lake-ripples';
+    }
+    this.ripples = ripples;
+    this.plugin = new WaterPlugin(mat, this.mirror, ripples);
     this.material = mat;
 
     // greedy rectangles over the mask
@@ -282,5 +315,6 @@ export class LakeWater {
 
   dispose(): void {
     this.mirror?.dispose();
+    this.ripples?.dispose();
   }
 }

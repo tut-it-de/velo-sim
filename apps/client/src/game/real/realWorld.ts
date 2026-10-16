@@ -15,6 +15,7 @@ import { buildGate, buildSegmentGates } from '../props';
 import type { RiderAvatar } from '../rider';
 import { buildBuildings } from './buildings';
 import { buildLandmarks } from './landmarks';
+import { LakeTraffic } from './lakeTraffic';
 import { RouteCorridor } from './corridor';
 import { FOG_DENSITY, SKY, SUN_DIR } from './env';
 import { fitGroundModel } from './ground';
@@ -66,6 +67,8 @@ export class RealWorld {
   private readonly casters = new Set<Mesh>();
   /** 3D trees next to the road (hoch and ultra only). */
   private nearTrees: NearTrees | null = null;
+  /** Sailing boats and the ferry on the lake (all levels except niedrig). */
+  lakeTraffic: LakeTraffic | null = null;
 
   private constructor(
     private readonly scene: Scene,
@@ -137,9 +140,11 @@ export class RealWorld {
 
     await step(data.lake.length > 0 ? 'See und Himmel …' : 'Himmel und Wolken …');
     const water = new LakeWater(scene, data, quality);
+    const lakeTraffic = data.lake.length > 0 && quality.level !== 'niedrig' ? new LakeTraffic(scene, data, field, track) : null;
     // Created last: drawn after the landscape, so the depth test skips most sky pixels.
     const sky = new SkyDome(scene, REAL_CAMERA_MAX_Z * 0.85);
     const world = new RealWorld(scene, data, corridor, sun, water, sky, vegetation, flora);
+    world.lakeTraffic = lakeTraffic;
     if (quality.cascades > 0) {
       // Cascades cover trees, walls and houses near the rider: their shadows fall over the road.
       const csm = new CascadedShadowGenerator(quality.shadowMap, sun);
@@ -196,6 +201,7 @@ export class RealWorld {
       ...(landmarks.solid ? [landmarks.solid] : []),
       ...(quality.level === 'hoch' || quality.level === 'ultra' ? vegetation.meshes : []),
       sky.mesh,
+      ...(lakeTraffic?.meshes ?? []),
     ]);
     return world;
   }
@@ -230,6 +236,7 @@ export class RealWorld {
   /** Per frame: animated water and clouds, shadow frustum follows the rider. */
   update(dt: number, camera: Vector3, rider: Vector3): void {
     this.water.update(dt);
+    this.lakeTraffic?.update(dt);
     this.sky.update(dt, camera.x, camera.z);
     this.nearTrees?.update(camera);
     this.vegetation.setNearFade(camera, this.nearTrees?.fade ?? { inner: 0, outer: 0 });

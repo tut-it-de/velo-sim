@@ -1002,5 +1002,45 @@ def grass(size):
     return out
 
 
+def _fbm_stretched(w, h, octaves, base_freq, seed, stretch_x):
+    """Tileable fbm like noise.fbm, with features stretched by stretch_x along x.
+
+    Same band-pass construction as noise.fbm; the x frequency is divided by stretch_x,
+    so the result stays periodic with integer frequencies. Returns float64 in [0, 1].
+    """
+    rng = np.random.default_rng(seed)
+    spectrum = np.fft.fft2(rng.standard_normal((h, w)))
+    kx, ky = np.meshgrid(np.fft.fftfreq(w, d=1.0 / w), np.fft.fftfreq(h, d=1.0 / h))
+    r = np.hypot(kx / stretch_x, ky)
+    safe_r = np.where(r > 0, r, 1.0)
+    total = np.zeros((h, w), dtype=np.float64)
+    for o in range(octaves):
+        f0 = base_freq * (2.0 ** o)
+        band = np.exp(-0.5 * (np.log2(safe_r / f0) / 0.5) ** 2)
+        band[r == 0] = 0.0
+        total += (0.5 ** o) * np.real(np.fft.ifft2(spectrum * band))
+    lo, hi = float(total.min()), float(total.max())
+    return (total - lo) / (hi - lo)
+
+
+@generator('ripples', size=(512, 512))
+def ripples(size):
+    """Lake ripple normal map, tileable and lossless.
+
+    Height is fbm with 4 octaves, stretched 2.5x along x (wind direction). R = normal X,
+    G = normal Z (both 0.5 = flat), B = 1, A = 1. Kept out of pack_detail on purpose: this
+    map is sampled as a slope (rg), not as a detail map.
+    """
+    w, h = size
+    height = _fbm_stretched(w, h, octaves=4, base_freq=4, seed=7, stretch_x=2.5)
+    nx, nz = noise.height_to_normal(height, strength=2.0)
+    out = np.zeros((h, w, 4), dtype=np.uint8)
+    out[..., 0] = np.clip(nx * 255.0 + 0.5, 0, 255).astype(np.uint8)
+    out[..., 1] = np.clip(nz * 255.0 + 0.5, 0, 255).astype(np.uint8)
+    out[..., 2] = 255
+    out[..., 3] = 255
+    return out
+
+
 if __name__ == "__main__":
     sys.exit(main(sys.argv))
