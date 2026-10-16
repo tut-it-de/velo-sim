@@ -29,6 +29,14 @@ describe('SegmentTracker', () => {
     expect(results[0]!.speedMps).toBeCloseTo(10, 6);
   });
 
+  it('ignores a jump across a whole segment (position reset) and keeps nothing open', () => {
+    const tr = new SegmentTracker(segs, 5000);
+    tr.update(500, 50);
+    expect(tr.update(3000, 51)).toEqual([]);
+    expect(tr.current()).toEqual([]);
+    expect(ride(tr, 10, 100)).toEqual([]);
+  });
+
   it('reports progress while inside a segment', () => {
     const tr = new SegmentTracker(segs, 5000);
     ride(tr, 10, 1500);

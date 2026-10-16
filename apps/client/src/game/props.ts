@@ -8,6 +8,7 @@ import {
   Quaternion,
   StandardMaterial,
   Vector3,
+  Vector4,
   VertexBuffer,
   type Scene,
 } from '@babylonjs/core';
@@ -232,7 +233,12 @@ export function buildGate(scene: Scene, track: Track, distanceM: number, text: s
     p.material = pillarMat;
     parts.push(p);
   }
-  const banner = MeshBuilder.CreatePlane('banner', { width: half * 2 + 0.5, height: 1.4, sideOrientation: Mesh.DOUBLESIDE }, scene);
+  // back side mirrored in u so the text reads correctly from both directions
+  const banner = MeshBuilder.CreatePlane(
+    'banner',
+    { width: half * 2 + 0.5, height: 1.4, sideOrientation: Mesh.DOUBLESIDE, frontUVs: new Vector4(0, 0, 1, 1), backUVs: new Vector4(1, 0, 0, 1) },
+    scene,
+  );
   banner.position.set(0, height - 0.4, 0);
   const bm = new StandardMaterial(`gate-banner-${text}`, scene);
   bm.diffuseTexture = bannerTexture(scene, text, color);

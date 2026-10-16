@@ -41,9 +41,9 @@ export function roadTexture(scene: Scene, town: boolean): DynamicTexture {
         ctx.fillRect(a1, y, w - a1, 2);
       }
     }
-    ctx.fillStyle = town ? '#4a4b4d' : '#434548';
+    ctx.fillStyle = town ? '#3f4042' : '#434548';
     ctx.fillRect(a0, 0, a1 - a0, h);
-    speckle(ctx, rng, a0, a1, h, 26000, town ? 76 : 70, 34);
+    speckle(ctx, rng, a0, a1, h, 26000, town ? 64 : 70, 30);
     // tyre tracks (slightly polished) and patches
     for (const u of [0.24, 0.39, 0.61, 0.76]) {
       const g = ctx.createLinearGradient(px(u - 0.05), 0, px(u + 0.05), 0);

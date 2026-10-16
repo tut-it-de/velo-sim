@@ -1,5 +1,6 @@
 import type { Track } from '@velo/routes';
 import { smoothstep } from '../noise';
+import { routeDistanceField } from './ground';
 import { cellKey, type BuildingIndex, type HeightField } from './heightField';
 import { LAND_CLASS } from './worldData';
 
@@ -18,7 +19,7 @@ export const PUSH_DEPTH = 2.5;
 export const DEFAULT_HALF_WIDTH = 3.3;
 export const WALL_THICK = 0.45;
 /** What borders the road on one side. */
-export const EDGE = { verge: 0, lake: 1, wall: 2, rail: 3 } as const;
+export const EDGE = { verge: 0, lake: 1, wall: 2, rail: 3, parapet: 4 } as const;
 /** Every 2nd track sample (4 m) is a ribbon row. */
 export const ROW_STRIDE = 2;
 
@@ -37,7 +38,7 @@ type SideArrays<T> = [T, T];
 
 /**
  * Analyses the lap once: road widths (narrow streets between houses), which side borders the lake,
- * needs a retaining wall or a guardrail, how far each verge may reach (hairpins, tight bends,
+ * needs a retaining wall, a stone parapet or a guardrail, how far each verge may reach (hairpins, tight bends,
  * other parts of the lap) and which rows duplicate an earlier pass (out-and-back sections).
  * Also answers "how high is the ground here?" consistently for the terrain, buildings and trees.
  */
@@ -160,6 +161,20 @@ export class RouteCorridor {
     return Math.min(dem, this.profile(hit.row, side, Math.abs(hit.offset), dem, hit.y)) - PUSH_DEPTH;
   }
 
+  /** Distance to the lap for every near-grid vertex (same layout as the near raster). */
+  routeDistanceGrid(): Float32Array {
+    return routeDistanceField(this.field.near, this.track).dist;
+  }
+
+  /** Distance to the lap from the nearest near-grid vertex (Infinity outside the near raster). */
+  routeDistance(x: number, z: number): number {
+    const g = this.field.near;
+    const i = Math.round((x - g.x0) / g.step);
+    const j = Math.round((z - g.z0) / g.step);
+    if (i < 0 || j < 0 || i >= g.nx || j >= g.nz) return Infinity;
+    return this.routeDistanceGrid()[j * g.nx + i]!;
+  }
+
   private analyze(buildings: BuildingIndex): void {
     const t = this.track;
     const f = this.field;
@@ -212,6 +227,10 @@ export class RouteCorridor {
     }
 
     // 4) edges and verge extents
+    // The elevation model is a surface model (trees, roofs), so the road profile deliberately sits
+    // below it. Walls are therefore judged by how the ground rises across the road (relative to the
+    // model at the centre line), not by the absolute difference to the road.
+    const rise: SideArrays<Float32Array> = [new Float32Array(rows), new Float32Array(rows)];
     for (let r = 0; r < rows; r++) {
       const i = this.sampleOf(r);
       const x = t.xs[i]!;
@@ -219,6 +238,7 @@ export class RouteCorridor {
       const y = t.ys[i]!;
       const rx = Math.cos(t.headings[i]!);
       const rz = -Math.sin(t.headings[i]!);
+      const demC = f.dem(x, z);
       // signed curvature over ±12 m: > 0 turns right (heading grows clockwise)
       const dh = wrapAngle(t.headings[(i + 6) % n]! - t.headings[(i - 6 + n) % n]!);
       const radius = 24 / Math.max(Math.abs(dh), 1e-3);
@@ -248,19 +268,36 @@ export class RouteCorridor {
         let edge: number = EDGE.verge;
         if (lake) edge = EDGE.lake;
         else if (Number.isNaN(mid)) {
-          const up = f.dem(x4, z4) - y;
+          const d4 = f.dem(x4, z4);
+          const up = d4 - y;
+          rise[side]![r] = d4 - demC;
           const [x7, z7] = at(hw + 7);
           const down = f.dem(x7, z7) - y;
-          if (up > 3) {
+          // villages are terraced with stone walls; in the open a grassy cut is fine up to ~4 m
+          const town = this.urban[r] === 1;
+          if (town ? up > 2.2 : up > 4 && d4 - demC > 1.5) {
             edge = EDGE.wall;
-            this.wallH[side]![r] = Math.min(3.2, Math.max(1, up - 1.2));
-          } else if (down < -3.5) edge = EDGE.rail;
+            this.wallH[side]![r] = Math.min(3.2, Math.max(town ? 1.6 : 1.2, up - (town ? 1 : 2)));
+          } else if (down < (town ? -2.5 : -3.5)) {
+            // villages and the lakeside get stone parapets, mountain roads steel guardrails
+            let lakeside = false;
+            for (let o = 12; o <= 240 && !lakeside; o += 12) {
+              const [px, pz] = at(hw + o);
+              lakeside = f.classAt(px, pz) === LAND_CLASS.water;
+            }
+            edge = lakeside || this.urban[r] ? EDGE.parapet : EDGE.rail;
+          }
         }
         this.edge[side]![r] = edge;
       }
+      // out of town, a cutting with walls on both sides only where the ground clearly rises on both sides
+      const bothWalls = this.edge[0]![r] === EDGE.wall && this.edge[1]![r] === EDGE.wall;
+      if (bothWalls && !this.urban[r] && Math.min(rise[0]![r]!, rise[1]![r]!) < 3) {
+        this.edge[rise[0]![r]! < rise[1]![r]! ? 0 : 1]![r] = EDGE.verge;
+      }
     }
     for (const arr of this.edge) {
-      for (const kind of [EDGE.lake, EDGE.wall, EDGE.rail]) {
+      for (const kind of [EDGE.lake, EDGE.wall, EDGE.rail, EDGE.parapet]) {
         const mask = Uint8Array.from(arr, (v) => (v === kind ? 1 : 0));
         cleanRuns(mask, 4);
         for (let r = 0; r < rows; r++) {

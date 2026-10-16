@@ -226,6 +226,15 @@ export function buildRouteRibbon(scene: Scene, c: RouteCorridor, terrain: RealTe
               [o + PARAPET_W, field.waterLevel - 1.5],
             ];
           }
+          if (edge === EDGE.parapet) {
+            // low stone wall above a drop, its outer face reaches down into the slope
+            return [
+              [o, f.y - 0.05],
+              [o, f.y + PARAPET_H],
+              [o + PARAPET_W, f.y + PARAPET_H],
+              [o + PARAPET_W, f.y - 2.5],
+            ];
+          }
           if (edge === EDGE.wall) {
             const top = f.y + c.wallH[side]![r]!;
             return [

@@ -15,6 +15,8 @@ import { buildGate, buildProps, buildSegmentGates, skyDome } from './props';
 import { RiderAvatar, type RiderLook } from './rider';
 import { buildRoadMesh } from './road';
 import { TerrainModel, buildTerrainMesh } from './terrain';
+import { DynamicResolution, resolveQuality, type GraphicsQuality, type QualityProfile } from './real/quality';
+import { REAL_CAMERA_MAX_Z, RealWorld, type MinimapData } from './real/realWorld';
 
 export type CameraMode = 'chase' | 'side' | 'top' | 'pov';
 
@@ -58,6 +60,10 @@ export class GameWorld {
   private camPos?: Vector3;
   private camLook?: Vector3;
   private disposed = false;
+  private real: RealWorld | null = null;
+  private dynamicResolution: DynamicResolution | null = null;
+  /** Graphics profile in use (real-world routes only). */
+  quality: QualityProfile | null = null;
 
   private constructor(canvas: HTMLCanvasElement, track: Track, look: RiderLook) {
     this.track = track;
@@ -74,10 +80,48 @@ export class GameWorld {
     this.rider = new RiderAvatar(this.scene, 'me', look);
   }
 
-  static async create(canvas: HTMLCanvasElement, routeId: string, look: RiderLook, onProgress?: (msg: string) => void): Promise<GameWorld> {
+  static async create(
+    canvas: HTMLCanvasElement,
+    routeId: string,
+    look: RiderLook,
+    onProgress?: (msg: string) => void,
+    graphics: GraphicsQuality = 'auto',
+  ): Promise<GameWorld> {
     const track = getTrack(routeId);
     const world = new GameWorld(canvas, track, look);
-    const scene = world.scene;
+    if (track.definition.world) await world.buildReal(graphics, onProgress);
+    else await world.buildClassic(onProgress);
+    await nextFrame();
+    await world.scene.whenReadyAsync();
+    world.scene.freezeMaterials();
+    world.real?.afterFreeze();
+
+    world.engine.runRenderLoop(() => world.renderFrame());
+    window.addEventListener('resize', world.onResize);
+    return world;
+  }
+
+  /** Map-data route: real terrain, buildings, lake and sky with a graphics profile for the device. */
+  private async buildReal(graphics: GraphicsQuality, onProgress?: (msg: string) => void): Promise<void> {
+    const quality = (this.quality = resolveQuality(graphics, this.engine));
+    const ratio = Math.min(window.devicePixelRatio || 1, quality.dprCap);
+    if (quality.dynamicResolution) this.dynamicResolution = new DynamicResolution(this.engine, ratio);
+    else this.engine.setHardwareScalingLevel(1 / ratio);
+    this.camera.minZ = 0.4;
+    this.camera.maxZ = REAL_CAMERA_MAX_Z;
+    this.real = await RealWorld.build(this.scene, this.track, quality, onProgress);
+    this.real.addRider(this.rider);
+    onProgress?.('Shader werden kompiliert …');
+  }
+
+  /** Map data of a real-world route for the HUD minimap. */
+  get minimap(): MinimapData | null {
+    return this.real?.minimap ?? null;
+  }
+
+  private async buildClassic(onProgress?: (msg: string) => void): Promise<void> {
+    const track = this.track;
+    const scene = this.scene;
     const style = track.definition.style;
     const atmo = ATMOSPHERE[style];
 
@@ -126,15 +170,7 @@ export class GameWorld {
     buildProps(scene, model);
     buildGate(scene, track, 0, 'START · ZIEL', '#ff7a1a');
     buildSegmentGates(scene, track, track.segments);
-
     onProgress?.('Shader werden kompiliert …');
-    await nextFrame();
-    await scene.whenReadyAsync();
-    scene.freezeMaterials();
-
-    world.engine.runRenderLoop(() => world.renderFrame());
-    window.addEventListener('resize', world.onResize);
-    return world;
   }
 
   private onResize = () => this.engine.resize();
@@ -154,12 +190,15 @@ export class GameWorld {
     if (!r) {
       r = new RiderAvatar(this.scene, `rider-${id}`, look);
       this.others.set(id, r);
+      this.real?.addRider(r);
     }
     return r;
   }
 
   removeRider(id: string): void {
-    this.others.get(id)?.dispose();
+    const r = this.others.get(id);
+    if (r) this.real?.removeRider(r);
+    r?.dispose();
     this.others.delete(id);
   }
 
@@ -181,6 +220,8 @@ export class GameWorld {
       }
       this.updateCamera(dt, me);
     }
+    this.dynamicResolution?.update(dt);
+    this.real?.update(dt, this.camera.position, this.rider.root.position);
     this.scene.render();
   }
 
@@ -239,6 +280,7 @@ export class GameWorld {
     this.disposed = true;
     window.removeEventListener('resize', this.onResize);
     this.engine.stopRenderLoop();
+    this.real?.dispose();
     this.scene.dispose();
     this.engine.dispose();
   }

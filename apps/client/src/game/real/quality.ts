@@ -60,14 +60,17 @@ export function resolveQuality(setting: GraphicsQuality, engine: Engine): Qualit
 }
 
 /**
- * Lowers the render resolution when frames take too long and raises it again when there is headroom,
- * between 55 % and 100 % of the profile's pixel ratio.
+ * Lowers the render resolution when frames take too long and raises it again when the display rate is
+ * reached, between 55 % and 100 % of the profile's pixel ratio. A raise that has to be taken back soon
+ * after doubles the wait before the next attempt, so the resolution does not keep pumping.
  */
 export class DynamicResolution {
   private scale = 1;
   private acc = 0;
   private frames = 0;
-  private cooldown = 2;
+  private sinceChange = 0;
+  private raiseWait = 4;
+  private lastWasRaise = false;
 
   constructor(
     private readonly engine: AbstractEngine,
@@ -79,20 +82,24 @@ export class DynamicResolution {
   update(dt: number): void {
     this.acc += dt;
     this.frames++;
-    this.cooldown -= dt;
+    this.sinceChange += dt;
     if (this.acc < 1.5) return;
     const frameMs = (this.acc / this.frames) * 1000;
     this.acc = 0;
     this.frames = 0;
-    if (this.cooldown > 0) return;
-    let next = this.scale;
-    if (frameMs > 21) next = Math.max(0.55, this.scale - 0.1);
-    else if (frameMs < 15.5) next = Math.min(1, this.scale + 0.05);
-    if (next !== this.scale) {
-      this.scale = next;
-      this.cooldown = 3;
-      this.apply();
+    if (frameMs > 21 && this.sinceChange > 2 && this.scale > 0.55) {
+      if (this.lastWasRaise && this.sinceChange < 8) this.raiseWait = Math.min(90, this.raiseWait * 2);
+      this.change(Math.max(0.55, this.scale - 0.1), false);
+    } else if (frameMs < 18 && this.scale < 1 && this.sinceChange > this.raiseWait) {
+      this.change(Math.min(1, this.scale + 0.05), true);
     }
+  }
+
+  private change(scale: number, raise: boolean): void {
+    this.scale = scale;
+    this.lastWasRaise = raise;
+    this.sinceChange = 0;
+    this.apply();
   }
 
   private apply(): void {

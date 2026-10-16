@@ -211,7 +211,7 @@ function RideView({
           })
         : undefined;
     const s = new RideSession(routeId, st, { bots, workout, loadout: garage.loadout, routesWithLap: garage.routesWithLap, net });
-    GameWorld.create(canvasRef.current!, routeId, lookFromLoadout(garage.loadout), setProgress)
+    GameWorld.create(canvasRef.current!, routeId, lookFromLoadout(garage.loadout), setProgress, st.graphicsQuality)
       .then((created) => {
         if (cancelled) {
           created.dispose();

@@ -1,0 +1,104 @@
+import { Color3, Mesh, MeshBuilder, ShaderMaterial, Vector4, type Scene } from '@babylonjs/core';
+import { SKY, TO_SUN } from './env';
+import { NOISE_GLSL } from './terrainMaterial';
+
+const glslColor = (hex: string) => {
+  const c = Color3.FromHexString(hex);
+  return `vec3(${c.r.toFixed(4)}, ${c.g.toFixed(4)}, ${c.b.toFixed(4)})`;
+};
+
+const VERTEX = /* glsl */ `
+precision highp float;
+attribute vec3 position;
+uniform mat4 world;
+uniform mat4 viewProjection;
+varying vec3 vDir;
+void main() {
+  vDir = position;
+  gl_Position = viewProjection * world * vec4(position, 1.0);
+}
+`;
+
+/**
+ * Sky gradient, sun with glow and a deck of fair-weather cumulus: the view ray is intersected with a
+ * cloud layer 1.8 km up and fractal noise decides coverage. The layer scrolls with the camera
+ * position and the wind, so clouds keep their place in the world while slowly drifting.
+ */
+const FRAGMENT = /* glsl */ `
+precision highp float;
+varying vec3 vDir;
+uniform vec4 veloSky;    // time, camera x, camera z, cloud cover
+uniform vec4 veloSunDir;
+${NOISE_GLSL}
+float fbm(vec2 p) {
+  float s = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 5; i++) {
+    s += a * veloNoise(p);
+    p = mat2(1.6, 1.2, -1.2, 1.6) * p + 7.3;
+    a *= 0.5;
+  }
+  return s;
+}
+void main() {
+  vec3 d = normalize(vDir);
+  vec3 sun = veloSunDir.xyz;
+  float up = d.y;
+  vec3 col = mix(${glslColor(SKY.horizon)}, ${glslColor(SKY.mid)}, smoothstep(0.0, 0.18, up));
+  col = mix(col, ${glslColor(SKY.zenith)}, smoothstep(0.15, 0.85, up));
+  float mu = max(dot(d, sun), 0.0);
+  col += vec3(1.0, 0.92, 0.75) * (pow(mu, 8.0) * 0.18 + pow(mu, 64.0) * 0.25);
+
+  if (up > 0.0) {
+    vec2 p = d.xz * (1800.0 / max(up, 0.035));
+    vec2 wind = vec2(4.0, 1.5) * veloSky.x;
+    vec2 q = (p + veloSky.yz + wind) * 0.00045;
+    float n = fbm(q);
+    float cover = smoothstep(1.0 - veloSky.w, 1.0 - veloSky.w + 0.28, n);
+    // self-shadowing: density a little towards the sun
+    float n2 = fbm(q + sun.xz * 0.08);
+    float shade = clamp(0.62 + (n - n2) * 2.6, 0.45, 1.05);
+    vec3 cloud = mix(vec3(0.66, 0.7, 0.77), vec3(1.0, 0.99, 0.96), shade);
+    cloud += vec3(1.0, 0.9, 0.7) * pow(mu, 12.0) * 0.35;
+    float fade = smoothstep(0.02, 0.22, up);
+    col = mix(col, cloud, cover * fade * 0.92);
+  }
+
+  // sun disc on top of everything (thin clouds let it through)
+  col = mix(col, ${glslColor(SKY.sun)} * 1.4, smoothstep(0.99993, 0.99997, mu));
+  // haze band: below the horizon the sky is the fog colour so distant mountains melt into it
+  col = mix(${glslColor(SKY.fog)}, col, smoothstep(-0.03, 0.06, up));
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+export class SkyDome {
+  readonly mesh: Mesh;
+  readonly material: ShaderMaterial;
+  private readonly params = new Vector4(0, 0, 0, 0.42);
+  private time = 0;
+
+  constructor(scene: Scene, radius: number) {
+    this.mesh = MeshBuilder.CreateSphere('sky', { diameter: radius * 2, segments: 20, sideOrientation: Mesh.BACKSIDE }, scene);
+    this.mesh.infiniteDistance = true;
+    this.mesh.isPickable = false;
+    this.mesh.applyFog = false;
+    this.mesh.alwaysSelectAsActiveMesh = true;
+    this.material = new ShaderMaterial(
+      'sky',
+      scene,
+      { vertexSource: VERTEX, fragmentSource: FRAGMENT },
+      { attributes: ['position'], uniforms: ['world', 'viewProjection', 'veloSky', 'veloSunDir'] },
+    );
+    this.material.backFaceCulling = false;
+    this.material.setVector4('veloSunDir', new Vector4(TO_SUN.x, TO_SUN.y, TO_SUN.z, 0));
+    this.material.setVector4('veloSky', this.params);
+    this.mesh.material = this.material;
+  }
+
+  update(dt: number, cameraX: number, cameraZ: number): void {
+    this.time += dt;
+    this.params.set(this.time % 7200, cameraX, cameraZ, this.params.w);
+    this.material.setVector4('veloSky', this.params);
+  }
+}

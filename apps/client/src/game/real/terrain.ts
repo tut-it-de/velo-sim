@@ -15,7 +15,7 @@ const CLASS_RGB: RGB[] = [
   [0.36, 0.48, 0.2], // grass
   [0.17, 0.27, 0.12], // forest
   [0.3, 0.38, 0.18], // shrub
-  [0.5, 0.48, 0.43], // urban
+  [0.38, 0.4, 0.3], // urban (courtyards, gardens, paving)
   [0.33, 0.45, 0.21], // garden
   [0.45, 0.5, 0.26], // farmland
   [0.5, 0.48, 0.45], // rock

@@ -59,14 +59,16 @@ export class SegmentTracker {
       for (const seg of this.segments) {
         const startAbs = base + seg.startM;
         const endAbs = base + seg.endM;
+        const crossedStart = d0 < startAbs && d1 >= startAbs;
+        if (crossedStart) this.active.set(seg.id, { startS: at(startAbs), startAbs });
         const running = this.active.get(seg.id);
         if (running && running.startAbs === startAbs && d0 < endAbs && d1 >= endAbs) {
-          const timeS = at(endAbs) - running.startS;
-          results.push({ segment: seg, timeS, speedMps: (seg.endM - seg.startM) / timeS, lap: lap + 1 });
+          // a jump across the whole segment in one step (position reset, resync) is no effort
+          if (!crossedStart) {
+            const timeS = at(endAbs) - running.startS;
+            results.push({ segment: seg, timeS, speedMps: (seg.endM - seg.startM) / timeS, lap: lap + 1 });
+          }
           this.active.delete(seg.id);
-        }
-        if (d0 < startAbs && d1 >= startAbs) {
-          this.active.set(seg.id, { startS: at(startAbs), startAbs });
         }
       }
     }

@@ -42,22 +42,8 @@ export function buildVegetation(scene: Scene, data: WorldData, corridor: RouteCo
   const radius = quality.treeRadius;
   const rng = createRng(2024);
 
-  // distance to the road per near-grid cell (from route samples every 20 m)
-  const dist = new Float32Array(g.nx * g.nz).fill(Infinity);
-  const reach = Math.ceil(radius / g.step) + 1;
-  for (let i = 0; i < track.count; i += 10) {
-    const x = track.xs[i]!;
-    const z = track.zs[i]!;
-    const ci = Math.round((x - g.x0) / g.step);
-    const cj = Math.round((z - g.z0) / g.step);
-    for (let j = Math.max(0, cj - reach); j <= Math.min(g.nz - 1, cj + reach); j++) {
-      for (let ii = Math.max(0, ci - reach); ii <= Math.min(g.nx - 1, ci + reach); ii++) {
-        const d = Math.hypot(g.x0 + ii * g.step - x, g.z0 + j * g.step - z);
-        const k = j * g.nx + ii;
-        if (d < dist[k]!) dist[k] = d;
-      }
-    }
-  }
+  // distance to the road per near-grid cell
+  const dist = corridor.routeDistanceGrid();
 
   const chunks = new Map<string, MeshData>();
   const plant = (x: number, z: number, type: number, height: number, d: number) => {
@@ -75,16 +61,17 @@ export function buildVegetation(scene: Scene, data: WorldData, corridor: RouteCo
     const shade = 0.85 + rng() * 0.25;
     const u0 = type / TREE_TYPES + 0.004;
     const u1 = (type + 1) / TREE_TYPES - 0.004;
+    // the atlas canvas is uploaded top row first: v = 0 is the crown's top
     for (let q = 0; q < 2; q++) {
       const a = yaw + q * (Math.PI / 2);
       const dx = Math.cos(a) * w;
       const dz = Math.sin(a) * w;
       const bottom = shade * 0.62;
       const top = shade * 1.06;
-      const v0 = md.vertex(x - dx, y, z - dz, 0, 1, 0, u0, 0, tint[0] * bottom, tint[1] * bottom, tint[2] * bottom);
-      const v1 = md.vertex(x + dx, y, z + dz, 0, 1, 0, u1, 0, tint[0] * bottom, tint[1] * bottom, tint[2] * bottom);
-      const v2 = md.vertex(x + dx, y + height, z + dz, 0, 1, 0, u1, 1, tint[0] * top, tint[1] * top, tint[2] * top);
-      const v3 = md.vertex(x - dx, y + height, z - dz, 0, 1, 0, u0, 1, tint[0] * top, tint[1] * top, tint[2] * top);
+      const v0 = md.vertex(x - dx, y, z - dz, 0, 1, 0, u0, 1, tint[0] * bottom, tint[1] * bottom, tint[2] * bottom);
+      const v1 = md.vertex(x + dx, y, z + dz, 0, 1, 0, u1, 1, tint[0] * bottom, tint[1] * bottom, tint[2] * bottom);
+      const v2 = md.vertex(x + dx, y + height, z + dz, 0, 1, 0, u1, 0, tint[0] * top, tint[1] * top, tint[2] * top);
+      const v3 = md.vertex(x - dx, y + height, z - dz, 0, 1, 0, u0, 0, tint[0] * top, tint[1] * top, tint[2] * top);
       md.idx.push(v0, v1, v2, v0, v2, v3);
     }
   };
@@ -132,16 +119,18 @@ export function buildVegetation(scene: Scene, data: WorldData, corridor: RouteCo
   for (let p = 0; p < data.trees.length; p += 2) {
     const x = data.trees[p]!;
     const z = data.trees[p + 1]!;
-    const hit = corridor.nearest(x, z, radius);
-    if (!hit) continue;
+    const d = corridor.routeDistance(x, z);
+    if (d > radius) continue;
     const cypress = field.dem(x, z) < 320 && rng() < 0.3;
-    plant(x, z, cypress ? TREE.cypress : TREE.garden, cypress ? 9 + rng() * 6 : 8 + rng() * 8, hit.dist);
+    plant(x, z, cypress ? TREE.cypress : TREE.garden, cypress ? 9 + rng() * 6 : 8 + rng() * 8, d);
   }
 
   const mat = new StandardMaterial('trees', scene);
   const atlas = treeAtlas(scene);
   mat.diffuseTexture = atlas;
   mat.transparencyMode = Material.MATERIAL_ALPHATEST;
+  // with an explicit transparency mode Babylon tests the final alpha, which must come from the atlas
+  mat.useAlphaFromDiffuseTexture = true;
   mat.alphaCutOff = 0.45;
   mat.backFaceCulling = false;
   mat.specularColor = Color3.Black();

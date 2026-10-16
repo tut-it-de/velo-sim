@@ -73,6 +73,8 @@ function solveKnee(hip: Vector3, foot: Vector3): Vector3 {
  */
 export class RiderAvatar {
   readonly root: TransformNode;
+  /** Soft contact shadow under the bike (the only shadow when shadow maps are off). */
+  readonly blob: Mesh;
   private crankAngle = Math.random() * Math.PI * 2;
   private wheelAngle = 0;
   private readonly wheels: TransformNode[] = [];
@@ -238,6 +240,7 @@ export class RiderAvatar {
     sm.zOffset = -4;
     shadow.material = sm;
     shadow.parent = this.root;
+    this.blob = shadow;
 
     for (const m of this.root.getChildMeshes()) m.isPickable = false;
     this.updatePose();
@@ -270,6 +273,11 @@ export class RiderAvatar {
   setPose(x: number, y: number, z: number, heading: number, gradePercent: number): void {
     this.root.position.set(x, y + 0.06, z);
     this.root.rotation.set(-Math.atan(gradePercent / 100), heading, 0);
+  }
+
+  /** Meshes that cast a real shadow (everything but the blob). */
+  get bodyMeshes(): Mesh[] {
+    return this.root.getChildMeshes(false).filter((m): m is Mesh => m !== this.blob && m instanceof Mesh);
   }
 
   dispose(): void {

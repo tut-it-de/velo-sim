@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { connectStrava, disconnectStrava, refreshStravaStatus, setStravaAutoUpload, stravaStore } from '../net/strava';
 import { accountStore, fetchOnline, login, logout, refreshAccount, register } from '../net/api';
+import { GRAPHICS_QUALITY_OPTIONS } from '../game/real/quality';
 import { settingsStore, updateSettings, type Settings } from '../state/settings';
 import { useStore } from '../state/store';
 
@@ -70,6 +71,24 @@ export function SettingsPage() {
               <input type="checkbox" checked={s.preferCadenceSensor} onChange={(e) => updateSettings({ preferCadenceSensor: e.target.checked })} />
               Kadenzsensor bevorzugen, wenn verbunden
             </label>
+          </div>
+        </div>
+        <div className="card">
+          <h2>Grafik</h2>
+          <div className="form">
+            <label>Qualität</label>
+            <div>
+              <div className="row" style={{ flexWrap: 'wrap' }}>
+                {GRAPHICS_QUALITY_OPTIONS.map((o) => (
+                  <button key={o.id} className={s.graphicsQuality === o.id ? 'primary' : ''} onClick={() => updateSettings({ graphicsQuality: o.id })}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+              <div className="muted small" style={{ marginTop: 6 }}>
+                {GRAPHICS_QUALITY_OPTIONS.find((o) => o.id === s.graphicsQuality)?.hint} · gilt ab der nächsten Fahrt
+              </div>
+            </div>
           </div>
         </div>
       </div>

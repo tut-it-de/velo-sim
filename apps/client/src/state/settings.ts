@@ -1,3 +1,4 @@
+import type { GraphicsQuality } from '../game/real/quality';
 import { Store, loadJson, saveJson } from './store';
 
 export interface Settings {
@@ -16,6 +17,8 @@ export interface Settings {
   serverUrl: string;
   /** Join the multiplayer room when starting a ride (if a server is configured). */
   rideOnline: boolean;
+  /** Graphics profile for the real-world routes. */
+  graphicsQuality: GraphicsQuality;
 }
 
 const KEY = 'velo.settings.v1';
@@ -30,6 +33,7 @@ export const DEFAULT_SETTINGS: Settings = {
   preferCadenceSensor: true,
   serverUrl: '',
   rideOnline: true,
+  graphicsQuality: 'auto',
 };
 
 export const settingsStore = new Store<Settings>(loadJson(KEY, DEFAULT_SETTINGS));
