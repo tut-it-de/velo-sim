@@ -44,6 +44,8 @@ function cumulative(pts: Vector3[]): number[] {
 
 interface Leg {
   thigh: TransformNode;
+  /** Helper bone at the knee, turned half-way between thigh and shin. */
+  knee: TransformNode;
   shin: TransformNode;
   foot: TransformNode;
   side: number;
@@ -182,8 +184,11 @@ export class Cyclist {
     shell.build(`${name}-helmet`, scene, mats.gloss, parent);
 
     // --- Legs: one skinned mesh, bones at pelvis, hips, knees and ankles -----------------------
-    // Built around a mid-stroke rest pose (crank at half past one), so the knee bends both ways from it and
-    // the skin stretches evenly; weights blend over a few centimetres at every joint.
+    // Each leg is modelled straight (thigh and shin on one axis, front = +z of the thigh bone) and
+    // bent by the bones. A helper bone at the knee always turns by half the knee angle, so the
+    // section at the joint stays on the bisecting plane: the front folds into a tight, rounded knee
+    // over the kneecap and the back closes into a crease where hamstrings meet the calf, instead of
+    // the thigh thinning out the way plain two-bone blending does.
     const legs = new MeshKit();
     const skeleton = new Skeleton(`${name}-legs`, `${name}-legs`, scene);
     new Bone(`${name}-pelvis`, skeleton, null, Matrix.Identity());
@@ -191,78 +196,78 @@ export class Cyclist {
       const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
       return t * t * (3 - 2 * t);
     };
+    const L1 = BODY.thigh;
+    const L2 = BODY.shin;
     for (const sx of [1, -1]) {
       const i = sx === 1 ? 0 : 1;
-      const rest = this.legPose(i, Math.PI / 4 - i * Math.PI, (k, a) => restPedal(bike, k, a));
-      const nodes = [`thigh`, `shin`, `foot`].map((part, k) => {
+      // Orientation of the thigh and of the foot relative to the shin from a mid-stroke pose.
+      const mid = this.legPose(i, Math.PI / 4 - i * Math.PI, (k, a) => restPedal(bike, k, a));
+      const R = mid.qThigh;
+      const footRel = Quaternion.Inverse(mid.qShin).multiply(mid.qFoot);
+      const qFoot = R.multiply(footRel);
+      const hip = mid.hip;
+      const axis = Y.applyRotationQuaternion(R);
+      const front = Z.applyRotationQuaternion(R);
+      const knee = hip.add(axis.scale(L1));
+      const ankle = knee.add(axis.scale(L2));
+      const parts: Array<[string, Quaternion, Vector3]> = [
+        ['thigh', R, hip],
+        ['knee', R, knee],
+        ['shin', R, knee],
+        ['foot', qFoot, ankle],
+      ];
+      const nodes = parts.map(([part, q, pos]) => {
         const n = new TransformNode(`${name}-${part}`, scene);
         n.parent = parent;
         n.rotationQuaternion = new Quaternion();
-        const q = [rest.qThigh, rest.qShin, rest.qFoot][k]!;
-        const pos = [rest.hip, rest.knee, rest.ankle][k]!;
         const bone = new Bone(`${name}-${part}-${i}`, skeleton, null, Matrix.Compose(Vector3.One(), q, pos));
         bone.linkTransformNode(n);
         return n;
       });
-      const b0 = 1 + i * 3;
-      const { hip, knee, ankle } = rest;
-      const t1 = knee.subtract(hip).normalize();
-      const t2 = ankle.subtract(knee).normalize();
-      const nk = t1.add(t2).normalize();
-      // Front of the leg: away from the inside of the knee bend.
-      const front = t1.subtract(t2).normalize();
+      const b0 = 1 + i * 4; // thigh, knee helper, shin, foot
       legs.skin = (p) => {
-        const dk = Vector3.Dot(p.subtract(knee), nk);
-        if (dk > 0) {
-          const da = Vector3.Dot(p.subtract(ankle), t2);
-          return da > -0.035 ? [b0 + 1, b0 + 2, smooth(-0.035, 0.015, da)] : [b0, b0 + 1, smooth(-0.07, 0.07, dk)];
-        }
-        if (dk > -0.07) return [b0, b0 + 1, smooth(-0.07, 0.07, dk)];
-        return [0, b0, smooth(-0.04, 0.06, Vector3.Dot(p.subtract(hip), t1))];
+        const sy = Vector3.Dot(p.subtract(hip), axis);
+        if (sy < 0.07) return [0, b0, smooth(-0.04, 0.07, sy)];
+        if (sy < L1) return [b0, b0 + 1, smooth(L1 - 0.04, L1 - 0.004, sy)];
+        if (sy < L1 + L2 - 0.04) return [b0 + 1, b0 + 2, smooth(L1 + 0.004, L1 + 0.04, sy)];
+        return [b0 + 2, b0 + 3, smooth(L1 + L2 - 0.035, L1 + L2 + 0.015, sy)];
       };
-      const L1 = BODY.thigh;
-      const L2 = BODY.shin;
-      const pts: Vector3[] = [];
-      const rw: number[] = [];
-      const rd: number[] = [];
-      const sh: number[] = [];
-      const add = (p: Vector3, w: number, d: number, f = 0) => {
-        pts.push(p);
-        rw.push(w);
-        rd.push(d);
-        sh.push(f);
-      };
-      const T = (f: number) => hip.add(t1.scale(f * L1));
-      const S = (f: number) => knee.add(t2.scale(f * L2));
-      add(T(-0.1), 0.078, 0.078, -0.004);
-      add(T(0), 0.083, 0.084, 0.004);
-      add(T(0.12), 0.084, 0.088, 0.008);
-      add(T(0.35), 0.076, 0.08, 0.01);
-      add(T(0.6), 0.066, 0.068, 0.008);
-      add(T(0.78), 0.056, 0.056, 0.004);
-      const r = 0.1;
-      bend(knee.subtract(t1.scale(r)), knee, knee.add(t2.scale(r)), [0.052, 0.05, 0.047], [0.053, 0.052, 0.05], (p, w, d) => add(p, w, d, 0.012));
-      add(S(0.28), 0.049, 0.06, -0.012);
-      add(S(0.5), 0.042, 0.05, -0.01);
-      add(S(0.72), 0.033, 0.036, -0.004);
-      add(S(0.85), 0.029, 0.031);
-      add(S(1), 0.027, 0.03);
-      const len = cumulative(pts);
-      const total = len[len.length - 1]!;
-      const shortsEnd = (0.1 + 0.72) * L1 / total;
-      const sockStart = 1 - (0.2 * L2) / total;
-      legs.loft(pts, rw, rd, (t) => (t < shortsEnd ? shorts : t < shortsEnd + 0.035 ? shade(shorts, 1.6) : t < sockStart ? skin : sock), {
-        hint: front,
-        seg: 18,
-        shift: sh,
-        capStart: false,
-      });
+      // Sections along the leg: [distance from the hip, half-width, half-depth, forward shift].
+      const prof: Array<[number, number, number, number]> = [
+        [-0.1 * L1, 0.078, 0.078, -0.004],
+        [0, 0.083, 0.084, 0.004],
+        [0.12 * L1, 0.084, 0.088, 0.008],
+        [0.35 * L1, 0.077, 0.08, 0.01],
+        [0.6 * L1, 0.066, 0.068, 0.008],
+        [0.8 * L1, 0.057, 0.057, 0.006],
+        // knee: bony and a little narrower, kneecap in front
+        [L1 - 0.045, 0.052, 0.054, 0.008],
+        [L1 - 0.015, 0.05, 0.054, 0.012],
+        [L1 + 0.015, 0.048, 0.052, 0.009],
+        [L1 + 0.045, 0.046, 0.051, 0.0],
+        [L1 + 0.28 * L2, 0.049, 0.06, -0.012],
+        [L1 + 0.5 * L2, 0.042, 0.05, -0.01],
+        [L1 + 0.72 * L2, 0.033, 0.036, -0.004],
+        [L1 + 0.85 * L2, 0.029, 0.031, 0],
+        [L1 + L2, 0.027, 0.03, 0],
+      ];
+      const total = prof[prof.length - 1]![0] - prof[0]![0];
+      const at = (sy: number) => (sy - prof[0]![0]) / total;
+      const shortsEnd = at(0.72 * L1);
+      const sockStart = at(L1 + 0.8 * L2);
+      legs.loft(
+        prof.map(([sy]) => hip.add(axis.scale(sy))),
+        prof.map((q) => q[1]),
+        prof.map((q) => q[2]),
+        (t) => (t < shortsEnd ? shorts : t < shortsEnd + 0.035 ? shade(shorts, 1.6) : t < sockStart ? skin : sock),
+        { hint: front, seg: 18, shift: prof.map((q) => q[3]), capStart: false, step: 0.01 },
+      );
 
-      // Foot: built in the foot's frame (y up, z toes) and moved to the rest pose; only the foot bone moves it.
-      legs.skin = () => [b0 + 2, b0 + 2, 0];
-      const F = (x: number, y: number, z: number) => v(x, y, z).applyRotationQuaternion(rest.qFoot).addInPlace(ankle);
-      const up = Y.applyRotationQuaternion(rest.qFoot);
-      legs.ellipsoid(ankle, v(0.032, 0.035, 0.035), sock, rest.qFoot, 10, 8);
+      // Foot: built in the foot's frame (y up, z toes) at its rest place; only the foot bone moves it.
+      legs.skin = () => [b0 + 3, b0 + 3, 0];
+      const F = (x: number, y: number, z: number) => v(x, y, z).applyRotationQuaternion(qFoot).addInPlace(ankle);
+      const up = Y.applyRotationQuaternion(qFoot);
+      legs.ellipsoid(ankle, v(0.032, 0.035, 0.035), sock, qFoot, 10, 8);
       const shoe = [F(0, -0.034, -0.07), F(0, -0.03, -0.035), F(0, -0.028, 0.02), F(0, -0.04, 0.08), F(0, -0.05, 0.14), F(0, -0.055, 0.19)];
       const shoeCol = hex('#f4f4f4');
       legs.loft(shoe, [0.034, 0.04, 0.043, 0.046, 0.043, 0.026], [0.04, 0.046, 0.046, 0.034, 0.024, 0.014], (t, a) => {
@@ -270,8 +275,8 @@ export class Cyclist {
         if (t > 0.25 && t < 0.42 && Math.sin(a) > 0.6) return accent;
         return shoeCol;
       }, { hint: up, seg: 14 });
-      legs.box(F(0, -0.074, 0.105), v(0.05, 0.008, 0.06), hex('#202020'), rest.qFoot);
-      this.legs.push({ thigh: nodes[0]!, shin: nodes[1]!, foot: nodes[2]!, side: sx });
+      legs.box(F(0, -0.074, 0.105), v(0.05, 0.008, 0.06), hex('#202020'), qFoot);
+      this.legs.push({ thigh: nodes[0]!, knee: nodes[1]!, shin: nodes[2]!, foot: nodes[3]!, side: sx });
     }
     const legMesh = legs.build(`${name}-legs`, scene, mats.cloth, parent);
     legMesh.skeleton = skeleton;
@@ -312,6 +317,8 @@ export class Cyclist {
       leg.thigh.rotationQuaternion!.copyFrom(p.qThigh);
       leg.shin.position.copyFrom(p.knee);
       leg.shin.rotationQuaternion!.copyFrom(p.qShin);
+      leg.knee.position.copyFrom(p.knee);
+      Quaternion.SlerpToRef(p.qThigh, p.qShin, 0.5, leg.knee.rotationQuaternion!);
       leg.foot.position.copyFrom(p.ankle);
       leg.foot.rotationQuaternion!.copyFrom(p.qFoot);
     }
