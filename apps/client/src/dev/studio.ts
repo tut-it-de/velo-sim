@@ -2,7 +2,7 @@
  * Avatar studio (dev page, studio.html): renders the bike and rider from the side, front, top and
  * three-quarter view, or the dimensioned reference drawing they are built from (?mode=blueprint).
  * Query: mode=rider|bike|blueprint, style=aero|allround|climber|endurance, crank=<rad>, rim=<mm>,
- * view=<0…3> (one view only), zoom, ty (target height for zoomed views).
+ * view=<0…3> (one view only), zoom, ty (target height for zoomed views), tz (shift along the bike).
  */
 import {
   Camera,
@@ -80,9 +80,16 @@ function studio3d(withRider: boolean): void {
   const only = q.get('view');
   const zoom = Number(q.get('zoom') ?? 1);
   const views = only === null ? VIEWS : [{ ...VIEWS[Number(only)]!, vp: [0, 0, 1, 1] as View['vp'] }];
-  const cams = views.map((v) => {
+  const cams = views.map((view) => {
+    let v = view;
     const cam = new UniversalCamera(v.name, v.pos, scene);
     if (v.up) cam.upVector = v.up;
+    // tz moves side and front views along the bike (e.g. tz=-0.25 for the hip, 0.3 for the elbow)
+    const tz = Number(q.get('tz') ?? 0);
+    if (tz && !v.up) {
+      cam.position.z += tz;
+      v = { ...v, target: v.target.add(new Vector3(0, 0, tz)) };
+    }
     const ty = q.get('ty');
     if (ty !== null) {
       const d = Number(ty) - v.target.y;

@@ -87,10 +87,15 @@ export class Cyclist {
     const spine = shoulders.subtract(pelvis).normalize();
     const back = v(0, spine.z, -spine.y);
     const along = (t: number, hump: number) => Vector3.Lerp(pelvis, shoulders, t).add(back.scale(hump));
-    const torso = [along(-0.08, -0.01), along(0.05, 0.0), along(0.3, 0.012), along(0.55, 0.02), along(0.78, 0.016), along(0.95, 0.0), along(1.04, -0.02), along(1.1, -0.035)];
-    const tw = [0.15, 0.165, 0.15, 0.158, 0.175, 0.198, 0.17, 0.09];
-    const td = [0.09, 0.105, 0.095, 0.11, 0.118, 0.1, 0.08, 0.06];
-    const jerseyPaint: Paint = (t, a) => {
+    // The first two rings round off the seat instead of ending in a flat cap.
+    const torso = [along(-0.17, -0.03), along(-0.13, -0.018), along(-0.08, -0.01), along(0.05, 0.0), along(0.3, 0.012), along(0.55, 0.02), along(0.78, 0.016), along(0.95, 0.0), along(1.04, -0.02), along(1.1, -0.035)];
+    const tw = [0.07, 0.135, 0.172, 0.182, 0.15, 0.158, 0.175, 0.198, 0.17, 0.09];
+    const td = [0.045, 0.078, 0.09, 0.105, 0.095, 0.11, 0.118, 0.1, 0.08, 0.06];
+    const tl = cumulative(torso);
+    const seat = tl[2]!;
+    const tTotal = tl[tl.length - 1]!;
+    const jerseyPaint: Paint = (tRaw, a) => {
+      const t = (tRaw * tTotal - seat) / (tTotal - seat);
       const flank = Math.abs(Math.cos(a));
       const up = Math.sin(a);
       if (t < 0.1) return shorts;
@@ -100,9 +105,9 @@ export class Cyclist {
       if (t < 0.3 && up > 0.5) return shade(jersey, Math.abs(Math.cos(a * 3)) < 0.12 || (t > 0.27 && t < 0.29) ? 0.62 : 0.9);
       return jersey;
     };
-    body.loft(torso, tw, td, jerseyPaint, { hint: back, seg: 20 });
+    body.loft(torso, tw, td, jerseyPaint, { hint: back, seg: 24 });
     // Glutes on the saddle.
-    for (const sx of [-1, 1]) body.ellipsoid(v(0.065 * sx, pose.hip.y - 0.025, pose.hip.z - 0.055), v(0.075, 0.07, 0.085), shorts, undefined, 12, 8);
+    for (const sx of [-1, 1]) body.ellipsoid(v(0.065 * sx, pose.hip.y - 0.025, pose.hip.z - 0.055), v(0.075, 0.07, 0.085), shorts, undefined, 20, 14);
 
     // --- Neck and head ---------------------------------------------------------------------------
     body.loft([shoulders.add(back.scale(-0.02)), pose.neck, pose.head.add(v(0, -0.06, -0.02))], [0.06, 0.052, 0.05], [0.055, 0.05, 0.048], skin, { seg: 12 });
@@ -158,21 +163,34 @@ export class Cyclist {
         rw.push(w);
         rd.push(d);
       };
+      // Straight upper arm and forearm meeting in a mitred joint: the section at the elbow lies on
+      // the bisecting plane, the elbow point (olecranon) shows at the back, a crease in the crook.
+      // The section's normal axis points to the elbow point: shift > 0 is triceps side, < 0 biceps side.
       const u1 = E.subtract(S).normalize();
       const u2 = W.subtract(E).normalize();
-      const r = 0.055;
-      add(S, 0.056, 0.058);
-      add(Vector3.Lerp(S, E, 0.3), 0.05, 0.052);
-      add(Vector3.Lerp(S, E, 0.6), 0.044, 0.047);
-      bend(E.subtract(u1.scale(r)), E, E.add(u2.scale(r)), [0.039, 0.036, 0.039], [0.04, 0.037, 0.038], add);
-      add(Vector3.Lerp(E, W, 0.42), 0.04, 0.037);
-      add(Vector3.Lerp(E, W, 0.75), 0.031, 0.028);
-      add(W, 0.025, 0.021);
+      const elbowOut = u1.subtract(u2);
+      const hint = elbowOut.length() > 0.1 ? elbowOut.normalize() : v(0, 0.3, -1).normalize();
+      const sh: number[] = [];
+      const add2 = (p: Vector3, w: number, d: number, f: number) => {
+        add(p, w, d);
+        sh.push(f);
+      };
+      add2(S, 0.056, 0.058, 0);
+      add2(Vector3.Lerp(S, E, 0.25), 0.05, 0.054, 0);
+      add2(Vector3.Lerp(S, E, 0.5), 0.046, 0.05, -0.002);
+      add2(Vector3.Lerp(S, E, 0.75), 0.042, 0.044, 0);
+      add2(E.subtract(u1.scale(0.045)), 0.04, 0.038, 0.003);
+      add2(E, 0.041, 0.037, 0.009);
+      add2(E.add(u2.scale(0.045)), 0.043, 0.036, 0.003);
+      add2(Vector3.Lerp(E, W, 0.25), 0.043, 0.037, -0.002);
+      add2(Vector3.Lerp(E, W, 0.55), 0.035, 0.03, 0);
+      add2(Vector3.Lerp(E, W, 0.85), 0.027, 0.021, 0);
+      add2(W, 0.025, 0.02, 0);
       const len = cumulative(pts);
       const total = len[len.length - 1]!;
       const sleeve = (0.5 * BODY.upperArm) / total;
       const cuff = 1 - (0.08 * BODY.forearm) / total;
-      body.loft(pts, rw, rd, (t) => (t < sleeve ? accent : t < sleeve + 0.03 ? shade(accent, 0.75) : t > cuff ? glove : skin), { seg: 14, hint: Y });
+      body.loft(pts, rw, rd, (t) => (t < sleeve ? accent : t < sleeve + 0.03 ? shade(accent, 0.75) : t > cuff ? glove : skin), { seg: 16, hint, shift: sh, step: 0.025 });
       // Hand wrapped around the hood.
       const hood = m(bike.hood);
       const dir = hood.subtract(W).normalize();
@@ -234,9 +252,11 @@ export class Cyclist {
       };
       // Sections along the leg: [distance from the hip, half-width, half-depth, forward shift].
       const prof: Array<[number, number, number, number]> = [
-        [-0.1 * L1, 0.078, 0.078, -0.004],
-        [0, 0.083, 0.084, 0.004],
-        [0.12 * L1, 0.084, 0.088, 0.008],
+        // starts inside the pelvis so the open end never shows behind the seat
+        [-0.05 * L1, 0.058, 0.06, 0],
+        // flatter on top at the hip joint, so the thigh flows into the pelvis instead of bulging out
+        [0, 0.083, 0.07, -0.012],
+        [0.12 * L1, 0.084, 0.08, -0.002],
         [0.35 * L1, 0.077, 0.08, 0.01],
         [0.6 * L1, 0.066, 0.068, 0.008],
         [0.8 * L1, 0.057, 0.057, 0.006],
