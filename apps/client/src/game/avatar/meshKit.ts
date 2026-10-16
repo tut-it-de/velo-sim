@@ -55,6 +55,13 @@ export class MeshKit {
   private readonly p: number[] = [];
   private readonly c: number[] = [];
   private readonly i: number[] = [];
+  private readonly mi: number[] = [];
+  private readonly mw: number[] = [];
+  /**
+   * Skinning: when set, every new vertex is bound to two bones by its position, as
+   * [bone A, bone B, weight of B]. Leave unset for rigid meshes.
+   */
+  skin: ((p: Vector3) => [number, number, number]) | null = null;
 
   get empty(): boolean {
     return this.i.length === 0;
@@ -63,6 +70,11 @@ export class MeshKit {
   private vertex(v: Vector3, col: Color3): number {
     this.p.push(v.x, v.y, v.z);
     this.c.push(col.r, col.g, col.b, 1);
+    if (this.skin) {
+      const [a, b, w] = this.skin(v);
+      this.mi.push(a, b, 0, 0);
+      this.mw.push(1 - w, w, 0, 0);
+    }
     return this.p.length / 3 - 1;
   }
 
@@ -235,6 +247,10 @@ export class MeshKit {
     const normals: number[] = [];
     VertexData.ComputeNormals(this.p, this.i, normals);
     vd.normals = normals;
+    if (this.mi.length) {
+      vd.matricesIndices = this.mi;
+      vd.matricesWeights = this.mw;
+    }
     vd.applyToMesh(mesh);
     mesh.material = material;
     mesh.parent = parent;

@@ -21,6 +21,8 @@ const DENSITY: Record<number, number> = {
 };
 /** Width relative to height per sprite. */
 const ASPECT = [0.95, 0.56, 0.26, 0.95];
+/** Share of the billboard width the crown actually fills. */
+const CROWN_FILL = 0.85;
 /** October: a share of the chestnuts and beeches already turning (share per flora below). */
 const AUTUMN: Array<[number, number, number]> = [
   [1, 1, 1],
@@ -99,8 +101,18 @@ export function buildVegetation(scene: Scene, data: WorldData, corridor: RouteCo
 
   const chunks = new Map<string, MeshData>();
   const plant = (x: number, z: number, type: number, height: number, d: number, larch = false) => {
-    const hit = corridor.nearest(x, z, 9);
-    if (hit && Math.abs(hit.offset) < corridor.hw[hit.offset >= 0 ? 1 : 0][hit.row]! + SHOULDER + 1.6) return;
+    // The crown must not reach over the road: on a slope below the road it would stand right in the
+    // lane at wheel height. Trees close to the edge are planted smaller, or not at all.
+    const hit = corridor.nearest(x, z, 16);
+    if (hit) {
+      const gap = Math.abs(hit.offset) - corridor.hw[hit.offset >= 0 ? 1 : 0][hit.row]! - SHOULDER;
+      if (gap < 1.6) return;
+      const fit = gap / (CROWN_FILL * ASPECT[type]! * 0.5);
+      if (fit < height) {
+        if (fit < 3.5) return;
+        height = fit;
+      }
+    }
     if (field.isWater(x, z) || buildings.find(x, z, 1.2) >= 0) return;
     const y = (d < 48 ? corridor.surface(x, z) : field.dem(x, z)) - 0.3;
     if (y < wl + 0.2) return;
