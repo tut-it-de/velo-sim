@@ -332,7 +332,7 @@ Blumenbüschel am Straßenrand.
 | P3.2 | 3A | Prozeduraler Baumgenerator `treeGen.ts` + Studio-Ansicht | fertig |
 | P3.3 | 3B | Artenparameter (8 Bäume, 2 Büsche) im Studio abstimmen | fertig |
 | P3.5 | 3B | Wind-Shader-Plugin | fertig |
-| P3.4 | 3C | Billboards aus den 3D-Bäumen backen (zur Laufzeit, Farbe + Normale) | offen |
+| P3.4 | 3C | Billboards aus den 3D-Bäumen backen (zur Laufzeit, Farbe + Normale) | fertig |
 | P3.7 | 3D | Fernbereich: gebackene Billboards statt Canvas-Atlas, Artwahl, Instanzliste | offen |
 | P3.6 | 3E | Nahbereich: 3D-Bäume als Thin Instances | offen |
 | P3.8 | 3F | Gras, Blumen und Farn am Straßenrand | offen |
@@ -549,6 +549,12 @@ P3.7 läuft vor P3.6, weil es die Instanzliste liefert; P3.6, P3.7 und P3.8 änd
   Fußpunkt–Kamera → `fade` wie in P3.6; verwerfen, wenn `veloIgn(gl_FragCoord.xy) >= fade`.
   Ohne Nah-Bäume (Mittel/Niedrig) `inner = outer = 0` → nichts wird verworfen.
 - `WindPlugin` mit `VELO_WIND_CARD` an das Billboard-Material (nicht bei Niedrig).
+- Stand nach P3.4: `bakeImpostors(scene, species, cell, { bark, leaves })` ist **async**
+  (`Promise<ImpostorAtlas>`, wartet auf die Shader) und braucht die geladenen Texturen
+  (`bark`/`leaves` mit `invertY = false`, `leaves.hasAlpha = true`). `cells` sind in RTT-UVs
+  (v = 0 unten). Der Farbatlas ist vormultipliziert (Hintergrund 0,0,0,0, Laub Alpha 1): im
+  Billboard-Plugin bei `CUSTOM_FRAGMENT_UPDATE_DIFFUSE` `baseColor.rgb /= max(baseColor.a, 0.001)`,
+  sonst bekommen ferne Bäume dunkle Ränder. `atlas.color.hasAlpha = true` setzen.
 - Abnahme: Screenshots aller drei Stellen mit `mittel` und `hoch`: Fernwald zeigt Kronen mit Licht-
   und Schattenseite passend zur Sonne, keine dunklen Ränder, Arten unterscheidbar (Zypressen, Palmen
   am Seeufer, Kastanienwald). Ladezeit der Strecke im Bericht (vorher/nachher).

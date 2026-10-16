@@ -2,6 +2,7 @@
  * Tree studio (dev page, treestudio.html): procedural trees from trees/species.ts in the ride lighting.
  * Query: species=<id> (one species, with seed=<n>), seed=<n> (default 1), wind=0|1 (1: wood and leaves sway in the wind).
  * Without species: every species of the table side by side, three seeds each.
+ * mode=atlas: the impostor atlas of all species (colour left, normals right), baked at load time.
  */
 import {
   ArcRotateCamera,
@@ -13,6 +14,7 @@ import {
   ImageProcessingConfiguration,
   Mesh,
   MeshBuilder,
+  RenderTargetTexture,
   Scene,
   ShadowGenerator,
   StandardMaterial,
@@ -23,6 +25,7 @@ import {
 } from '@babylonjs/core';
 import { SUN_DIR } from '../game/real/env';
 import { SPECIES } from '../game/real/trees/species';
+import { bakeImpostors } from '../game/real/trees/impostorBake';
 import { generateTree, triangleCount } from '../game/real/trees/treeGen';
 import type { GeomPart, SpeciesId, SpeciesParams } from '../game/real/trees/types';
 import { WindPlugin } from '../game/real/trees/windPlugin';
@@ -31,6 +34,7 @@ const q = new URLSearchParams(location.search);
 const oneSpecies = q.get('species');
 const seed = Number(q.get('seed') ?? 1);
 const wind = q.get('wind') === '1';
+const atlasMode = q.get('mode') === 'atlas';
 const SEEDS = [1, 2, 3];
 const SPACING = 34;
 
@@ -123,49 +127,110 @@ function partMesh(name: string, part: GeomPart, mat: StandardMaterial): Mesh {
   return mesh;
 }
 
-const placed: { species: SpeciesId; seed: number; triangles: number; height: number; x: number }[] = [];
-const mats = new Map<SpeciesId, { wood: StandardMaterial; leaves: StandardMaterial }>();
+/** Places the species trees (table or one species) and runs the render loop. */
+function showTrees(): void {
+  const placed: { species: SpeciesId; seed: number; triangles: number; height: number; x: number }[] = [];
+  const mats = new Map<SpeciesId, { wood: StandardMaterial; leaves: StandardMaterial }>();
 
-function place(id: SpeciesId, s: number, x: number, z: number): void {
-  const p = SPECIES[id]!;
-  if (!mats.has(id)) mats.set(id, speciesMaterials(id, p));
-  const m = mats.get(id)!;
-  const g = generateTree(p, s);
-  const wood = partMesh(`${id}-${s}-wood`, g.wood, m.wood);
-  const leaves = partMesh(`${id}-${s}-leaves`, g.leaves, m.leaves);
-  for (const mesh of [wood, leaves]) mesh.position.set(x, 0, z);
-  placed.push({ species: id, seed: s, triangles: triangleCount(g), height: g.height, x });
-}
+  function place(id: SpeciesId, s: number, x: number, z: number): void {
+    const p = SPECIES[id]!;
+    if (!mats.has(id)) mats.set(id, speciesMaterials(id, p));
+    const m = mats.get(id)!;
+    const g = generateTree(p, s);
+    const wood = partMesh(`${id}-${s}-wood`, g.wood, m.wood);
+    const leaves = partMesh(`${id}-${s}-leaves`, g.leaves, m.leaves);
+    for (const mesh of [wood, leaves]) mesh.position.set(x, 0, z);
+    placed.push({ species: id, seed: s, triangles: triangleCount(g), height: g.height, x });
+  }
 
-const ids = (Object.keys(SPECIES) as SpeciesId[]).filter((id) => SPECIES[id]);
-if (oneSpecies && SPECIES[oneSpecies as SpeciesId]) {
-  place(oneSpecies as SpeciesId, seed, 0, 0);
-} else {
-  ids.forEach((id, col) => {
-    SEEDS.forEach((s, row) => place(id, s, (col - (ids.length - 1) / 2) * SPACING, (row - 1) * SPACING));
+  const ids = (Object.keys(SPECIES) as SpeciesId[]).filter((id) => SPECIES[id]);
+  if (oneSpecies && SPECIES[oneSpecies as SpeciesId]) {
+    place(oneSpecies as SpeciesId, seed, 0, 0);
+  } else {
+    ids.forEach((id, col) => {
+      SEEDS.forEach((s, row) => place(id, s, (col - (ids.length - 1) / 2) * SPACING, (row - 1) * SPACING));
+    });
+  }
+
+  const info = document.getElementById('info');
+  if (info) {
+    info.textContent = placed.map((t) => `${t.species} seed ${t.seed}: ${t.triangles} Dreiecke, ${t.height.toFixed(1)} m`).join('\n');
+  }
+  (window as unknown as { __trees: unknown }).__trees = placed;
+
+  // Camera: one tree is framed by its own height, the whole table by the spread of the grid.
+  const tallest = Math.max(...placed.map((t) => t.height));
+  const spread = ids.length * SPACING * 0.5 + 10;
+  const camera = oneSpecies
+    ? new ArcRotateCamera('cam', -Math.PI / 2, Math.PI / 2.4, tallest * 1.9, new Vector3(0, tallest * 0.45, 0), scene)
+    : new ArcRotateCamera('cam', -Math.PI / 2, 1.2, spread * 1.9, new Vector3(0, tallest * 0.4, 0), scene);
+  camera.lowerRadiusLimit = 4;
+  camera.upperRadiusLimit = 400;
+  camera.wheelPrecision = 20;
+  camera.attachControl(canvas, true);
+  camera.minZ = 0.5;
+
+  engine.runRenderLoop(() => {
+    if (wind) WindPlugin.update(scene, engine.getDeltaTime() / 1000);
+    scene.render();
   });
 }
 
-const info = document.getElementById('info');
-if (info) {
-  info.textContent = placed.map((t) => `${t.species} seed ${t.seed}: ${t.triangles} Dreiecke, ${t.height.toFixed(1)} m`).join('\n');
+/** Atlas view: the impostor atlas of all species, colour and normals side by side. */
+async function showAtlas(): Promise<void> {
+  ground.setEnabled(false);
+  scene.imageProcessingConfiguration.toneMappingEnabled = false;
+  // The textures load asynchronously; the bake samples them, so wait (with a timeout for failed loads).
+  const started = performance.now();
+  while (!(barkTex.isReady() && leafTex.isReady()) && performance.now() - started < 5000) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  const ids = (Object.keys(SPECIES) as SpeciesId[]).filter((id) => SPECIES[id]);
+  const atlas = await bakeImpostors(scene, ids, [256, 512], { bark: barkTex, leaves: leafTex });
+  const size = atlas.color.getSize();
+
+
+  const PLANE_W = 40;
+  const planeH = (PLANE_W * size.height) / size.width;
+  const plane = (name: string, tex: RenderTargetTexture, x: number): void => {
+    const mesh = MeshBuilder.CreatePlane(name, { width: PLANE_W, height: planeH }, scene);
+    mesh.position.set(x, planeH / 2, 0);
+    const mat = new StandardMaterial(`${name}-mat`, scene);
+    // unlit display: the atlas is the diffuse texture, its alpha is the cut-out
+    tex.hasAlpha = true;
+    mat.disableLighting = true;
+    mat.emissiveColor = Color3.White();
+    mat.diffuseTexture = tex;
+    mat.useAlphaFromDiffuseTexture = true;
+    mat.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
+    mat.backFaceCulling = false;
+    mesh.material = mat;
+  };
+  plane('atlas-color', atlas.color, -PLANE_W / 2 - 4);
+  plane('atlas-normal', atlas.normal, PLANE_W / 2 + 4);
+
+  const info = document.getElementById('info');
+  if (info) {
+    const lines = [
+      `impostor atlas ${size.width}x${size.height}, ${atlas.cells.size} cells, bake ${atlas.bakeMs.toFixed(0)} ms`,
+      ...[...atlas.cells.keys()].map((k) => `${k}  aspect ${atlas.aspect.get(k)!.toFixed(2)}`),
+    ];
+    info.textContent = lines.join('\n');
+  }
+  (window as unknown as { __atlas: unknown }).__atlas = { bakeMs: atlas.bakeMs, cells: Object.fromEntries(atlas.cells) };
+
+  const camera = new ArcRotateCamera('cam', -Math.PI / 2, Math.PI / 2, 110, new Vector3(0, planeH / 2, 0), scene);
+  camera.lowerRadiusLimit = 10;
+  camera.upperRadiusLimit = 400;
+  camera.wheelPrecision = 5;
+  camera.attachControl(canvas, true);
+  camera.minZ = 0.5;
+  engine.runRenderLoop(() => scene.render());
 }
-(window as unknown as { __trees: unknown }).__trees = placed;
 
-// Camera: one tree is framed by its own height, the whole table by the spread of the grid.
-const tallest = Math.max(...placed.map((t) => t.height));
-const spread = ids.length * SPACING * 0.5 + 10;
-const camera = oneSpecies
-  ? new ArcRotateCamera('cam', -Math.PI / 2, Math.PI / 2.4, tallest * 1.9, new Vector3(0, tallest * 0.45, 0), scene)
-  : new ArcRotateCamera('cam', -Math.PI / 2, 1.2, spread * 1.9, new Vector3(0, tallest * 0.4, 0), scene);
-camera.lowerRadiusLimit = 4;
-camera.upperRadiusLimit = 400;
-camera.wheelPrecision = 20;
-camera.attachControl(canvas, true);
-camera.minZ = 0.5;
-
-engine.runRenderLoop(() => {
-  if (wind) WindPlugin.update(scene, engine.getDeltaTime() / 1000);
-  scene.render();
-});
+if (atlasMode) {
+  void showAtlas();
+} else {
+  showTrees();
+}
 window.addEventListener('resize', () => engine.resize());
