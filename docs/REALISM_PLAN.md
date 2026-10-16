@@ -584,6 +584,10 @@ P3.7 läuft vor P3.6, weil es die Instanzliste liefert; P3.6, P3.7 und P3.8 änd
 - Vorher/Nachher-Bilder aller drei Stellen mit Ultra, Hoch und Mittel; Nutzer prüft die Bildrate auf
   Laptop und iPad. Wenn es auf Hoch ruckelt: `max`/Radius der Nah-Bäume senken (Werte in
   `nearTrees.ts`), dann Gras-Dichte.
+- Ergebnis (gemessen im Wald, 8500 m, ohne V-Sync): Ultra ruckelte (34 ms je Bild statt 10,6 ms vor
+  Phase 3). Ursache waren die Schatten der Laubkarten in drei Kaskaden mit 2048² (ohne Nah-Baum-Schatten
+  11 ms). Korrektur: Ultra-Schattenkarte 1024², Nah-Bäume Ultra 150 bis 55 m → 14–16 ms an allen
+  drei Stellen. Hoch unverändert (8,6 ms).
 
 ### Phase 4 – Straßenrand
 

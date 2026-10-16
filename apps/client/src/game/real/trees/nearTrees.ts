@@ -33,7 +33,7 @@ const RING_MARGIN = 15;
 /** `inner` lies this far inside `outer` (m). */
 const FADE_BAND = 12;
 const LIMITS: Record<'ultra' | 'hoch', { max: number; outer: number }> = {
-  ultra: { max: 250, outer: 70 },
+  ultra: { max: 150, outer: 55 },
   hoch: { max: 120, outer: 50 },
 };
 
