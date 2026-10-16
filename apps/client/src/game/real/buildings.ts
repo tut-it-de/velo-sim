@@ -183,6 +183,8 @@ function earClip(ring: Float32Array): number[] {
 class Chunk {
   readonly walls = new MeshData(true, true);
   readonly roofs = new MeshData(true, true);
+  /** Chimneys, balconies: vertex colours only, no texture. */
+  readonly extras = new MeshData(false, true);
 }
 
 /** Adds a planar polygon face with a flat normal (the upward one for roofs, outward for gable walls). */
@@ -308,6 +310,117 @@ function gableRoof(chunk: Chunk, r: Rect, top: number, color: RGB, wall: RGB, pi
   face(chunk.walls, [wb, wc, rectPoint(r, r.u1, vm, apex)], wall, 7.2, r.az, -r.ax, false);
 }
 
+const scale = (c: RGB, f: number): RGB => [c[0] * f, c[1] * f, c[2] * f];
+
+/**
+ * Axis-aligned box centred at `c`. U and V are horizontal unit vectors, `size` is [along U, along V, height].
+ * Every face gets its outward normal, so the winding comes from MeshData.quad.
+ */
+function box(md: MeshData, c: [number, number, number], U: [number, number], V: [number, number], size: [number, number, number], color: RGB): void {
+  const axes: Array<[number, number, number]> = [
+    [U[0], 0, U[1]],
+    [V[0], 0, V[1]],
+    [0, 1, 0],
+  ];
+  const at = (s: number[]): [number, number, number] => {
+    const p: number[] = [c[0], c[1], c[2]];
+    for (let i = 0; i < 3; i++) {
+      const o = (s[i]! * size[i]!) / 2;
+      for (let j = 0; j < 3; j++) p[j]! += axes[i]![j]! * o;
+    }
+    return [p[0]!, p[1]!, p[2]!];
+  };
+  const LOOP: Array<[number, number]> = [
+    [-1, -1],
+    [1, -1],
+    [1, 1],
+    [-1, 1],
+  ];
+  for (let i = 0; i < 3; i++) {
+    const j = (i + 1) % 3;
+    const k = (i + 2) % 3;
+    for (const sign of [-1, 1]) {
+      const nx = axes[i]![0] * sign;
+      const ny = axes[i]![1] * sign;
+      const nz = axes[i]![2] * sign;
+      const v = LOOP.map(([sj, sk]) => {
+        const s = [0, 0, 0];
+        s[i] = sign;
+        s[j] = sj;
+        s[k] = sk;
+        const p = at(s);
+        return md.vertex(p[0], p[1], p[2], nx, ny, nz, 0, 0, color[0], color[1], color[2]);
+      });
+      md.quad(v[0]!, v[1]!, v[2]!, v[3]!, nx, ny, nz);
+    }
+  }
+}
+
+/** Brick chimney on a pitched roof: from the wall top to 0.7 m above the ridge, with a cap slab. */
+function chimney(md: MeshData, r: Rect, top: number, pitch: number, body: RGB, roof: RGB): void {
+  const ridge = top + 0.03 + ((r.v1 - r.v0) / 2) * pitch;
+  const p = rectPoint(r, r.u0 + 0.3 * (r.u1 - r.u0), r.v0 + 0.3 * (r.v1 - r.v0), 0);
+  const U: [number, number] = [r.ax, r.az];
+  const V: [number, number] = [-r.az, r.ax];
+  const capY = ridge + 0.7;
+  box(md, [p[0], (top + capY) / 2, p[2]], U, V, [0.55, 0.55, capY - top], scale(body, 0.9));
+  box(md, [p[0], capY + 0.04, p[2]], U, V, [0.7, 0.7, 0.08], scale(roof, 0.8));
+}
+
+/**
+ * Balcony on the longest outer edge of a house, centred on a window of the upper floor. Windows repeat every
+ * 7.2 m along the wall at 1.8 m and 5.4 m; the balcony takes the point nearest the edge middle, 1.4 m clear of corners.
+ * Slab 2.4 m wide and 0.9 m deep, railing with a handrail, two side rails and nine posts.
+ */
+function balcony(md: MeshData, ring: Float32Array, ground: number, rail: RGB, post: number): void {
+  const n = ring.length / 2;
+  const edges: Array<{ i: number; start: number; len: number }> = [];
+  let run = 0;
+  for (let i = 0; i < n; i++) {
+    const len = Math.hypot(ring[((i + 1) % n) * 2]! - ring[i * 2]!, ring[((i + 1) % n) * 2 + 1]! - ring[i * 2 + 1]!);
+    if (len < 0.05) continue;
+    edges.push({ i, start: run, len });
+    run += len;
+  }
+  let e: (typeof edges)[number] | undefined = edges[0];
+  for (const c of edges) if (!e || c.len > e.len) e = c;
+  if (!e || e.len < 2.8) return;
+  let t = -1;
+  let bestGap = Infinity;
+  for (const target of [1.8, 5.4]) {
+    let s = (((target - e.start) % 7.2) + 7.2) % 7.2;
+    while (s < 1.4) s += 7.2;
+    for (; s <= e.len - 1.4; s += 7.2) {
+      const gap = Math.abs(s - e.len / 2);
+      if (gap < bestGap) {
+        bestGap = gap;
+        t = s;
+      }
+    }
+  }
+  if (t < 0) return;
+  const x0 = ring[e.i * 2]!;
+  const z0 = ring[e.i * 2 + 1]!;
+  const x1 = ring[((e.i + 1) % n) * 2]!;
+  const z1 = ring[((e.i + 1) % n) * 2 + 1]!;
+  // along the edge and outward, the same normal as walls()
+  const U: [number, number] = [(x1 - x0) / e.len, (z1 - z0) / e.len];
+  const V: [number, number] = [U[1], -U[0]];
+  const px = x0 + U[0] * t;
+  const pz = z0 + U[1] * t;
+  // point `along` m beside the window and `out` m away from the wall, at height y
+  const at = (along: number, out: number, y: number): [number, number, number] => [
+    px + U[0] * along + V[0] * out,
+    y,
+    pz + U[1] * along + V[1] * out,
+  ];
+  const slabTop = ground + 3.1 + 0.95 - 0.05;
+  box(md, at(0, 0.45, slabTop - 0.06), U, V, [2.4, 0.9, 0.12], [0.82, 0.8, 0.76]);
+  box(md, at(0, 0.88, slabTop + 1.0), U, V, [2.4, 0.04, 0.04], rail);
+  for (const side of [-1.2, 1.2]) box(md, at(side, 0.45, slabTop + 1.0), U, V, [0.04, 0.9, 0.04], rail);
+  for (let i = 0; i < 9; i++) box(md, at(-1.2 + ((i + 0.5) * 2.4) / 9, 0.88, slabTop + 0.5), U, V, [post, post, 1.0], rail);
+}
+
 function church(chunk: Chunk, ring: Float32Array, base: number, top: number, ground: number, style: Style): void {
   const cs = style.church;
   const r = orientedRect(ring);
@@ -369,6 +482,8 @@ export function buildBuildings(
   roofMat.specularColor = new Color3(0.05, 0.05, 0.05);
   roofMat.backFaceCulling = false;
   roofMat.twoSidedLighting = true;
+  const extrasMat = new StandardMaterial('building-extras', scene);
+  extrasMat.specularColor = new Color3(0.05, 0.05, 0.05);
   // detail maps add a texture read per pixel on the largest surfaces, so only the two top profiles get them
   if (quality.level === 'ultra' || quality.level === 'hoch') {
     // facade units are 7.2 m (walls) and 6.2 m (height) wide, roof units 2 m; plaster tiles 3 m, roof tiles 2 m
@@ -423,11 +538,16 @@ export function buildBuildings(
     const shade = 0.92 + hash(k + 17) * 0.1;
     const color: RGB = [paint[0] * shade, paint[1] * shade, paint[2] * shade];
     walls(chunk.walls, ring, base, top, ground, color);
+    if ((architecture === 'italian' || architecture === 'alpine') && top - ground >= 5.6 && hash(k + 29) < 0.45) {
+      const italian = architecture === 'italian';
+      balcony(chunk.extras, ring, ground, italian ? [0.1, 0.13, 0.1] : [0.42, 0.28, 0.16], italian ? 0.025 : 0.08);
+    }
     if (b.kind === 1) {
       const roofColor = style.roof(hash(k + 3));
       const rect = orientedRect(ring);
       if (hash(k + 7) < style.hipShare) hipRoof(chunk.roofs, rect, top, roofColor, style);
       else gableRoof(chunk, rect, top, roofColor, color, style.pitch, style.eaves);
+      if (hash(k + 23) < 0.7) chimney(chunk.extras, rect, top, style.pitch, color, roofColor);
     } else {
       const tris = earClip(ring);
       const roofs = chunk.roofs;
@@ -439,13 +559,14 @@ export function buildBuildings(
 
   const meshes: Mesh[] = [];
   for (const [key, chunk] of chunks) {
-    for (const [md, mat, name] of [
-      [chunk.walls, wallMat, 'walls'],
-      [chunk.roofs, roofMat, 'roofs'],
+    for (const [md, mat, name, dist] of [
+      [chunk.walls, wallMat, 'walls', quality.buildingDistance],
+      [chunk.roofs, roofMat, 'roofs', quality.buildingDistance],
+      [chunk.extras, extrasMat, 'extras', Math.min(600, quality.buildingDistance)],
     ] as const) {
       const m = md.build(scene, `bld-${name}-${key}`, mat);
       if (!m) continue;
-      m.addLODLevel(quality.buildingDistance, null);
+      m.addLODLevel(dist, null);
       meshes.push(m);
     }
   }

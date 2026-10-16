@@ -772,7 +772,7 @@ Grundlagen aus dem Code:
 | P5.2 | 5A | Schnee und Fels an Gipfeln nach Höhe/Neigung | fertig |
 | P5.3 | 5B | Feine Seekräuselung (Normalmap) und Sonnenglitzern | fertig |
 | P5.4 | 5B | Segelboote und Fähre auf dem See | fertig |
-| P5.5 | 5C | Balkone und Kamine | offen |
+| P5.5 | 5C | Balkone und Kamine | fertig |
 | P5.6 | 5D | Fensterlaibungen (Parallax-Fassade) | offen |
 | P5.7 | 5E | Abnahme-Screenshots + Bildrate | offen |
 
