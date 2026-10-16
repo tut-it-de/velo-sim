@@ -162,3 +162,65 @@ describe('Großer Feldberg (real road data)', () => {
     for (let i = 1; i < fb.count; i++) expect(Math.abs(fb.ys[i]! - fb.ys[i - 1]!)).toBeLessThan(0.5);
   });
 });
+
+describe("Alpe d'Huez (real road data)", () => {
+  const ah = getTrack('alpe-dhuez');
+
+  it('climbs from Bourg-d\'Oisans to the resort and back', () => {
+    expect(ah.length).toBeGreaterThan(28000);
+    expect(ah.length).toBeLessThan(30000);
+    expect(Math.abs(ah.length - ah.definition.lengthM)).toBeLessThan(100);
+    // Bourg-d'Oisans ~720 m, finish ~1850 m
+    expect(ah.sample(0).y).toBeGreaterThan(700);
+    expect(ah.sample(0).y).toBeLessThan(740);
+    expect(ah.maxElevation).toBeGreaterThan(1820);
+    expect(ah.maxElevation).toBeLessThan(1870);
+  });
+
+  it('the 21 hairpins are ~14 km at ~8 %', () => {
+    const climb = ah.segments.find((s) => s.id === 'alpe-dhuez')!;
+    const len = climb.endM - climb.startM;
+    const avg = ((ah.sample(climb.endM).y - ah.sample(climb.startM).y) / len) * 100;
+    expect(len).toBeGreaterThan(13500);
+    expect(len).toBeLessThan(14500);
+    expect(avg).toBeGreaterThan(7.5);
+    expect(avg).toBeLessThan(8.5);
+  });
+
+  it('has no DEM spikes and stays within the trainer limits', () => {
+    expect(ah.maxGrade).toBeLessThan(16);
+    expect(ah.minGrade).toBeGreaterThan(-16);
+    for (let i = 1; i < ah.count; i++) expect(Math.abs(ah.ys[i]! - ah.ys[i - 1]!)).toBeLessThan(0.7);
+  });
+});
+
+describe('Taunus – Mammolshainer Stich (real road data)', () => {
+  const tm = getTrack('taunus-mammolshain');
+
+  it('is a ~15.7 km loop from Kronberg up to Falkenstein', () => {
+    expect(tm.length).toBeGreaterThan(15000);
+    expect(tm.length).toBeLessThan(16500);
+    expect(Math.abs(tm.length - tm.definition.lengthM)).toBeLessThan(100);
+    expect(tm.sample(0).y).toBeGreaterThan(235);
+    expect(tm.sample(0).y).toBeLessThan(265);
+    expect(tm.maxElevation).toBeGreaterThan(400);
+    expect(tm.maxElevation).toBeLessThan(430);
+  });
+
+  it('the Stich is ~2.4 km at ~8 %', () => {
+    const climb = tm.segments.find((s) => s.id === 'mammolshainer-stich')!;
+    const len = climb.endM - climb.startM;
+    const avg = ((tm.sample(climb.endM).y - tm.sample(climb.startM).y) / len) * 100;
+    expect(len).toBeGreaterThan(2200);
+    expect(len).toBeLessThan(2600);
+    expect(avg).toBeGreaterThan(7);
+    expect(avg).toBeLessThan(8.5);
+  });
+
+  it('has no DEM spikes; the Stich peaks at 15-18 %', () => {
+    expect(tm.maxGrade).toBeGreaterThan(14);
+    expect(tm.maxGrade).toBeLessThan(18);
+    expect(tm.minGrade).toBeGreaterThan(-18);
+    for (let i = 1; i < tm.count; i++) expect(Math.abs(tm.ys[i]! - tm.ys[i - 1]!)).toBeLessThan(0.75);
+  });
+});

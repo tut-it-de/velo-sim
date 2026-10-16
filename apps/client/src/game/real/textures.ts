@@ -373,11 +373,12 @@ export function treeAtlas(scene: Scene): DynamicTexture {
   const tex = canvasTexture(
     scene,
     'tree-atlas',
-    1024,
-    256,
+    2048,
+    512,
     (ctx) => {
       const rng = createRng(21);
-      ctx.clearRect(0, 0, 1024, 256);
+      ctx.clearRect(0, 0, 2048, 512);
+      ctx.scale(2, 2);
       const blob = (x: number, y: number, r: number, base: [number, number, number], light: number) => {
         const k = 0.7 + light * 0.55 + (rng() - 0.5) * 0.18;
         ctx.fillStyle = `rgb(${Math.min(255, base[0] * k) | 0},${Math.min(255, base[1] * k) | 0},${Math.min(255, base[2] * k) | 0})`;
@@ -407,17 +408,49 @@ export function treeAtlas(scene: Scene): DynamicTexture {
       // 0: chestnut / beech
       trunk(128, 150, 9, '#4a3b2c');
       crown(128, 104, 104, 92, [70, 98, 44], 520, 7, 16);
-      // 1: spruce — stacked drooping branch layers
-      trunk(384, 200, 6, '#3d3026');
-      for (let y = 14; y < 236; y += 3) {
-        const t = (y - 10) / 226;
-        const half = 6 + t * 92 * (0.85 + rng() * 0.3);
-        for (let k = 0; k < 4; k++) {
-          const x = 384 + (rng() * 2 - 1) * half;
-          const light = Math.max(0, 0.55 - ((x - 384) / 100) * 0.4 - t * 0.25);
-          blob(x, y + rng() * 4, 3 + rng() * 5, [34, 62, 38], light);
+      // 1: spruce — tiers of drooping branches, drawn bottom-up so each tier overhangs and shades the
+      // one below; in world proportions (the cell is shown at 0.56 of its height, x stretched by 1 / 0.56)
+      ctx.save();
+      ctx.translate(384, 0);
+      ctx.scale(1 / 0.56, 1);
+      trunk(0, 170, 3.5, '#3d3026');
+      const tiers = 24;
+      for (let i = tiers - 1; i >= 0; i--) {
+        const t = i / (tiers - 1);
+        const top = 2 + t * 212;
+        const half = (3 + Math.pow(t, 0.8) * 62) * (0.8 + rng() * 0.4);
+        const drop = 10 + t * 24;
+        const slope = Math.atan2(drop * 0.9, half);
+        const lift = (x: number) => top + drop * (0.62 + 0.38 * Math.abs(x) / half);
+        // shaded underside: the silhouette of the tier, branch tips hanging lowest
+        ctx.fillStyle = 'rgb(16,30,19)';
+        ctx.beginPath();
+        ctx.moveTo(0, top);
+        ctx.quadraticCurveTo(half * 0.5, top + drop * 0.3, half, top + drop);
+        for (let k = 1; k < 10; k++) {
+          const x = half - (k / 10) * half * 2;
+          ctx.lineTo(x, lift(x) - (k % 2) * drop * 0.16);
+        }
+        ctx.lineTo(-half, top + drop);
+        ctx.quadraticCurveTo(-half * 0.5, top + drop * 0.3, 0, top);
+        ctx.fill();
+        // needle sprays along the drooping branches, brightest on top of the tier and to the upper left
+        const count = 26 + Math.floor(t * 120);
+        for (let k = 0; k < count; k++) {
+          const u = rng() * 2 - 1;
+          const x = u * half;
+          const y0 = top + drop * 0.3 * Math.abs(u) ** 0.8;
+          const depth = rng() ** 1.6;
+          const y = y0 + depth * (lift(x) - y0) * 0.8;
+          const light = Math.max(0, Math.min(1, 0.75 - u * 0.3 - depth * 0.75 - t * 0.1));
+          const kk = 0.62 + light * 0.6 + (rng() - 0.5) * 0.16;
+          ctx.fillStyle = `rgb(${(40 * kk) | 0},${(74 * kk) | 0},${(44 * kk) | 0})`;
+          ctx.beginPath();
+          ctx.ellipse(x, y, 2.6 + rng() * 2.6, 1 + rng() * 0.9, u >= 0 ? slope : -slope, 0, Math.PI * 2);
+          ctx.fill();
         }
       }
+      ctx.restore();
       // 2: Italian cypress — tall dark flame
       trunk(640, 230, 4, '#3a2e24');
       for (let i = 0; i < 700; i++) {

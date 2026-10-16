@@ -98,6 +98,8 @@ class Config:
     extra_places: list[tuple[str, float, float]] = field(default_factory=list)
     attribution: str = DEFAULT_ATTRIBUTION
     cache_dir: Path | None = None  # default: tools/geo/.cache/<id>
+    # Tall masts and towers from OpenStreetMap (summit transmitters, observation towers), seen from afar.
+    landmarks: bool = True
 
 
 # ---------------------------------------------------------------------------- local frame
@@ -136,8 +138,9 @@ def log(*args):
 
 # ---------------------------------------------------------------------------- downloads
 
-def overture(theme: str, typ: str, bbox, name: str | None = None, flt=None):
-    """Features of one Overture type inside bbox (cached as JSON): id, class, subtype, name, geom (GeoJSON)."""
+def overture(theme: str, typ: str, bbox, name: str | None = None, flt=None, tags=False):
+    """Features of one Overture type inside bbox (cached as JSON): id, class, subtype, name, geom (GeoJSON),
+    with `tags` also the OpenStreetMap tags (source_tags)."""
     path = CACHE / f'{name or typ}.json'
     if path.exists():
         return json.loads(path.read_text())
@@ -153,7 +156,7 @@ def overture(theme: str, typ: str, bbox, name: str | None = None, flt=None):
     if flt is not None:
         f = f & flt
     cols = [c for c in ['id', 'geometry', 'names', 'class', 'subtype', 'height', 'num_floors', 'is_underground', 'connectors', 'elevation']
-            if c in d.schema.names]
+            + (['source_tags'] if tags else []) if c in d.schema.names]
     rows = []
     for r in d.to_table(filter=f, columns=cols).to_pylist():
         o = {'id': r['id'], 'class': r.get('class'), 'subtype': r.get('subtype'), 'name': (r.get('names') or {}).get('primary'),
@@ -161,6 +164,8 @@ def overture(theme: str, typ: str, bbox, name: str | None = None, flt=None):
         for k in ('height', 'num_floors', 'is_underground', 'elevation'):
             if r.get(k) is not None:
                 o[k] = r[k]
+        if tags:
+            o['tags'] = dict(r.get('source_tags') or [])
         rows.append(o)
     CACHE.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(rows))
@@ -727,7 +732,8 @@ def build(cfg: Config, make_lap: Callable, make_segments: Callable[[Context], li
             if isinstance(poly, Polygon) and poly.area > 20000:
                 rings.append([[round(c[0]), round(c[1])] for c in poly.exterior.coords])
     water_level = cfg.water_level if lake_local is not None else math.floor(float(horizon.height.min())) - 50.0
-    write_world(near, far, horizon, buildings, tree_xy, roads, places, rings, water_level)
+    landmarks = build_landmarks(overture('base', 'infrastructure', cfg.fetch_near, 'infrastructure', tags=True), nb) if cfg.landmarks else []
+    write_world(near, far, horizon, buildings, tree_xy, roads, places, rings, water_level, landmarks)
 
 
 def place_points(land) -> list[dict]:
@@ -789,6 +795,46 @@ def build_buildings(rows, nb, lake_local):
             out.append([int(round(h * 10)), kind] + ring_dm(coords))
             count += 1
     log(f'  {count} buildings')
+    return out
+
+
+LANDMARK_MIN_HEIGHT = 20.0
+
+
+def build_landmarks(rows, nb) -> list[dict]:
+    """Masts and towers with a mapped height: {kind, name, x, z, h, r}. kind is 'mast' (guyed or
+    tubular steel mast, banded red and white above 60 m), 'lattice' (steel lattice), 'telecom'
+    (freestanding concrete telecommunication tower) or 'observation' (stone observation tower)."""
+    out = []
+    for r in rows:
+        t = r.get('tags') or {}
+        made = t.get('man_made')
+        if made not in ('mast', 'tower'):
+            continue
+        typ = t.get('tower:type', 'communication' if made == 'mast' else '')
+        if typ not in ('communication', 'observation', 'radar', 'monitoring'):
+            continue
+        h = r.get('height')
+        if not h or h < LANDMARK_MIN_HEIGHT:
+            continue
+        construction = t.get('tower:construction', '')
+        g = to_local_geom(r['geom'])
+        c = g.centroid
+        if not (nb[0] < c.x < nb[2] and nb[1] < c.y < nb[3]):
+            continue
+        if typ == 'observation':
+            kind = 'observation'
+        elif 'lattice' in construction:
+            kind = 'lattice'
+        elif made == 'mast' or 'tube' in construction or 'guyed' in construction:
+            kind = 'mast'
+        else:
+            kind = 'telecom'
+        default_r = {'mast': 0.9, 'lattice': 2.5, 'telecom': 4.5, 'observation': 3.0}[kind]
+        radius = math.sqrt(g.area / math.pi) if g.geom_type in ('Polygon', 'MultiPolygon') else default_r
+        out.append({'kind': kind, 'name': r.get('name') or '', 'x': round(float(c.x), 1), 'z': round(float(c.y), 1),
+                    'h': round(float(min(h, 400.0)), 1), 'r': round(float(min(max(radius, 0.6), 14.0)), 1)})
+    log(f'  {len(out)} landmarks: ' + ', '.join(f"{o['name'] or o['kind']} {o['h']:.0f} m" for o in out))
     return out
 
 
@@ -887,7 +933,7 @@ export const {P}_SEGMENTS: RouteSegment[] = {seg};
     log(f'wrote {out_route.relative_to(ROOT)} ({len(body) // 1024} KB)')
 
 
-def write_world(near, far, horizon, buildings, trees, roads, places, lake_rings, water_level):
+def write_world(near, far, horizon, buildings, trees, roads, places, lake_rings, water_level, landmarks=()):
     out_world = ROOT / 'apps/client/public/worlds' / C.id
     out_world.mkdir(parents=True, exist_ok=True)
     blobs = []
@@ -918,6 +964,7 @@ def write_world(near, far, horizon, buildings, trees, roads, places, lake_rings,
         'buildings': buildings,
         'trees': trees,
         'roads': roads,
+        'landmarks': list(landmarks),
         'look': {'flora': C.flora, 'architecture': C.architecture},
     }
     text = json.dumps(world, separators=(',', ':'), ensure_ascii=False)

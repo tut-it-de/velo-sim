@@ -60,6 +60,18 @@ export type Flora = 'mediterranean' | 'central' | 'alpine';
 /** Building style of a region: facade colours, roof shapes and materials. */
 export type Architecture = 'italian' | 'german' | 'alpine';
 
+/** Tall mast or tower from OpenStreetMap, seen from afar (summit transmitters, observation towers). */
+export interface Landmark {
+  kind: 'mast' | 'lattice' | 'telecom' | 'observation';
+  name: string;
+  x: number;
+  z: number;
+  /** Height above ground, m. */
+  h: number;
+  /** Footprint radius, m. */
+  r: number;
+}
+
 export interface WorldLook {
   flora: Flora;
   architecture: Architecture;
@@ -81,6 +93,7 @@ export interface WorldData {
   /** Single trees (x, z pairs). */
   trees: Float32Array;
   roads: SideRoad[];
+  landmarks: Landmark[];
   look: WorldLook;
 }
 
@@ -107,6 +120,8 @@ interface WorldJson {
   buildings: number[][];
   trees: number[];
   roads: number[][];
+  /** Missing in worlds generated before landmarks existed. */
+  landmarks?: Landmark[];
   /** Missing in the first world (Lake Como), which is Mediterranean. */
   look?: Partial<WorldLook>;
 }
@@ -168,6 +183,7 @@ async function load(id: string): Promise<WorldData> {
     buildings: json.buildings.map((b) => ({ height: b[0]! / 10, kind: b[1] as BuildingKind, ring: decodeRing(b, 2) })),
     trees: Float32Array.from(json.trees, (v) => v / 10),
     roads: json.roads.map((r) => ({ width: r[0]! / 10, track: r[1] === 1, pts: decodeRing(r, 2) })),
+    landmarks: json.landmarks ?? [],
     look: { flora: json.look?.flora ?? 'mediterranean', architecture: json.look?.architecture ?? 'italian' },
   };
 }

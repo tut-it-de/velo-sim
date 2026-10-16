@@ -1,3 +1,5 @@
+import { TAUNUS_MAMMOLSHAIN_LENGTH_M, TAUNUS_MAMMOLSHAIN_PATH, TAUNUS_MAMMOLSHAIN_SEGMENTS } from './data/taunusMammolshain';
+import { ALPE_D_HUEZ_LENGTH_M, ALPE_D_HUEZ_PATH, ALPE_D_HUEZ_SEGMENTS } from './data/alpeDHuez';
 import { FELDBERG_TAUNUS_LENGTH_M, FELDBERG_TAUNUS_PATH, FELDBERG_TAUNUS_SEGMENTS } from './data/feldbergTaunus';
 import { LAGO_DI_COMO_LENGTH_M, LAGO_DI_COMO_PATH, LAGO_DI_COMO_SEGMENTS } from './data/lagoDiComo';
 import { Track } from './track';
@@ -186,7 +188,33 @@ export const FELDBERG_TAUNUS: RouteDefinition = {
   segments: FELDBERG_TAUNUS_SEGMENTS,
 };
 
-export const ROUTES: RouteDefinition[] = [LAGO_DI_COMO, FELDBERG_TAUNUS, KUESTENRUNDE, HUEGELRUNDE, BERGRUNDE];
+export const ALPE_D_HUEZ: RouteDefinition = {
+  id: 'alpe-dhuez',
+  name: "Alpe d'Huez – 21 Kehren",
+  description:
+    "Der Klassiker der Tour de France auf echten Straßen: vom Kreisel in Bourg-d'Oisans über die D211 mit ihren 21 nummerierten Kehren durch La Garde und Huez hinauf zur Ankunft an der Avenue du Rif Nel (14 km, Ø 8 %, 1120 Hm), Wende durch die Station und Abfahrt auf derselben Straße.",
+  region: 'Oisans · Frankreich',
+  style: 'alpine',
+  lengthM: ALPE_D_HUEZ_LENGTH_M,
+  path: decodePath(ALPE_D_HUEZ_PATH),
+  world: 'alpe-dhuez',
+  segments: ALPE_D_HUEZ_SEGMENTS,
+};
+
+export const TAUNUS_MAMMOLSHAIN: RouteDefinition = {
+  id: 'taunus-mammolshain',
+  name: 'Taunus – Mammolshainer Stich',
+  description:
+    'Runde ab dem Berliner Platz in Kronberg über Schönberg und Oberhöchstadt nach Kronthal, dann der berühmte Mammolshainer Stich aus Eschborn–Frankfurt (2,4 km, Ø 7,8 %, bis 16 %) hinauf nach Mammolshain, weiter über Königstein und Falkenstein und auf der B 455 am Opel-Zoo vorbei zurück nach Kronberg.',
+  region: 'Taunus · Deutschland',
+  style: 'hills',
+  lengthM: TAUNUS_MAMMOLSHAIN_LENGTH_M,
+  path: decodePath(TAUNUS_MAMMOLSHAIN_PATH),
+  world: 'taunus-mammolshain',
+  segments: TAUNUS_MAMMOLSHAIN_SEGMENTS,
+};
+
+export const ROUTES: RouteDefinition[] = [LAGO_DI_COMO, FELDBERG_TAUNUS, TAUNUS_MAMMOLSHAIN, ALPE_D_HUEZ, KUESTENRUNDE, HUEGELRUNDE, BERGRUNDE];
 
 const trackCache = new Map<string, Track>();
 

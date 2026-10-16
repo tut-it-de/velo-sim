@@ -77,4 +77,6 @@ CdA   = (CdA_Basis + ΔCdA_Rad + ΔCdA_Laufräder + ΔCdA_Trikot) · (1 − Wind
 | + | HUD nach Vorlage: Streckenkarte, „In der Nähe“ mit Flaggen und Zeitabständen, Minimap mit Nordpfeil, Anstiegs-Panel mit Steigungsprofil, Werte unten links (Speed, Leistung, Kadenz, Puls) und rechts (Distanz, Zeit, Steigung) | ✅ |
 | + | Geo-Pipeline als Bibliothek (`tools/geo/worldgen.py`), Welten ohne See, Flora und Architektur je Region (Satteldächer, Kirchtürme mit Spitzhelm, Buchen/Fichten, Lärchen, Baumgrenze), länderspezifische Mittellinien | ✅ |
 | + | Großer Feldberg (Taunus) ab Hohemark/Waldtraut: Kanonenstraße – Sandplacken – Gipfel, 23,4 km / 596 hm | ✅ |
+| + | Taunus-Runde Mammolshainer Stich (Einbahnstraßen aus Overture-Zugangsregeln) und Alpe d'Huez (21 Kehren) | ✅ |
+| + | Landmarken: Sendemasten, Fernmelde- und Aussichtstürme mit echter Höhe aus OSM; neue Fichten-Sprites | ✅ |
 | 6 – Später | Helme, Level, Trainingspläne, Gruppenfahrten, Rennen | offen |

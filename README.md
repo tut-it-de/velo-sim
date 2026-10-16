@@ -154,6 +154,8 @@ tools/
 |---|---|---|---|---|
 | Lago di Como – Bellagio Loop | Comer See · Italien | 22,8 km | 683 hm | Uferstraße und Anstieg nach Civenna |
 | Großer Feldberg – ab Hohemark | Taunus · Deutschland | 23,4 km | 596 hm | Vom Waldtraut über die Kanonenstraße und den Sandplacken zum Gipfel (879 m), 11,6 km mit Ø 4,9 % |
+| Taunus – Mammolshainer Stich | Taunus · Deutschland | 15,7 km | 320 hm | Runde ab Kronberg: Mammolshainer Stich (2,4 km, Ø 7,8 %, bis 16 %), Königstein, Falkenstein, B 455 |
+| Alpe d'Huez – 21 Kehren | Oisans · Frankreich | 29,0 km | 1135 hm | Bourg-d'Oisans – D211 mit 21 Kehren – Ankunft Avenue du Rif Nel, 14 km mit Ø 8 % |
 
 Jede echte Strecke hat ein eigenes Skript in `tools/geo/` (z. B. `feldberg_taunus.py`) auf Basis der
 gemeinsamen Bibliothek `tools/geo/worldgen.py`. Das Skript beschreibt die Welt (Ausschnitt, See, Flora,

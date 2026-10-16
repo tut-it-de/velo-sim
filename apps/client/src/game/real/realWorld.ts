@@ -13,6 +13,7 @@ import type { Track } from '@velo/routes';
 import { buildGate, buildSegmentGates } from '../props';
 import type { RiderAvatar } from '../rider';
 import { buildBuildings } from './buildings';
+import { buildLandmarks } from './landmarks';
 import { RouteCorridor } from './corridor';
 import { FOG_DENSITY, SKY, SUN_DIR } from './env';
 import { fitGroundModel } from './ground';
@@ -107,6 +108,7 @@ export class RealWorld {
 
     await step('Häuser und Kirchen …');
     const buildings = buildBuildings(scene, data.buildings, corridor, quality, data.look.architecture);
+    const landmarks = buildLandmarks(scene, data, field);
 
     await step(FLORA_STEP[data.look.flora]);
     const trees = buildVegetation(scene, data, corridor, buildingIndex, quality);
@@ -124,6 +126,7 @@ export class RealWorld {
     water.setReflected([
       ...lodMasters(terrain.meshes),
       ...buildings,
+      ...(landmarks.solid ? [landmarks.solid] : []),
       ...(quality.level === 'hoch' ? trees : []),
       sky.mesh,
     ]);
