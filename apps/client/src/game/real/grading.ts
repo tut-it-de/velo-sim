@@ -3,6 +3,8 @@ import {
   ColorCurves,
   DefaultRenderingPipeline,
   ImageProcessingConfiguration,
+  SSAO2RenderingPipeline,
+  ThinEngine,
   type Camera,
   type Effect,
   type Scene,
@@ -64,6 +66,28 @@ export function setupImagePipeline(scene: Scene, camera: Camera, quality: Qualit
   ip.ditheringEnabled = quality.postProcess;
   ip.ditheringIntensity = 1 / 255;
   return pipeline;
+}
+
+/**
+ * Screen-space ambient occlusion for the 'ultra' profile: darkens the corners and creases where walls
+ * meet the road, wheels touch the ground and the rider's outline meets the sky, so objects sit in the
+ * scene instead of floating. Needs WebGL 2 (the pipeline uses the depth and normal buffers). Runs at half
+ * resolution and is denoised, which keeps it cheap. Must be created before the image pipeline so the
+ * post-processes are chained in order.
+ */
+export function setupAmbientOcclusion(scene: Scene, camera: Camera, quality: QualityProfile): SSAO2RenderingPipeline | null {
+  const engine = scene.getEngine();
+  if (!quality.ssao || !(engine instanceof ThinEngine) || engine.webGLVersion < 2) return null;
+  const ao = new SSAO2RenderingPipeline('ao', scene, { ssaoRatio: 0.5, blurRatio: 1 }, [camera], true);
+  ao.radius = 1.6;
+  ao.totalStrength = 1.1;
+  ao.base = 0.1;
+  ao.samples = 16;
+  ao.maxZ = 250;
+  ao.minZAspect = 0.5;
+  ao.expensiveBlur = true;
+  ao.epsilon = 0.02;
+  return ao;
 }
 
 /** What a ShaderMaterial needs to apply the scene's image processing exactly like the built-in materials. */

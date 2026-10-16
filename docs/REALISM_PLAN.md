@@ -124,9 +124,9 @@ Legende Status: `offen` · `läuft` · `fertig` · `verworfen`
 | P1.2 | 1A | Tiefe, warme Sonne und Himmelsfarben | fertig |
 | P1.3 | 1B | Kaskadenschatten (Bäume, Mauern, Häuser) | fertig |
 | P1.4 | 1B | Filmische Tonwertkurve und Bildstimmung | fertig |
-| P1.5 | 1C | Umgebungsverdeckung (SSAO) für Ultra | offen |
-| P1.6 | 1C | Höhendunst in Tälern | offen |
-| P1.7 | 1D | Abnahme-Screenshots Phase 1 | offen |
+| P1.5 | 1C | Umgebungsverdeckung (SSAO) für Ultra | fertig |
+| P1.6 | 1C | Höhendunst in Tälern | fertig |
+| P1.7 | 1D | Abnahme-Screenshots Phase 1 | fertig |
 
 **P1.1 Neue Verfolger-Kamera**
 - Datei: `apps/client/src/game/world.ts` (nur `updateCamera`, Zweig `default`, und Konstruktor-FOV)
@@ -229,6 +229,9 @@ Legende Status: `offen` · `läuft` · `fertig` · `verworfen`
   als Konstante einsetzen, Import aus `./env`.)
 - Abnahme: Screenshot `descent`: entfernte Talhänge blasser und wärmer als nahe, Gipfel klarer als
   Talgrund. Nahe Wiese unverändert.
+- Ergebnis (Orchestrator): Dunstfarbe bewusst im Gamma-Raum (StandardMaterial mischt den Szenen-Nebel
+  dort ebenfalls); Wirkung mit den Planwerten dezent. SSAO (P1.5): WebGL-2-Prüfung über
+  `engine instanceof ThinEngine`, Kontaktschatten am Rad sichtbar, am Mauerfuß kaum.
 
 **P1.7 Abnahme Phase 1** (Orchestrator)
 - Screenshots `wall`, `forest`, `descent` jeweils mit `ultra`, `hoch`, `mittel`; Vorher/Nachher-Bild

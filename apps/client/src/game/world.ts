@@ -16,7 +16,7 @@ import { RiderAvatar, type RiderLook } from './rider';
 import { buildRoadMesh } from './road';
 import { TerrainModel, buildTerrainMesh } from './terrain';
 import { DynamicResolution, resolveQuality, type GraphicsQuality, type QualityProfile } from './real/quality';
-import { setupImagePipeline } from './real/grading';
+import { setupAmbientOcclusion, setupImagePipeline } from './real/grading';
 import { REAL_CAMERA_MAX_Z, RealWorld, type MinimapData } from './real/realWorld';
 
 export type CameraMode = 'chase' | 'side' | 'top' | 'pov';
@@ -112,6 +112,7 @@ export class GameWorld {
     else this.engine.setHardwareScalingLevel(1 / ratio);
     this.camera.minZ = 0.4;
     this.camera.maxZ = REAL_CAMERA_MAX_Z;
+    setupAmbientOcclusion(this.scene, this.camera, quality);
     setupImagePipeline(this.scene, this.camera, quality);
     this.real = await RealWorld.build(this.scene, this.track, quality, onProgress);
     this.real.addRider(this.rider);

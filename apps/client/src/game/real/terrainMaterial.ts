@@ -12,6 +12,7 @@ import {
   type UniformBuffer,
 } from '@babylonjs/core';
 import type { WorldGrid } from './worldData';
+import { SKY } from './env';
 
 /** Cheap value noise for shaders (hash after Dave Hoskins, lattice wrapped every 289 cells). */
 export const NOISE_GLSL = /* glsl */ `
@@ -69,6 +70,25 @@ const UPDATE_DIFFUSE = /* glsl */ `
   veloCol = mix(veloCol, vec3(0.47, 0.45, 0.42) * (0.85 + 0.3 * veloNoise(veloP * 0.05)), veloRock);
   veloCol *= 1.0 - 0.32 * (1.0 - smoothstep(veloMap.w - 0.6, veloMap.w + 0.35, vPositionW.y));
   baseColor.rgb = veloCol;
+}
+`;
+
+/** Haze colour as a GLSL constant. Gamma space on purpose: StandardMaterial mixes the scene fog in gamma space too. */
+const SKY_FOG_GLSL = (() => {
+  const c = Color3.FromHexString(SKY.fog);
+  return `vec3(${c.r.toFixed(4)}, ${c.g.toFixed(4)}, ${c.b.toFixed(4)})`;
+})();
+
+/**
+ * Valley haze before fog: thickens with distance and towards the lake level (fading out 900 m above it), so the
+ * far valley sides go pale and warm while peaks and the near meadow stay as they are.
+ */
+const HAZE_BEFORE_FOG = /* glsl */ `
+{
+  float veloD = distance(vPositionW, vEyePosition.xyz);
+  float veloLow = 1.0 - smoothstep(veloMap.w + 50.0, veloMap.w + 900.0, vPositionW.y);
+  float veloHaze = (1.0 - exp(-veloD * 0.00012)) * veloLow * 0.55;
+  color.rgb = mix(color.rgb, ${SKY_FOG_GLSL}, veloHaze);
 }
 `;
 
@@ -135,6 +155,7 @@ export class TerrainPlugin extends MaterialPluginBase {
     return {
       CUSTOM_FRAGMENT_DEFINITIONS: `uniform sampler2D veloColorMap;\n${NOISE_GLSL}`,
       CUSTOM_FRAGMENT_UPDATE_DIFFUSE: UPDATE_DIFFUSE,
+      CUSTOM_FRAGMENT_BEFORE_FOG: HAZE_BEFORE_FOG,
     };
   }
 }
