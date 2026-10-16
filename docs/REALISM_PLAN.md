@@ -257,7 +257,7 @@ Fassadenfarben erhalten.
 | P2.5 | 2B | Fels- und Waldboden-Detailmaps | fertig |
 | P2.6 | 2C | Detailmaps an Straße, Mauern, Häusern | fertig |
 | P2.7 | 2C | Detailmaps im Gelände (Weltkoordinaten) | fertig |
-| P2.8 | 2D | Abnahme-Screenshots Phase 2 | offen |
+| P2.8 | 2D | Abnahme-Screenshots Phase 2 | fertig |
 
 **P2.1 Texturgenerator-Grundgerüst**
 - Dateien (neu): `tools/texgen/texgen.py`, `tools/texgen/noise.py`, `tools/texgen/README.md`
@@ -330,18 +330,238 @@ Blumenbüschel am Straßenrand.
 |---|---|---|---|
 | P3.1 | 3A | Blatt- und Rindentexturen (Python, wie Phase 2) | offen |
 | P3.2 | 3A | Prozeduraler Baumgenerator `treeGen.ts` + Studio-Ansicht | offen |
-| P3.3 | 3B | Artenparameter (8 Arten) im Studio abstimmen | offen |
-| P3.4 | 3C | Impostor-Bake-Seite → Atlas (Farbe + Normale) | offen |
-| P3.5 | 3C | Wind-Shader-Plugin | offen |
-| P3.6 | 3D | Nahbereich: 3D-Bäume als Thin Instances | offen |
-| P3.7 | 3D | Fernbereich: Impostor-Atlas statt Canvas-Atlas | offen |
-| P3.8 | 3E | Gras, Blumen und Büsche am Straßenrand | offen |
-| P3.9 | 3F | Abnahme-Screenshots + Bildrate | offen |
+| P3.3 | 3B | Artenparameter (8 Bäume, 2 Büsche) im Studio abstimmen | offen |
+| P3.5 | 3B | Wind-Shader-Plugin | offen |
+| P3.4 | 3C | Billboards aus den 3D-Bäumen backen (zur Laufzeit, Farbe + Normale) | offen |
+| P3.7 | 3D | Fernbereich: gebackene Billboards statt Canvas-Atlas, Artwahl, Instanzliste | offen |
+| P3.6 | 3E | Nahbereich: 3D-Bäume als Thin Instances | offen |
+| P3.8 | 3F | Gras, Blumen und Farn am Straßenrand | offen |
+| P3.9 | 3G | Abnahme-Screenshots + Bildrate | offen |
 
-Detailspezifikation der Phase-3-Aufgaben schreibt der Orchestrator nach Abnahme von Phase 2 in
-diese Datei (sie hängt von den Bildraten aus Phase 1 ab: wie viele Schattenwerfer und Dreiecke
-das Budget erlaubt). Eckwerte: ≤ 6 000 Dreiecke pro Nah-Baum, ≤ 250 Nah-Bäume sichtbar (Ultra),
-≤ 120 (Hoch), Mittel nur Impostors.
+Eckwerte (Bildrate nach Phase 2 auf Ultra, Hoch und iPad/Mittel flüssig):
+
+| | Ultra | Hoch | Mittel | Niedrig |
+|---|---|---|---|---|
+| Nah-Bäume (3D) | ≤ 250, Radius 70 m | ≤ 120, Radius 50 m | – | – |
+| Dreiecke pro Nah-Baum | ≤ 6 000 | ≤ 6 000 | – | – |
+| Nah-Bäume werfen Schatten | ja | ja | – | – |
+| Billboards aus 3D-Bäumen gebacken | 256×512 je Zelle | 256×512 | 128×256 | 128×256 |
+| Wind | Bäume, Billboards, Gras | wie Ultra | nur Billboards, Gras | aus |
+| Gras/Blumen am Rand | dicht, 80 m | dicht, 60 m | halb, 40 m | aus |
+
+P3.7 läuft vor P3.6, weil es die Instanzliste liefert; P3.6, P3.7 und P3.8 ändern alle
+`realWorld.ts` und laufen deshalb nacheinander.
+
+**Gemeinsame Begriffe** (gelten für alle Phase-3-Aufgaben):
+- Neuer Ordner `apps/client/src/game/real/trees/`. Die Arten heißen (Typ `SpeciesId`):
+  `chestnut`, `beech`, `plane`, `olive`, `palm`, `spruce`, `larch`, `cypress`, `oleander`, `laurel`
+  (8 Bäume, 2 Büsche).
+- `TreeInstance` (in `trees/types.ts`, angelegt von P3.2):
+  `{ x: number; y: number; z: number; species: SpeciesId; variant: number; height: number; yaw: number; tint: [number, number, number] }`.
+  `y` = Fußpunkt, `height` in Metern, `variant` 0–2.
+- Vertex-Daten der 3D-Bäume: `uv` = Texturkoordinate (Rinde bzw. Blattatlas), `uv2.x` = Windgewicht
+  (0 am Stammfuß … 1 an den Zweigspitzen), `uv2.y` = Phase je Ast (0…2π). Farbe (vertex color) = Tönung.
+- Texturen liegen in `apps/client/public/textures/` und werden über
+  `${import.meta.env.BASE_URL}textures/<name>.webp` geladen (wie `detailMaps.ts`).
+- Blending-Hash für Überblendungen (in allen Shadern identisch, „interleaved gradient noise“):
+  `float veloIgn(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }`
+  angewendet auf `gl_FragCoord.xy`.
+
+**P3.1 Blatt-, Rinden- und Grastexturen**
+- Dateien: `tools/texgen/texgen.py`, `tools/texgen/noise.py`, `tools/texgen/README.md`,
+  neu `apps/client/public/textures/leaves.webp`, `bark.webp`, `grass.webp`
+- `texgen.py`: `@generator(name, size=(w, h))` – optionale Größe, Standard `(SIZE, SIZE)`. `build`
+  prüft die Form `(h, w, 4)`. Bestehende Generatoren bleiben unverändert und erzeugen dieselben Dateien.
+- `noise.py`: `pack_albedo(rgb, alpha)` → uint8 RGBA (Farbe in sRGB, gerade Alpha – nicht
+  vormultipliziert). Vor dem Packen die Farbe in die durchsichtigen Bereiche ausbluten lassen
+  (wiederholtes 3×3-Mittel nur aus deckenden Nachbarn, bis alles gefüllt ist), damit Mipmaps keine
+  dunklen Ränder bekommen. Funktion `dilate(rgb, alpha, steps=32)`.
+- `leaves` (2048×2048, Raster 4×4, Zelle 512²): Blattbüschel von oben gesehen, Alpha = Silhouette,
+  Deckung 45–65 % pro Zelle, Blätter nicht über den Zellrand (8 px Rand frei). Zellen:
+  0 Edelkastanie (lange gesägte Blätter, 12–18 Stück), 1 Buche (ovale Blätter, dicht), 2 Platane
+  (gelappt, groß), 3 Olive (schmal, silbrig-graugrün), 4 Palmwedel (ein Wedel diagonal über die
+  ganze Zelle, Fiedern), 5 Fichtenzweig (Nadeln dicht, dunkel), 6 Lärchenzweig (Nadelbüschel, hell),
+  7 Zypresse (schuppige Zweigspitzen, dunkel, sehr dicht), 8 Oleander (schmale Blätter + 3–5 rosa
+  Blütendolden), 9 Lorbeer (glänzend dunkelgrün, oval), 10–15 frei (transparent).
+  Farben als Grundton mit ±10 % Helligkeit pro Blatt; die Tönung (Herbst) kommt später per Vertexfarbe.
+- `bark` (1024×1024, Raster 2×2, Zelle 512², deckend, kachelbar je Zelle in v): 0 gefurcht
+  (Kastanie, Olive), 1 glatt grau mit Flecken (Buche, Platane), 2 schuppig rotbraun (Fichte, Lärche,
+  Zypresse), 3 Palmstamm mit Ringen.
+- `grass` (2048×512, Raster 4×1, Zelle 512²): 0 Grasbüschel grün, 1 trockenes Gras (Oktober),
+  2 Gras mit weißen und gelben Blüten, 3 Farnwedel. Halme unten gebündelt, oben aufgefächert, unten
+  im Bild = Boden.
+- Abnahme: `python3 tools/texgen/texgen.py all` erzeugt alle neun Dateien, `selftest` OK, bestehende
+  sechs Detailmaps byte-gleich zu vorher (`git diff --stat` zeigt sie nicht). Vorschau-PNGs jeder
+  neuen Textur auf grauem und auf weißem Grund im Scratchpad; Gesamtgröße der drei neuen Dateien
+  ≤ 12 MB.
+
+**P3.2 Baumgenerator und Baum-Studio**
+- Dateien: neu `apps/client/src/game/real/trees/types.ts`, `trees/treeGen.ts`,
+  `trees/treeGen.test.ts`, `trees/species.ts` (nur Gerüst mit zwei Arten: `chestnut`, `spruce`),
+  `apps/client/src/dev/treeStudio.ts`, `apps/client/treestudio.html`, `apps/client/vite.config.ts`
+  (Eintrag `treestudio` in `rollupOptions.input`).
+- `types.ts`: `SpeciesId`, `TreeInstance` (siehe oben), `SpeciesParams`:
+  - `height: [min, max]` m, `trunkRadius` (am Fuß, relativ zur Höhe), `trunkLean` (rad),
+    `crownStart` (Anteil der Höhe, ab dem Äste wachsen), `crownShape: 'round' | 'cone' | 'column' | 'umbrella' | 'palm' | 'bush'`,
+    `crownWidth` (relativ zur Höhe), `levels` (1–3 Astebenen), `branches: [lvl1, lvl2, lvl3]`
+    (Anzahl je Ebene), `branchAngle` (rad), `branchDroop` (rad), `gnarl` (0–1, Krümmung),
+    `leafCell` (Zelle im Blattatlas), `leafSize` m, `leavesPerTip`, `barkCell`,
+    `leafColor`/`barkColor` (`[r, g, b]` 0–1, multipliziert mit der Textur), `sides: [stamm, ast]`
+    (Ecken der Zylinder, z. B. `[7, 4]`).
+- `treeGen.ts`: `generateTree(p: SpeciesParams, seed: number): TreeGeometry` – reine Funktion ohne
+  Babylon-Abhängigkeit (testbar). Rückgabe getrennt für Holz und Laub:
+  `{ wood: GeomPart; leaves: GeomPart; height: number; radius: number }`,
+  `GeomPart = { positions: Float32Array; normals; uvs; uvs2; colors; indices: Uint32Array }`.
+  - Holz: Stamm und Äste als verjüngte Röhren entlang leicht gekrümmter Kurven (Segmentlänge
+    ≈ 0.6 m Stamm, 0.35 m Ast), Kappen nur am Stamm unten weggelassen. Astanzahl nach `branches`,
+    Abzweig an zufälliger Höhe ab `crownStart`, Richtung nach Kronenform (Kegel: Äste kürzer nach
+    oben; Säule: steil; Schirm: flach nach außen oben; Palme: keine Äste, Wedel am Kopf).
+  - Laub: an jeder Astspitze und entlang der letzten Ebene `leavesPerTip` Karten (Quads, Größe
+    `leafSize` ±30 %, zufällig gedreht, zur Seite geneigt). **Normale jeder Kartenecke** =
+    normalize(0.3 × Kartennormale + 0.7 × Richtung vom Kronenmittelpunkt zur Ecke) – damit
+    leuchtet die Krone wie ein weicher Körper und hat eine Licht- und eine Schattenseite.
+  - `uv2` siehe gemeinsame Begriffe. Dreiecksbudget: wenn > 6 000, Laubkarten zufällig
+    ausdünnen (Holz bleibt), bis ≤ 6 000.
+  - Deterministisch: gleicher `seed` → identische Arrays (eigener RNG aus `../noise` `createRng`).
+- `treeGen.test.ts` (vitest): für beide Gerüst-Arten und Seeds 1–3: Dreiecke ≤ 6 000; Höhe der
+  Bounding-Box innerhalb `height`; alle Normalen Länge 1 ± 1e-3; `uvs2.x` in [0, 1]; zwei Läufe
+  mit gleichem Seed liefern gleiche Arrays.
+- Studio (`treestudio.html?species=chestnut&seed=1&wind=0`): Szene mit grauem Boden, Sonne aus
+  `env.ts` (`SUN_DIR`), Hemisphärenlicht wie `realWorld.ts`, Schatten (ShadowGenerator 2048).
+  Ohne `species`: alle Arten aus `species.ts` nebeneinander mit je drei Seeds. Kamera ArcRotate.
+  Materialien: Holz `StandardMaterial` mit `bark.webp`, Laub `StandardMaterial` mit `leaves.webp`,
+  `MATERIAL_ALPHATEST`, `alphaCutOff = 0.4`, `backFaceCulling = false`, `twoSidedLighting = true`,
+  `useAlphaFromDiffuseTexture = true`. Fehlen die Texturen noch (P3.1 läuft parallel): einfarbig
+  rendern statt abzubrechen.
+- Abnahme: Test grün; Screenshot `treestudio.html` (beide Arten, je drei Seeds) im Scratchpad;
+  Kastanie liest sich als runde Laubkrone mit sichtbaren Ästen unten, Fichte als Kegel.
+
+**P3.3 Artenparameter abstimmen**
+- Dateien: `apps/client/src/game/real/trees/species.ts`, bei Bedarf `trees/treeGen.ts`
+  (nur neue Kronenformen, keine Änderung der Schnittstelle)
+- Alle zehn Arten eintragen. Zielbilder (Höhe in m, Merkmale):
+  - `chestnut` 12–20, runde breite Krone ab 30 %, knorriger Stamm, Blatt gelbgrün-dunkelgrün.
+  - `beech` 18–28, hohe ovale Krone ab 40 %, glatter grauer Stamm.
+  - `plane` 14–24, breite lockere Krone, gefleckter Stamm, große Blätter (auch für Linde/Garten).
+  - `olive` 4–7, Schirm, verdrehter Stamm (gnarl 0.8), silbrig-graues Laub, lückig.
+  - `palm` 6–11, schlanker leicht gebogener Stamm ohne Äste, 12–16 Wedel am Kopf, hängend.
+  - `spruce` 18–32, schmaler Kegel bis fast zum Boden, Äste hängend (droop), dunkel.
+  - `larch` 16–26, lockerer Kegel, heller; Herbstfarbe kommt über `tint` aus `vegetation.ts`.
+  - `cypress` 8–16, schmale Säule (Breite ≤ 18 % der Höhe), sehr dicht, fast kein Holz sichtbar.
+  - `oleander` 2–4, Busch mit vielen Trieben aus dem Boden, rosa Blüten.
+  - `laurel` 2.5–5, dichter runder Busch.
+- Abnahme: Studio-Screenshot aller Arten (je 3 Seeds), Dreiecke je Art im Bericht (Tabelle),
+  Test grün. Der Orchestrator zeigt das Bild dem Nutzer, bevor 3C startet.
+
+**P3.4 Billboards aus den 3D-Bäumen backen (zur Laufzeit)**
+- Dateien: neu `apps/client/src/game/real/trees/impostorBake.ts`, `apps/client/src/dev/treeStudio.ts`
+  (Ansicht `?mode=atlas`)
+- Statt einer eigenen Bake-Seite mit Datei-Export wird beim Laden gebacken: kein zusätzlicher
+  Download, und Atlas und Arten bleiben automatisch gleich. Zeitbudget ≤ 400 ms.
+- `bakeImpostors(scene, species: SpeciesId[], cell: [w, h]): ImpostorAtlas` mit
+  `{ color: RenderTargetTexture; normal: RenderTargetTexture; cells: Map<string, { u0, v0, u1, v1 }>; aspect: Map<string, number> }`,
+  Schlüssel `${species}:${variant}`. Je Art 3 Varianten (Seeds 1–3) → Zellen im Atlas, Atlasbreite
+  `16 × cell[0]`, Höhe nach Bedarf (Zweierpotenz).
+  - Pro Zelle: orthografische Kamera von der Seite, Ausschnitt = Bounding-Box des Baums, Viewport
+    auf die Zelle. Farbe: Holz und Laub mit ihren Texturen, **unbeleuchtet** (nur Albedo × Tönung;
+    `disableLighting = true`, `emissiveColor = 1`), Alpha aus dem Laub. Normale: `ShaderMaterial`,
+    das die Normale im Kameraraum als `n * 0.5 + 0.5` schreibt (Alpha-Test identisch).
+  - Danach `generateMipMaps`, Sampling trilinear. RTTs nicht jedes Frame neu rendern
+    (`refreshRate = 0` nach dem ersten Rendern).
+- Studio `?mode=atlas`: zeigt Farb- und Normalatlas nebeneinander.
+- Abnahme: Atlas-Screenshot, Zeit des Backens im Bericht (Konsole), keine Lücken/Ränder zwischen
+  Zellen.
+
+**P3.5 Wind**
+- Dateien: neu `apps/client/src/game/real/trees/windPlugin.ts`, `apps/client/src/dev/treeStudio.ts`
+  (nur Parameter `?wind=1`). Läuft parallel zu P3.3, das nur `species.ts`/`treeGen.ts` ändert.
+- `WindPlugin extends MaterialPluginBase` (Priorität 210), Defines `VELO_WIND` und
+  `VELO_WIND_CARD` (Billboard/Gras: Gewicht aus der Texturkoordinate statt `uv2`).
+  Uniform `veloWind` (vec4: Richtung x, Richtung z, Stärke, Zeit). Statische Funktion
+  `WindPlugin.update(scene, dt)` setzt die Zeit für alle Instanzen (ein gemeinsamer Wert).
+- Vertex (`CUSTOM_VERTEX_UPDATE_POSITION`): `w = uv2.x` (bzw. bei `VELO_WIND_CARD`:
+  `w = 1.0 - uv.y`), `ph = uv2.y` (bzw. aus `positionUpdated.xz` gehasht);
+  Versatz = `dir * strength * w*w * (0.6 * sin(t*1.3 + ph) + 0.25 * sin(t*3.1 + ph*2.3))`;
+  zusätzlich bei `w > 0.6` ein Blattflattern `0.02 * sin(t*7.0 + dot(positionUpdated, vec3(3.1)))` in y.
+  Stärke: Bäume 0.15 m an den Spitzen, Billboards 0.08, Gras 0.06. Die Instanz-Matrix (Thin
+  Instances) muss vorher angewendet sein – Versatz in Weltkoordinaten addieren
+  (`CUSTOM_VERTEX_UPDATE_WORLDPOS`), nicht im Objektraum.
+- Schatten: Der Schatten bewegt sich nicht mit (Versatz zu klein, um aufzufallen) – bewusst so.
+- Studio: `?wind=1` aktiviert das Plugin an Holz und Laub.
+- Abnahme: Studio mit Wind zeigt ruhiges Schwingen, kein Abreißen zwischen Stamm und Ästen
+  (Stammfuß bleibt fest); Bericht mit kurzer Beschreibung, zwei Screenshots im Abstand 1 s.
+
+**P3.6 Nahbereich: 3D-Bäume als Thin Instances**
+- Dateien: neu `apps/client/src/game/real/trees/nearTrees.ts`, `apps/client/src/game/real/realWorld.ts`
+- `class NearTrees` – `constructor(scene, instances: TreeInstance[], quality, shadow: ShadowGenerator | null)`,
+  `update(camera: Vector3)`, `get fade(): { inner: number; outer: number }`, `dispose()`.
+  - Für jede Art, die in `instances` vorkommt, und jede Variante 0–2: `generateTree` einmal,
+    daraus zwei Meshes (Holz, Laub) mit Thin Instances. Materialien wie im Studio + `WindPlugin`.
+  - Räumliches Raster (32 m Zellen) über alle Instanzen. `update`: nur wenn sich die Kamera ≥ 8 m
+    bewegt hat; Instanzen im Radius `outer + 15` sammeln, nach Abstand sortieren, die nächsten
+    `max` nehmen (Ultra 250, Hoch 120). Ist die Grenze erreicht, wird `outer` auf den Abstand
+    des letzten genommenen Baums gesenkt. `inner = outer − 12`. Standard `outer`: Ultra 70, Hoch 50.
+  - Matrix je Instanz: Skalierung `height / generierteHöhe`, Drehung `yaw`, Position. Tönung über
+    Thin-Instance-Attribut `color` (`thinInstanceRegisterAttribute('color', 4)`).
+  - Überblendung: Laub- und Holzmaterial bekommen ein kleines Plugin, das im Fragment-Shader
+    `fade = smoothstep(inner, outer, Abstand Kamera–Instanzursprung)` berechnet und verwirft, wenn
+    `veloIgn(gl_FragCoord.xy) < fade`. (Billboards verwerfen komplementär, siehe P3.7.)
+  - Schatten: wenn `shadow`, beide Meshes in die `renderList` (Laub mit Alpha-Test).
+- `realWorld.ts`: nur bei `ultra`/`hoch` anlegen (Instanzen aus `buildVegetation`, siehe P3.7);
+  in `update` `nearTrees.update(camera)` und danach `vegetation.setNearFade(camera, nearTrees.fade)`.
+  `WindPlugin.update(scene, dt)` ebenfalls in `update`.
+- Abnahme: Screenshots `forest` und `wall` (ultra, hoch): Bäume an der Straße sind 3D mit Ästen,
+  Schatten mit Blattstruktur auf der Straße, kein Aufploppen beim Fahren (kurzes Video oder drei
+  Screenshots im Abstand von 20 m Fahrt), Konsole ohne Fehler. Dreiecke gesamt im Bericht
+  (`scene.getActiveIndices() / 3`).
+
+**P3.7 Fernbereich: gebackene Billboards statt Canvas-Atlas**
+- Dateien: `apps/client/src/game/real/vegetation.ts`, `apps/client/src/game/real/textures.ts`
+  (nur `treeAtlas` entfernen, wenn nicht mehr benutzt)
+- Artwahl ersetzt die vier `TREE`-Typen:
+  - Wald, Laub: `mediterranean` → `chestnut`; `central`/`alpine` → `beech`. Nadel: `spruce`,
+    über 1500 m mit `flora.larch` `larch` (wie heute).
+  - Siedlung/Garten/Park: unter 320 m `cypress` mit `flora.cypress`; `mediterranean` unter 260 m
+    zu 8 % `palm`, zu 15 % `oleander`; sonst `plane`.
+  - Obstgarten: `mediterranean` → `olive`, sonst `plane` (4–7 m).
+  - Gebüsch: `laurel` (bei `central`/`alpine` mit grünerer Tönung).
+  - Höhen aus `species.ts` (`height`), weiter gekappt durch die bestehende Regel an der Straße.
+- `buildVegetation` gibt `{ meshes: Mesh[]; instances: TreeInstance[]; setNearFade(camera, fade): void }`
+  zurück. `realWorld.ts` wird an die neue Rückgabe angepasst (nur die Zeilen mit `trees`).
+- Billboards wie bisher zwei gekreuzte Quads, aber Textur/UV aus `bakeImpostors` (Zelle
+  `${species}:${variant}`, Breite aus `aspect`), Zellgröße nach Tabelle oben. Material:
+  `diffuseTexture = atlas.color`, `bumpTexture = atlas.normal` (Normalen im Kameraraum der
+  Bake-Kamera = Tangentenraum des Quads; ggf. `invertNormalMapX/Y` setzen, im Studio prüfen),
+  Alpha-Test wie bisher. Die alten künstlichen Vertex-Normalen und die Hell-Dunkel-Verläufe
+  (`bottom`/`top`) entfallen, Tönung bleibt als Vertexfarbe.
+- `uv2` jedes Billboard-Vertex = Fußpunkt (x, z) des Baums. Plugin im Fragment-Shader: Abstand
+  Fußpunkt–Kamera → `fade` wie in P3.6; verwerfen, wenn `veloIgn(gl_FragCoord.xy) >= fade`.
+  Ohne Nah-Bäume (Mittel/Niedrig) `inner = outer = 0` → nichts wird verworfen.
+- `WindPlugin` mit `VELO_WIND_CARD` an das Billboard-Material (nicht bei Niedrig).
+- Abnahme: Screenshots aller drei Stellen mit `mittel` und `hoch`: Fernwald zeigt Kronen mit Licht-
+  und Schattenseite passend zur Sonne, keine dunklen Ränder, Arten unterscheidbar (Zypressen, Palmen
+  am Seeufer, Kastanienwald). Ladezeit der Strecke im Bericht (vorher/nachher).
+
+**P3.8 Gras, Blumen und Büsche am Straßenrand**
+- Dateien: neu `apps/client/src/game/real/roadsideFlora.ts`, `apps/client/src/game/real/realWorld.ts`
+- Platzierung einmal beim Laden entlang `corridor` (Zeilenabstand `ROW_STRIDE`), beide Seiten, nur
+  wo `edge[side][row] === EDGE.verge` und nicht `urban[row]`: Abstand zur Fahrbahnkante
+  `hw + SHOULDER + 0.2 … 2.8 m`, Dichte Ultra/Hoch 1.4 Büschel pro Meter und Seite, Mittel 0.7.
+  Höhe aus `corridor.surface`. Nicht in Wasser, nicht in Gebäuden.
+- Büschel = drei gekreuzte Quads (Höhe 0.35–0.7 m, Breite 0.6–1.0 m), Zelle aus `grass.webp`:
+  60 % grün, 25 % trocken, 10 % Blumen, 5 % Farn (im Wald: 30 % Farn). Tönung ±10 %.
+  Normalen nach oben (0, 1, 0) – Gras wird wie der Boden beleuchtet, keine Seitenschattierung.
+- Meshes in 100-m-Stücken, `addLODLevel(80 / 60 / 40, null)` nach Profil. Material Alpha-Test,
+  `backFaceCulling = false`, `WindPlugin` mit `VELO_WIND_CARD`. Schatten empfangen ja, werfen nein.
+- Büsche (`oleander`, `laurel`) kommen über `vegetation.ts`/P3.7 – hier nichts tun.
+- `realWorld.ts`: anlegen außer bei Niedrig, Meshes in die Empfängerliste der Schatten.
+- Abnahme: Screenshots `forest`, `descent` (ultra, mittel): Straßenrand zeigt Grasbüschel, im
+  Wald Farne, keine schwebenden Büschel an Mauern oder über dem See.
+
+**P3.9 Abnahme Phase 3**
+- Vorher/Nachher-Bilder aller drei Stellen mit Ultra, Hoch und Mittel; Nutzer prüft die Bildrate auf
+  Laptop und iPad. Wenn es auf Hoch ruckelt: `max`/Radius der Nah-Bäume senken (Werte in
+  `nearTrees.ts`), dann Gras-Dichte.
 
 ### Phase 4 – Straßenrand
 
