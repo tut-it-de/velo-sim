@@ -15,6 +15,12 @@ function clockOf(scene: Scene): { time: number } {
 export interface WindOptions {
   /** Billboards and grass: the weight comes from the texture v coordinate instead of uv2. */
   card?: boolean;
+  /**
+   * Cards only: where the weight comes from. 'uv' (default): 1 − v, for cards whose texture spans v = 0 (top)
+   * … 1 (foot), like grass. 'colorAlpha': vertex colour alpha (0 at the foot, 1 at the top) with the phase from
+   * uv2 (the foot position), for atlas billboards whose cell covers only part of v.
+   */
+  weight?: 'uv' | 'colorAlpha';
   /** Amplitude in metres at the tips (weight 1). */
   strength?: number;
   /** Horizontal wind direction (x, z); normalised internally. */
@@ -41,10 +47,19 @@ const WIND_WORLDPOS = /* glsl */ `
   float veloW = 0.0;
   float veloPh = 0.0;
 #ifdef VELO_WIND_CARD
-  #ifdef UV1
+  #ifdef VELO_WIND_COLOR_W
+    #ifdef VERTEXCOLOR
+  veloW = colorUpdated.a;
+    #endif
+    #ifdef UV2
+  veloPh = veloWindHash(uv2Updated) * 6.2831853;
+    #endif
+  #else
+    #ifdef UV1
   veloW = 1.0 - uvUpdated.y;
-  #endif
+    #endif
   veloPh = veloWindHash(positionUpdated.xz) * 6.2831853;
+  #endif
 #else
   #ifdef UV2
   veloW = uv2Updated.x;
@@ -69,13 +84,16 @@ const WIND_WORLDPOS = /* glsl */ `
  */
 export class WindPlugin extends MaterialPluginBase {
   private readonly card: boolean;
+  private readonly colorWeight: boolean;
   private readonly params: Vector4;
   private readonly clock: { time: number };
 
   constructor(material: Material, options: WindOptions = {}) {
     const card = options.card ?? false;
-    super(material, 'VeloWind', 210, { VELO_WIND: true, VELO_WIND_CARD: card });
+    const colorWeight = card && options.weight === 'colorAlpha';
+    super(material, 'VeloWind', 210, { VELO_WIND: true, VELO_WIND_CARD: card, VELO_WIND_COLOR_W: colorWeight });
     this.card = card;
+    this.colorWeight = colorWeight;
     const [dx, dz] = options.direction ?? [1, 0.35];
     const len = Math.hypot(dx, dz) || 1;
     this.params = new Vector4(dx / len, dz / len, options.strength ?? 0.15, 0);
@@ -101,6 +119,7 @@ export class WindPlugin extends MaterialPluginBase {
     const d = defines as unknown as Record<string, boolean>;
     d['VELO_WIND'] = true;
     d['VELO_WIND_CARD'] = this.card;
+    d['VELO_WIND_COLOR_W'] = this.colorWeight;
   }
 
   override getUniforms() {

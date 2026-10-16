@@ -333,7 +333,7 @@ Blumenbüschel am Straßenrand.
 | P3.3 | 3B | Artenparameter (8 Bäume, 2 Büsche) im Studio abstimmen | fertig |
 | P3.5 | 3B | Wind-Shader-Plugin | fertig |
 | P3.4 | 3C | Billboards aus den 3D-Bäumen backen (zur Laufzeit, Farbe + Normale) | fertig |
-| P3.7 | 3D | Fernbereich: gebackene Billboards statt Canvas-Atlas, Artwahl, Instanzliste | offen |
+| P3.7 | 3D | Fernbereich: gebackene Billboards statt Canvas-Atlas, Artwahl, Instanzliste | fertig |
 | P3.6 | 3E | Nahbereich: 3D-Bäume als Thin Instances | offen |
 | P3.8 | 3F | Gras, Blumen und Farn am Straßenrand | offen |
 | P3.9 | 3G | Abnahme-Screenshots + Bildrate | offen |
@@ -555,6 +555,11 @@ P3.7 läuft vor P3.6, weil es die Instanzliste liefert; P3.6, P3.7 und P3.8 änd
   (v = 0 unten). Der Farbatlas ist vormultipliziert (Hintergrund 0,0,0,0, Laub Alpha 1): im
   Billboard-Plugin bei `CUSTOM_FRAGMENT_UPDATE_DIFFUSE` `baseColor.rgb /= max(baseColor.a, 0.001)`,
   sonst bekommen ferne Bäume dunkle Ränder. `atlas.color.hasAlpha = true` setzen.
+- Stand nach P3.7: kein `bumpTexture`. Das `BillboardPlugin` baut die Normale bei
+  `CUSTOM_FRAGMENT_BEFORE_LIGHTS` aus `atlas.normal` und dem Kartenrahmen, wobei die Tiefenkomponente
+  zur Betrachterseite zeigt (gekreuzte Karten von hinten wären sonst dunkel). Wind der Billboards:
+  `WindPlugin` mit `weight: 'colorAlpha'` (Gewicht = Vertex-Alpha, Phase aus uv2 = Fußpunkt).
+  `buildVegetation` ist async, das Material bleibt nach `freezeMaterials` aufgetaut (`afterFreeze`).
 - Abnahme: Screenshots aller drei Stellen mit `mittel` und `hoch`: Fernwald zeigt Kronen mit Licht-
   und Schattenseite passend zur Sonne, keine dunklen Ränder, Arten unterscheidbar (Zypressen, Palmen
   am Seeufer, Kastanienwald). Ladezeit der Strecke im Bericht (vorher/nachher).

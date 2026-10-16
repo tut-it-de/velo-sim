@@ -24,7 +24,7 @@ import { buildRouteRibbon } from './roadRibbon';
 import { buildSideRoads } from './sideRoads';
 import { SkyDome } from './sky';
 import { RealTerrain } from './terrain';
-import { buildVegetation } from './vegetation';
+import { buildVegetation, type Vegetation } from './vegetation';
 import { LakeWater } from './water';
 import { loadWorldData, type Flora, type Place, type WorldData } from './worldData';
 
@@ -69,6 +69,7 @@ export class RealWorld {
     private readonly sun: DirectionalLight,
     private readonly water: LakeWater,
     private readonly sky: SkyDome,
+    private readonly vegetation: Vegetation,
   ) {}
 
   static async build(scene: Scene, track: Track, quality: QualityProfile, onProgress?: (msg: string) => void): Promise<RealWorld> {
@@ -116,7 +117,7 @@ export class RealWorld {
     const landmarks = buildLandmarks(scene, data, field);
 
     await step(FLORA_STEP[data.look.flora]);
-    const trees = buildVegetation(scene, data, corridor, buildingIndex, quality);
+    const vegetation = await buildVegetation(scene, data, corridor, buildingIndex, quality);
 
     await step('Dorfstraßen und Feldwege …');
     buildSideRoads(scene, data, corridor, quality);
@@ -132,11 +133,11 @@ export class RealWorld {
       ...lodMasters(terrain.meshes),
       ...buildings,
       ...(landmarks.solid ? [landmarks.solid] : []),
-      ...(quality.level === 'hoch' || quality.level === 'ultra' ? trees : []),
+      ...(quality.level === 'hoch' || quality.level === 'ultra' ? vegetation.meshes : []),
       sky.mesh,
     ]);
 
-    const world = new RealWorld(scene, data, corridor, sun, water, sky);
+    const world = new RealWorld(scene, data, corridor, sun, water, sky, vegetation);
     if (quality.cascades > 0) {
       // Cascades cover trees, walls and houses near the rider: their shadows fall over the road.
       const csm = new CascadedShadowGenerator(quality.shadowMap, sun);
@@ -155,7 +156,7 @@ export class RealWorld {
       const casterList = csm.getShadowMap()?.renderList;
       // Alpha-tested tree billboards cast leaf-shaped shadows; verges blend into the terrain and stay out.
       const casters: Mesh[] = [
-        ...trees,
+        ...vegetation.meshes,
         ...buildings,
         ...ribbon.other.filter((m) => !m.name.startsWith('verge-')),
         ...(landmarks.solid ? [landmarks.solid] : []),
@@ -216,6 +217,7 @@ export class RealWorld {
   update(dt: number, camera: Vector3, rider: Vector3): void {
     this.water.update(dt);
     this.sky.update(dt, camera.x, camera.z);
+    this.vegetation.setNearFade(camera, { inner: 0, outer: 0 });
     if (this.shadow && !this.cascaded) this.sun.position.copyFrom(rider).subtractInPlace(SUN_DIR.scale(70));
   }
 
@@ -223,6 +225,7 @@ export class RealWorld {
   afterFreeze(): void {
     this.water.material.unfreeze();
     this.sky.material.unfreeze();
+    this.vegetation.afterFreeze();
   }
 
   dispose(): void {
