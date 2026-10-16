@@ -21,6 +21,7 @@ import { fitGroundModel } from './ground';
 import { BuildingIndex, HeightField } from './heightField';
 import type { QualityProfile } from './quality';
 import { buildRouteRibbon } from './roadRibbon';
+import { buildRoadsideFlora, type RoadsideFlora } from './roadsideFlora';
 import { buildSideRoads } from './sideRoads';
 import { SkyDome } from './sky';
 import { RealTerrain } from './terrain';
@@ -73,6 +74,7 @@ export class RealWorld {
     private readonly water: LakeWater,
     private readonly sky: SkyDome,
     private readonly vegetation: Vegetation,
+    private readonly flora: RoadsideFlora | null,
   ) {}
 
   static async build(scene: Scene, track: Track, quality: QualityProfile, onProgress?: (msg: string) => void): Promise<RealWorld> {
@@ -125,6 +127,9 @@ export class RealWorld {
     await step('Dorfstraßen und Feldwege …');
     buildSideRoads(scene, data, corridor, quality);
 
+    await step('Gras und Blumen am Straßenrand …');
+    const flora = quality.level === 'niedrig' ? null : await buildRoadsideFlora(scene, corridor, buildingIndex, quality);
+
     buildGate(scene, track, 0, 'START · ZIEL', '#ff7a1a');
     buildSegmentGates(scene, track, track.segments);
 
@@ -132,7 +137,7 @@ export class RealWorld {
     const water = new LakeWater(scene, data, quality);
     // Created last: drawn after the landscape, so the depth test skips most sky pixels.
     const sky = new SkyDome(scene, REAL_CAMERA_MAX_Z * 0.85);
-    const world = new RealWorld(scene, data, corridor, sun, water, sky, vegetation);
+    const world = new RealWorld(scene, data, corridor, sun, water, sky, vegetation, flora);
     if (quality.cascades > 0) {
       // Cascades cover trees, walls and houses near the rider: their shadows fall over the road.
       const csm = new CascadedShadowGenerator(quality.shadowMap, sun);
@@ -233,6 +238,7 @@ export class RealWorld {
     this.water.material.unfreeze();
     this.sky.material.unfreeze();
     this.vegetation.afterFreeze();
+    this.flora?.afterFreeze();
     this.nearTrees?.afterFreeze();
   }
 

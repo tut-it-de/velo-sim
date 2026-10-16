@@ -335,7 +335,7 @@ Blumenbüschel am Straßenrand.
 | P3.4 | 3C | Billboards aus den 3D-Bäumen backen (zur Laufzeit, Farbe + Normale) | fertig |
 | P3.7 | 3D | Fernbereich: gebackene Billboards statt Canvas-Atlas, Artwahl, Instanzliste | fertig |
 | P3.6 | 3E | Nahbereich: 3D-Bäume als Thin Instances | fertig |
-| P3.8 | 3F | Gras, Blumen und Farn am Straßenrand | offen |
+| P3.8 | 3F | Gras, Blumen und Farn am Straßenrand | fertig |
 | P3.9 | 3G | Abnahme-Screenshots + Bildrate | offen |
 
 Eckwerte (Bildrate nach Phase 2 auf Ultra, Hoch und iPad/Mittel flüssig):
@@ -489,7 +489,7 @@ P3.7 läuft vor P3.6, weil es die Instanzliste liefert; P3.6, P3.7 und P3.8 änd
 - `WindPlugin extends MaterialPluginBase` (Priorität 210), Defines `VELO_WIND` und
   `VELO_WIND_CARD` (Billboard/Gras: Gewicht aus der Texturkoordinate statt `uv2`).
   Uniform `veloWind` (vec4: Richtung x, Richtung z, Stärke, Zeit). Statische Funktion
-  `WindPlugin.update(scene, dt)` setzt die Zeit für alle Instanzen (ein gemeinsamer Wert).
+  Die Windzeit ist ein gemeinsamer Wert je Szene und läuft von selbst (`onBeforeRenderObservable`).
 - Vertex (`CUSTOM_VERTEX_UPDATE_POSITION`): `w = uv2.x` (bzw. bei `VELO_WIND_CARD`:
   `w = 1.0 - uv.y`), `ph = uv2.y` (bzw. aus `positionUpdated.xz` gehasht);
   Versatz = `dir * strength * w*w * (0.6 * sin(t*1.3 + ph) + 0.25 * sin(t*3.1 + ph*2.3))`;
@@ -520,7 +520,7 @@ P3.7 läuft vor P3.6, weil es die Instanzliste liefert; P3.6, P3.7 und P3.8 änd
   - Schatten: wenn `shadow`, beide Meshes in die `renderList` (Laub mit Alpha-Test).
 - `realWorld.ts`: nur bei `ultra`/`hoch` anlegen (Instanzen aus `buildVegetation`, siehe P3.7);
   in `update` `nearTrees.update(camera)` und danach `vegetation.setNearFade(camera, nearTrees.fade)`.
-  `WindPlugin.update(scene, dt)` ebenfalls in `update`.
+  (Die Windzeit läuft im `WindPlugin` von selbst.)
 - Abnahme: Screenshots `forest` und `wall` (ultra, hoch): Bäume an der Straße sind 3D mit Ästen,
   Schatten mit Blattstruktur auf der Straße, kein Aufploppen beim Fahren (kurzes Video oder drei
   Screenshots im Abstand von 20 m Fahrt), Konsole ohne Fehler. Dreiecke gesamt im Bericht

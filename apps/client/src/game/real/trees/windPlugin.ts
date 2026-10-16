@@ -1,13 +1,20 @@
 import { MaterialPluginBase, type Material, type MaterialDefines, type Scene, type UniformBuffer, Vector4 } from '@babylonjs/core';
 
-/** Shared wind clock per scene: every wind material of the scene reads the same time value. */
+/**
+ * Shared wind clock per scene: every wind material of the scene reads the same time value. The clock advances by
+ * itself before every render of the scene, so no caller has to drive it.
+ */
 const windClocks = new WeakMap<Scene, { time: number }>();
 
 function clockOf(scene: Scene): { time: number } {
   let clock = windClocks.get(scene);
   if (!clock) {
-    clock = { time: 0 };
-    windClocks.set(scene, clock);
+    const c = { time: 0 };
+    windClocks.set(scene, c);
+    scene.onBeforeRenderObservable.add(() => {
+      c.time += scene.getEngine().getDeltaTime() / 1000;
+    });
+    clock = c;
   }
   return clock;
 }
@@ -80,7 +87,7 @@ const WIND_WORLDPOS = /* glsl */ `
 
 /**
  * Vertex-shader wind for StandardMaterial. Uniform `veloWind` = (dir x, dir z, strength, time).
- * Create one per material (wood and leaves separately), then call `WindPlugin.update(scene, dt)` once per frame.
+ * Create one per material (wood and leaves separately); the scene's wind clock runs by itself.
  */
 export class WindPlugin extends MaterialPluginBase {
   private readonly card: boolean;
@@ -99,11 +106,6 @@ export class WindPlugin extends MaterialPluginBase {
     this.params = new Vector4(dx / len, dz / len, options.strength ?? 0.15, 0);
     this.clock = clockOf(material.getScene());
     this._enable(true);
-  }
-
-  /** Advances the wind clock of a scene by `dt` seconds. */
-  static update(scene: Scene, dt: number): void {
-    clockOf(scene).time += dt;
   }
 
   override getClassName(): string {

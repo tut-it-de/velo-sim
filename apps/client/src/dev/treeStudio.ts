@@ -171,7 +171,6 @@ function showTrees(): void {
   camera.minZ = 0.5;
 
   engine.runRenderLoop(() => {
-    if (wind) WindPlugin.update(scene, engine.getDeltaTime() / 1000);
     scene.render();
   });
 }

@@ -424,7 +424,6 @@ export async function buildVegetation(
   const plugin = new BillboardPlugin(mat, atlas.normal);
   if (quality.level !== 'niedrig') {
     new WindPlugin(mat, { card: true, weight: 'colorAlpha', strength: 0.25 });
-    scene.onBeforeRenderObservable.add(() => WindPlugin.update(scene, scene.getEngine().getDeltaTime() / 1000));
   }
   plugin.params.set(noFade.inner, noFade.outer, 0, 0);
 
