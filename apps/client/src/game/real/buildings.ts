@@ -226,13 +226,20 @@ function walls(md: MeshData, ring: Float32Array, base: number, top: number, grou
     const u0 = run / 7.2;
     const u1 = (run + len) / 7.2;
     run += len;
-    const vb = (base - ground) / 6.2;
-    const vt = (top - ground) / 6.2;
-    const a = md.vertex(x0, base, z0, nx, 0, nz, u0, vb, ...color);
-    const b = md.vertex(x0, top, z0, nx, 0, nz, u0, vt, ...color);
-    const c = md.vertex(x1, top, z1, nx, 0, nz, u1, vt, ...color);
-    const d = md.vertex(x1, base, z1, nx, 0, nz, u1, vb, ...color);
-    md.quad(a, b, c, d, nx, 0, nz);
+    // fake ambient occlusion: darker where the wall meets the ground
+    const skirt = ground + 1.8;
+    const rows: Array<[number, number]> = skirt > base + 0.2 && top > skirt + 0.5 ? [[base, 0.6], [skirt, 1], [top, 1]] : [[base, 0.8], [top, 1]];
+    for (let r = 0; r + 1 < rows.length; r++) {
+      const [y0, s0] = rows[r]!;
+      const [y1, s1] = rows[r + 1]!;
+      const v0 = (y0 - ground) / 6.2;
+      const v1 = (y1 - ground) / 6.2;
+      const a = md.vertex(x0, y0, z0, nx, 0, nz, u0, v0, color[0] * s0, color[1] * s0, color[2] * s0);
+      const b = md.vertex(x0, y1, z0, nx, 0, nz, u0, v1, color[0] * s1, color[1] * s1, color[2] * s1);
+      const c = md.vertex(x1, y1, z1, nx, 0, nz, u1, v1, color[0] * s1, color[1] * s1, color[2] * s1);
+      const d = md.vertex(x1, y0, z1, nx, 0, nz, u1, v0, color[0] * s0, color[1] * s0, color[2] * s0);
+      md.quad(a, b, c, d, nx, 0, nz);
+    }
   }
 }
 

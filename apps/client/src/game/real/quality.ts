@@ -28,14 +28,18 @@ export interface QualityProfile {
   shadowMap: number;
   /** Fine ground detail and forest canopy relief in the terrain shader. */
   detail: boolean;
+  /** Colour grading and vignette on top of the tone mapping. */
+  grading: boolean;
+  /** HDR post-process pipeline (MSAA, bloom, tone mapping in one pass); otherwise tone mapping runs in the materials. */
+  postProcess: boolean;
   /** Adapt the render resolution to keep the frame rate up. */
   dynamicResolution: boolean;
 }
 
 const PROFILES: Record<QualityLevel, Omit<QualityProfile, 'dynamicResolution'>> = {
-  hoch: { level: 'hoch', dprCap: 1.75, terrainLod: [1400, 3400], mirror: 0.5, treeRadius: 320, treeDistance: 2600, buildingDistance: 4200, shadowMap: 1024, detail: true },
-  mittel: { level: 'mittel', dprCap: 1.3, terrainLod: [950, 2300], mirror: 0.3, treeRadius: 210, treeDistance: 1800, buildingDistance: 3000, shadowMap: 512, detail: true },
-  niedrig: { level: 'niedrig', dprCap: 1, terrainLod: [600, 1500], mirror: 0, treeRadius: 110, treeDistance: 1100, buildingDistance: 1900, shadowMap: 0, detail: false },
+  hoch: { level: 'hoch', dprCap: 1.75, terrainLod: [1400, 3400], mirror: 0.5, treeRadius: 320, treeDistance: 2600, buildingDistance: 4200, shadowMap: 1024, detail: true, grading: true, postProcess: true },
+  mittel: { level: 'mittel', dprCap: 1.3, terrainLod: [950, 2300], mirror: 0.3, treeRadius: 210, treeDistance: 1800, buildingDistance: 3000, shadowMap: 512, detail: true, grading: true, postProcess: false },
+  niedrig: { level: 'niedrig', dprCap: 1, terrainLod: [600, 1500], mirror: 0, treeRadius: 110, treeDistance: 1100, buildingDistance: 1900, shadowMap: 0, detail: false, grading: false, postProcess: false },
 };
 
 function isAppleTablet(): boolean {

@@ -1,7 +1,21 @@
-import { Color3, Matrix, Mesh, MeshBuilder, Quaternion, StandardMaterial, Texture, Vector3, type Scene } from '@babylonjs/core';
+import {
+  Color3,
+  MaterialPluginBase,
+  Matrix,
+  Mesh,
+  MeshBuilder,
+  Quaternion,
+  StandardMaterial,
+  Texture,
+  Vector3,
+  type Material,
+  type Scene,
+} from '@babylonjs/core';
 import { smoothstep } from '../noise';
 import { EDGE, ROW_STRIDE, SHOULDER, VERGE_BLEND, WALL_THICK, type RouteCorridor } from './corridor';
+import { SKY, TO_SUN } from './env';
 import { MeshData } from './meshData';
+import { NOISE_GLSL } from './terrainMaterial';
 import type { RealTerrain } from './terrain';
 import { roadTexture, roadTextureRepeat, stoneTexture } from './textures';
 import type { Architecture } from './worldData';
@@ -25,6 +39,47 @@ interface Frame {
   z: number;
   rx: number;
   rz: number;
+}
+
+const glslColor = (hex: string) => {
+  const c = Color3.FromHexString(hex);
+  return `vec3(${c.r.toFixed(4)}, ${c.g.toFixed(4)}, ${c.b.toFixed(4)})`;
+};
+
+/**
+ * Asphalt that is not one flat texture: large patches of older and newer surface, darker strips along
+ * the edges, and a Fresnel sheen of sky and sun at grazing angles (the bright road against the light).
+ */
+class AsphaltPlugin extends MaterialPluginBase {
+  constructor(material: Material) {
+    super(material, 'VeloAsphalt', 200);
+    this._enable(true);
+  }
+
+  override getClassName(): string {
+    return 'VeloAsphaltPlugin';
+  }
+
+  override getCustomCode(shaderType: string) {
+    if (shaderType !== 'fragment') return null;
+    return {
+      CUSTOM_FRAGMENT_DEFINITIONS: NOISE_GLSL,
+      CUSTOM_FRAGMENT_UPDATE_DIFFUSE: /* glsl */ `
+{
+  vec2 veloP = vPositionW.xz;
+  baseColor.rgb *= 0.88 + 0.13 * veloNoise(veloP * 0.045) + 0.09 * veloNoise(veloP * 0.23 + 3.7);
+  float veloU = vDiffuseUV.x;
+  baseColor.rgb *= 0.86 + 0.14 * smoothstep(0.06, 0.17, veloU) * smoothstep(0.94, 0.83, veloU);
+}`,
+      CUSTOM_FRAGMENT_BEFORE_FOG: /* glsl */ `
+{
+  vec3 veloV = normalize(vEyePosition.xyz - vPositionW);
+  float veloFres = pow(1.0 - clamp(dot(normalW, veloV), 0.0, 1.0), 5.0);
+  float veloGlare = pow(max(dot(reflect(-veloV, normalW), vec3(${TO_SUN.x.toFixed(4)}, ${TO_SUN.y.toFixed(4)}, ${TO_SUN.z.toFixed(4)})), 0.0), 6.0);
+  color.rgb += (${glslColor(SKY.horizon)} * 0.1 + ${glslColor(SKY.sun)} * veloGlare * 0.45) * veloFres;
+}`,
+    };
+  }
 }
 
 /** Stretches of rows to draw: everything except the second pass of out-and-back sections. */
@@ -93,6 +148,7 @@ export function buildRouteRibbon(scene: Scene, c: RouteCorridor, terrain: RealTe
     (m.diffuseTexture as Texture).wrapV = Texture.WRAP_ADDRESSMODE;
     m.specularColor = new Color3(0.07, 0.07, 0.07);
     m.specularPower = 24;
+    new AsphaltPlugin(m);
   }
   const stoneMat = new StandardMaterial('stone', scene);
   stoneMat.diffuseTexture = stoneTexture(scene);

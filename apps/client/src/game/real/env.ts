@@ -10,9 +10,9 @@ export const SKY = {
   mid: '#6f9fd6',
   horizon: '#cddcea',
   /** Haze the fog fades distant mountains into. */
-  fog: '#c4d3e2',
+  fog: '#b3c6dc',
   sun: '#fff4dc',
 };
 
-/** Exponential-squared fog: mountains 10 km away stay visible, 30 km away they are gone. */
-export const FOG_DENSITY = 0.000068;
+/** Exponential fog (aerial perspective): a quarter of the haze colour at 5 km, 70 % at 20 km. */
+export const FOG_DENSITY = 0.00006;

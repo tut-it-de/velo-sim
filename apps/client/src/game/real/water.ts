@@ -1,5 +1,6 @@
 import {
   Color3,
+  Constants,
   MaterialPluginBase,
   MirrorTexture,
   Plane,
@@ -72,6 +73,10 @@ const BEFORE_FOG = /* glsl */ `
 #ifdef VELO_MIRROR
   vec2 veloUv = gl_FragCoord.xy * veloParams.yz + veloN.xz * 0.06 * veloParams.w;
   vec3 veloRefl = texture2D(veloMirror, clamp(veloUv, vec2(0.001), vec2(0.999))).rgb;
+#ifdef IMAGEPROCESSINGPOSTPROCESS
+  // the HDR pipeline renders the mirror in linear space; this shader mixes in gamma space
+  veloRefl = toGammaSpace(veloRefl);
+#endif
 #else
   float veloEl = clamp(veloR.y, 0.0, 1.0);
   vec3 veloRefl = mix(${glslColor(SKY.fog)}, mix(${glslColor(SKY.mid)}, ${glslColor(SKY.zenith)}, smoothstep(0.25, 0.9, veloEl)), smoothstep(0.0, 0.25, veloEl));
@@ -206,7 +211,10 @@ export class LakeWater {
     // worlds without a lake (mountain roads): no water mesh and no mirror pass
     const hasWater = mask.some((v) => v !== 0);
     if (hasWater && quality.mirror > 0) {
-      const mirror = new MirrorTexture('lake-mirror', { ratio: quality.mirror }, scene, false, undefined, Texture.BILINEAR_SAMPLINGMODE);
+      // linear HDR colour with the post-process pipeline: half float keeps dark shores free of banding
+      const hdr = quality.postProcess && scene.getEngine().getCaps().textureHalfFloatRender;
+      const type = hdr ? Constants.TEXTURETYPE_HALF_FLOAT : undefined;
+      const mirror = new MirrorTexture('lake-mirror', { ratio: quality.mirror }, scene, false, type, Texture.BILINEAR_SAMPLINGMODE);
       mirror.mirrorPlane = new Plane(0, -1, 0, wl);
       mirror.refreshRate = quality.level === 'hoch' ? 1 : 2;
       mirror.clearColor = Color3.FromHexString(SKY.fog).toColor4(1);

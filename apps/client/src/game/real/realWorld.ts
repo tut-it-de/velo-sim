@@ -86,20 +86,21 @@ export class RealWorld {
 
     const fog = Color3.FromHexString(SKY.fog);
     scene.clearColor = new Color4(fog.r, fog.g, fog.b, 1);
-    scene.fogMode = 2; // Scene.FOGMODE_EXP2
+    scene.fogMode = 1; // Scene.FOGMODE_EXP: aerial perspective grows linearly with the air mass
     scene.fogDensity = FOG_DENSITY;
     scene.fogColor = fog;
     scene.ambientColor = Color3.Black();
 
+    // Sun about 2.5 times the sky fill on level ground: warm direct light, blue-grey shade, earthy bounce.
     const hemi = new HemisphericLight('sky-light', new Vector3(0, 1, 0), scene);
     hemi.intensity = 0.58;
-    hemi.diffuse = new Color3(0.86, 0.92, 1);
-    hemi.groundColor = new Color3(0.3, 0.29, 0.25);
+    hemi.diffuse = new Color3(0.76, 0.86, 1);
+    hemi.groundColor = new Color3(0.34, 0.31, 0.24);
     hemi.specular = Color3.Black();
     const sun = new DirectionalLight('sun', SUN_DIR.clone(), scene);
-    sun.intensity = 1.08;
-    sun.diffuse = new Color3(1, 0.95, 0.86);
-    sun.specular = new Color3(1, 0.95, 0.86);
+    sun.intensity = 1.28;
+    sun.diffuse = new Color3(1, 0.93, 0.8);
+    sun.specular = new Color3(1, 0.93, 0.8);
 
     const terrain = await RealTerrain.build(scene, data, field, corridor, quality, step);
 

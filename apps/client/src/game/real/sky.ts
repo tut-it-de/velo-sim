@@ -1,5 +1,6 @@
 import { Color3, Mesh, MeshBuilder, ShaderMaterial, Vector4, type Scene } from '@babylonjs/core';
 import { SKY, TO_SUN } from './env';
+import { shaderImageProcessing } from './grading';
 import { NOISE_GLSL } from './terrainMaterial';
 
 const glslColor = (hex: string) => {
@@ -29,6 +30,9 @@ precision highp float;
 varying vec3 vDir;
 uniform vec4 veloSky;    // time, camera x, camera z, cloud cover
 uniform vec4 veloSunDir;
+#include<helperFunctions>
+#include<imageProcessingDeclaration>
+#include<imageProcessingFunctions>
 ${NOISE_GLSL}
 float fbm(vec2 p) {
   float s = 0.0;
@@ -68,7 +72,11 @@ void main() {
   col = mix(col, ${glslColor(SKY.sun)} * 1.4, smoothstep(0.99993, 0.99997, mu));
   // haze band: below the horizon the sky is the fog colour so distant mountains melt into it
   col = mix(${glslColor(SKY.fog)}, col, smoothstep(-0.03, 0.06, up));
-  gl_FragColor = vec4(col, 1.0);
+  vec4 color = vec4(toLinearSpace(col), 1.0);
+#if defined(IMAGEPROCESSING) && !defined(IMAGEPROCESSINGPOSTPROCESS)
+  color = applyImageProcessing(color);
+#endif
+  gl_FragColor = color;
 }
 `;
 
@@ -84,12 +92,18 @@ export class SkyDome {
     this.mesh.isPickable = false;
     this.mesh.applyFog = false;
     this.mesh.alwaysSelectAsActiveMesh = true;
+    // the sky goes through the same tone mapping and grading as the lit materials
+    const ip = shaderImageProcessing(scene);
     this.material = new ShaderMaterial(
       'sky',
       scene,
       { vertexSource: VERTEX, fragmentSource: FRAGMENT },
-      { attributes: ['position'], uniforms: ['world', 'viewProjection', 'veloSky', 'veloSunDir'] },
+      { attributes: ['position'], uniforms: ['world', 'viewProjection', 'veloSky', 'veloSunDir', ...ip.uniforms], defines: ip.defines },
     );
+    this.material.onBindObservable.add(() => {
+      const effect = this.material.getEffect();
+      if (effect) ip.bind(effect);
+    });
     this.material.backFaceCulling = false;
     this.material.setVector4('veloSunDir', new Vector4(TO_SUN.x, TO_SUN.y, TO_SUN.z, 0));
     this.material.setVector4('veloSky', this.params);

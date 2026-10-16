@@ -120,10 +120,13 @@ export function buildVegetation(scene: Scene, data: WorldData, corridor: RouteCo
       const dz = Math.sin(a) * w;
       const bottom = shade * 0.62;
       const top = shade * 1.06;
-      const v0 = md.vertex(x - dx, y, z - dz, 0, 1, 0, u0, 1, tint[0] * bottom, tint[1] * bottom, tint[2] * bottom);
-      const v1 = md.vertex(x + dx, y, z + dz, 0, 1, 0, u1, 1, tint[0] * bottom, tint[1] * bottom, tint[2] * bottom);
-      const v2 = md.vertex(x + dx, y + height, z + dz, 0, 1, 0, u1, 0, tint[0] * top, tint[1] * top, tint[2] * top);
-      const v3 = md.vertex(x - dx, y + height, z - dz, 0, 1, 0, u0, 0, tint[0] * top, tint[1] * top, tint[2] * top);
+      // normals lean outwards from the trunk: each crown gets a sunlit and a shaded side
+      const cx = Math.cos(a);
+      const cz = Math.sin(a);
+      const v0 = md.vertex(x - dx, y, z - dz, -cx * 0.55, 0.83, -cz * 0.55, u0, 1, tint[0] * bottom, tint[1] * bottom, tint[2] * bottom);
+      const v1 = md.vertex(x + dx, y, z + dz, cx * 0.55, 0.83, cz * 0.55, u1, 1, tint[0] * bottom, tint[1] * bottom, tint[2] * bottom);
+      const v2 = md.vertex(x + dx, y + height, z + dz, cx * 0.4, 0.92, cz * 0.4, u1, 0, tint[0] * top, tint[1] * top, tint[2] * top);
+      const v3 = md.vertex(x - dx, y + height, z - dz, -cx * 0.4, 0.92, -cz * 0.4, u0, 0, tint[0] * top, tint[1] * top, tint[2] * top);
       md.idx.push(v0, v1, v2, v0, v2, v3);
     }
   };

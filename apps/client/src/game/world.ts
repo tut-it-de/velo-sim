@@ -16,6 +16,7 @@ import { RiderAvatar, type RiderLook } from './rider';
 import { buildRoadMesh } from './road';
 import { TerrainModel, buildTerrainMesh } from './terrain';
 import { DynamicResolution, resolveQuality, type GraphicsQuality, type QualityProfile } from './real/quality';
+import { setupImagePipeline } from './real/grading';
 import { REAL_CAMERA_MAX_Z, RealWorld, type MinimapData } from './real/realWorld';
 
 export type CameraMode = 'chase' | 'side' | 'top' | 'pov';
@@ -109,6 +110,7 @@ export class GameWorld {
     else this.engine.setHardwareScalingLevel(1 / ratio);
     this.camera.minZ = 0.4;
     this.camera.maxZ = REAL_CAMERA_MAX_Z;
+    setupImagePipeline(this.scene, this.camera, quality);
     this.real = await RealWorld.build(this.scene, this.track, quality, onProgress);
     this.real.addRider(this.rider);
     onProgress?.('Shader werden kompiliert …');
@@ -232,6 +234,7 @@ export class GameWorld {
     const fz = Math.cos(p.heading);
     let pos: Vector3;
     let look: Vector3;
+    let bend = 0;
     switch (this.cameraMode) {
       case 'side': {
         const ahead = t.positionAt(me.distanceM + 3, me.lateralM + 7);
@@ -253,10 +256,18 @@ export class GameWorld {
         break;
       }
       default: {
-        const behind = t.positionAt(me.distanceM - 7, me.lateralM - 0.4);
-        const ahead = t.positionAt(me.distanceM + 8, me.lateralM);
+        // In hairpins the road 7 m back and 8 m ahead lies far to the side: the camera moves in closer
+        // and follows faster, so it stays above the asphalt instead of cutting through the trees on the
+        // inside of the bend and looking across it.
+        const turn = t.positionAt(me.distanceM + 8, me.lateralM).heading - t.positionAt(me.distanceM - 7, me.lateralM).heading;
+        const sharp = Math.min(1, Math.max(0, (Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn))) - 0.5) / 1.1));
+        bend = sharp * sharp * (3 - 2 * sharp);
+        const behind = t.positionAt(me.distanceM - 7 + 2.5 * bend, me.lateralM - 0.4);
+        const ahead = t.positionAt(me.distanceM + 8 - 2 * bend, me.lateralM);
         pos = new Vector3(behind.x, Math.max(behind.y, p.y) + 2.5, behind.z);
-        look = new Vector3(ahead.x, ahead.y + 0.9, ahead.z);
+        // aim partly along the rider's heading rather than across the bend at the road ahead
+        const w = 0.6 * bend;
+        look = new Vector3(ahead.x + (p.x + fx * 6 - ahead.x) * w, ahead.y + 0.9, ahead.z + (p.z + fz * 6 - ahead.z) * w);
       }
     }
     // Smooth the camera offset relative to the rider (not the absolute position),
@@ -268,7 +279,7 @@ export class GameWorld {
       this.camPos = relPos;
       this.camLook = relLook;
     } else {
-      const k = 1 - Math.exp(-dt * (this.cameraMode === 'pov' ? 14 : 4));
+      const k = 1 - Math.exp(-dt * (this.cameraMode === 'pov' ? 14 : 4 + 5 * bend));
       this.camPos = Vector3.Lerp(this.camPos, relPos, k);
       this.camLook = Vector3.Lerp(this.camLook, relLook, k);
     }
