@@ -250,7 +250,7 @@ Fassadenfarben erhalten.
 
 | ID | Gruppe | Aufgabe | Status |
 |---|---|---|---|
-| P2.1 | 2A | Texturgenerator-Grundgerüst | offen |
+| P2.1 | 2A | Texturgenerator-Grundgerüst | fertig |
 | P2.2 | 2B | Asphalt-Detailmap | offen |
 | P2.3 | 2B | Bruchstein-/Mauer-Detailmap | offen |
 | P2.4 | 2B | Putz- und Ziegel-Detailmaps | offen |
@@ -267,7 +267,8 @@ Fassadenfarben erhalten.
   - `voronoi(n, cells, seed)` – kachelbar (Abstände mit Wrap-around), liefert `(f1, f2, cell_id)`.
   - `height_to_normal(h, strength)` – Sobel mit `np.roll` (kachelbar), liefert nx, ny in [0,1].
   - `pack_detail(lum, height, rough, strength)` → RGBA-uint8 nach obiger Belegung.
-  - `save_webp(path, rgba, quality=90)`.
+  - `save_webp(path, rgba, quality=90, lossless=False)`; die Detail-Maps werden **verlustfrei** gespeichert
+    (verlustbehaftetes WebP verdoppelt den Sprung an der Kachelnaht).
 - `texgen.py`: CLI `python3 tools/texgen/texgen.py <name|all>`; Registry `GENERATORS = {}`, jeder
   Generator ist eine Funktion `(n) -> rgba`. Ausgabe nach `apps/client/public/textures/<name>.webp`.
 - README: wie man neu generiert, Belegung der Kanäle, Lizenz (eigene Erzeugung, frei).
