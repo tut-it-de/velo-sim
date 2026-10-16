@@ -336,7 +336,7 @@ Blumenbüschel am Straßenrand.
 | P3.7 | 3D | Fernbereich: gebackene Billboards statt Canvas-Atlas, Artwahl, Instanzliste | fertig |
 | P3.6 | 3E | Nahbereich: 3D-Bäume als Thin Instances | fertig |
 | P3.8 | 3F | Gras, Blumen und Farn am Straßenrand | fertig |
-| P3.9 | 3G | Abnahme-Screenshots + Bildrate | offen |
+| P3.9 | 3G | Abnahme-Screenshots + Bildrate | fertig |
 
 Eckwerte (Bildrate nach Phase 2 auf Ultra, Hoch und iPad/Mittel flüssig):
 
@@ -588,6 +588,10 @@ P3.7 läuft vor P3.6, weil es die Instanzliste liefert; P3.6, P3.7 und P3.8 änd
   Phase 3). Ursache waren die Schatten der Laubkarten in drei Kaskaden mit 2048² (ohne Nah-Baum-Schatten
   11 ms). Korrektur: Ultra-Schattenkarte 1024², Nah-Bäume Ultra 150 bis 55 m → 14–16 ms an allen
   drei Stellen. Hoch unverändert (8,6 ms).
+- Nachtrag (Großer Feldberg, Ultra): dunkle Rechtecke im Himmel und schwarze Bäume. Ursache war SSAO: der
+  G-Puffer zeichnete die Billboard-Karten als volle Vierecke (ohne Nah-Ausblendung und Wind). Korrektur:
+  Meshes mit `metadata.noAmbientOcclusion` bleiben aus dem G-Puffer (`grading.ts`), die Billboards setzen
+  das Flag. Außerdem bekommen die Impostor-RTTs echte Mip-Stufen (`generateMipMaps`). 14,6 ms im Wald.
 
 ### Phase 4 – Straßenrand
 

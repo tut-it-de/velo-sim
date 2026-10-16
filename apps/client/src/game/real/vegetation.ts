@@ -452,6 +452,8 @@ export async function buildVegetation(
     vd.applyToMesh(m, false);
     m.material = mat;
     m.isPickable = false;
+    // kept out of the SSAO G-buffer (grading.ts), which would draw the cards as full quads
+    m.metadata = { noAmbientOcclusion: true };
     m.freezeWorldMatrix();
     m.doNotSyncBoundingInfo = true;
     m.addLODLevel(quality.treeDistance, null);

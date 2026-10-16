@@ -5,6 +5,7 @@ import {
   ImageProcessingConfiguration,
   SSAO2RenderingPipeline,
   ThinEngine,
+  type AbstractMesh,
   type Camera,
   type Effect,
   type Scene,
@@ -87,6 +88,22 @@ export function setupAmbientOcclusion(scene: Scene, camera: Camera, quality: Qua
   ao.minZAspect = 0.5;
   ao.expensiveBlur = true;
   ao.epsilon = 0.02;
+  // Meshes flagged with metadata.noAmbientOcclusion stay out of the G-buffer: the distant billboard trees
+  // would land there as full quads (the pass knows neither their near fade nor the wind) and cast dark
+  // rectangles onto the sky.
+  const gbuffer = scene.geometryBufferRenderer?.getGBuffer();
+  if (gbuffer) {
+    const kept: AbstractMesh[] = [];
+    gbuffer.getCustomRenderList = (_pass, list, length) => {
+      if (!list) return null;
+      kept.length = 0;
+      for (let i = 0; i < length; i++) {
+        const mesh = list[i]!;
+        if (!(mesh.metadata as { noAmbientOcclusion?: boolean } | null)?.noAmbientOcclusion) kept.push(mesh);
+      }
+      return kept;
+    };
+  }
   return ao;
 }
 

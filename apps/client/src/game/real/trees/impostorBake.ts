@@ -165,8 +165,10 @@ export async function bakeImpostors(
   const width = COLUMNS * cw;
   const height = nextPow2(Math.ceil(jobs.length / COLUMNS) * ch);
 
-  const color = new RenderTargetTexture('impostor-color', { width, height }, scene, false, true);
-  const normal = new RenderTargetTexture('impostor-normal', { width, height }, scene, false, true);
+  // generateMipMaps = true: without it the mip levels are never allocated, generateMipMapsFramebuffer below does
+  // nothing, and distant billboards sample undefined levels (dark rectangles in the sky).
+  const color = new RenderTargetTexture('impostor-color', { width, height }, scene, true, true);
+  const normal = new RenderTargetTexture('impostor-normal', { width, height }, scene, true, true);
 
   // Each render clears only its own cell (scissor); the first render clears the whole target.
   let clearRect = { x: 0, y: 0, w: width, h: height };
