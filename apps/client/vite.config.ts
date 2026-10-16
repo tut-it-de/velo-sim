@@ -13,5 +13,9 @@ export default defineConfig({
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 4000,
+    rollupOptions: {
+      // studio.html: avatar preview and reference drawing for development.
+      input: { main: 'index.html', studio: 'studio.html' },
+    },
   },
 });

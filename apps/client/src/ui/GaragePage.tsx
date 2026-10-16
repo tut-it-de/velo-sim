@@ -22,6 +22,8 @@ import { accountStore, isLoggedIn, serverBuy, serverEquip } from '../net/api';
 import { settingsStore } from '../state/settings';
 import { useStore } from '../state/store';
 import { formatDuration } from './components';
+import { AvatarPreview } from './AvatarPreview';
+import { lookFromLoadout } from '../game/look';
 
 const TABS: Array<{ id: ItemType; label: string }> = [
   { id: 'bike', label: 'Räder' },
@@ -87,6 +89,11 @@ export function GaragePage() {
   }, [selectedItem, garage.loadout, tracks, settings, power]);
 
   const items = CATALOG.filter((i) => i.type === tab).sort((a, b) => a.price - b.price);
+  // The preview shows the selected item on the current setup.
+  const previewLook = useMemo(
+    () => lookFromLoadout(selectedItem ? { ...garage.loadout, [selectedItem.type]: selectedItem.id } : garage.loadout),
+    [garage.loadout, selectedItem],
+  );
 
   return (
     <div className="page">
@@ -100,6 +107,7 @@ export function GaragePage() {
         </div>
 
         <div className="card garage-current">
+          <AvatarPreview look={previewLook} />
           <div>
             <div className="muted small">Aktuelle Ausrüstung</div>
             <div className="garage-loadout">

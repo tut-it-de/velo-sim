@@ -1129,6 +1129,13 @@ button.icon {
   justify-content: space-between;
   flex-wrap: wrap;
 }
+.avatar-preview {
+  width: 300px;
+  height: 200px;
+  border-radius: 10px;
+  background: radial-gradient(ellipse at 50% 80%, rgba(255, 255, 255, 0.1), transparent 70%);
+  touch-action: none;
+}
 .garage-loadout {
   display: flex;
   gap: 14px;
