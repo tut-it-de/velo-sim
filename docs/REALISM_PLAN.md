@@ -928,16 +928,123 @@ Grundlagen aus dem Code:
 - Bekannter älterer Fehler, nicht aus Phase 5: von erhöhter Stelle sieht man in Richtung ferner Seeteile eine
   weiße Fläche unter schwebenden Uferbergen (fernes Raster ohne Wasser/Gelände). Kandidat für Phase 6.
 
-### Phase 6 – Fahrer, Rad, Effekte
+### Phase 6 – Fahrer, Effekte, Feinschliff
+
+Ziel: Der Fahrer – das größte Objekt im Bild – wirkt nicht mehr wie eingefärbter Kunststoff: Lycra mit
+Falten und leichtem Glanz, Haut mit weichem, warmem Schatten. Bei schneller Abfahrt verschwimmt der Bildrand
+leicht. Der ferne See leuchtet nicht mehr als weiße Fläche unter den Uferbergen.
+
+Grundlagen aus dem Code:
+- Fahrer: `apps/client/src/game/avatar/`. `MeshKit` (meshKit.ts) baut Meshes nur aus Positionen und
+  Vertexfarben (keine UVs), `build()` ruft `VertexData.applyToMesh`. `cyclist.ts` baut Rumpf/Arme/Kopf
+  (`body`) und die geskinnten Beine (`legs`) mit dem Material `avatarMaterials(scene).cloth` (materials.ts,
+  ein `StandardMaterial` für Lycra **und** Haut, specular 0.07/12). Haut hat die Farbe `skin` (aus
+  `look.skin`, Ohren `skin × 0.92`), Arme sind eine Loft mit Ärmel, Haut und Handschuh in einem.
+- Material-Plugins: wie `TerrainPlugin` (terrainMaterial.ts): `prepareDefinesBeforeAttributes` mit
+  `_needUVs = true`, im Vertex-Shader `uvUpdated` / `positionUpdated` (Bind-Pose, also auch bei den
+  geskinnten Beinen am Körper „festgeklebt“). Verfügbare Hooks im Fragment-Shader: `CUSTOM_FRAGMENT_DEFINITIONS`,
+  `CUSTOM_FRAGMENT_UPDATE_DIFFUSE` (`diffuseColor`), `CUSTOM_FRAGMENT_BEFORE_LIGHTS`, `CUSTOM_FRAGMENT_BEFORE_FOG`
+  (`color`, `normalW`, `viewDirectionW`, `diffuseBase` sind hier gültig).
+- Nachbearbeitung: `real/grading.ts` (`setupImagePipeline`, `DefaultRenderingPipeline` auf hoch/ultra),
+  aufgerufen in `world.ts` (`buildReal`). `World.renderFrame()` kennt die Geschwindigkeit (`me.speedMps`).
+- Ferner See: `real/water.ts` (Spiegel, Fresnel, Ersatzhimmel `veloRefl` mit `SKY.fog` am Horizont,
+  Spiegel-`clearColor` = `SKY.fog`), Talnebel `HAZE_BEFORE_FOG` in `real/terrainMaterial.ts` (bis 0.55
+  Dunst, nahe dem Seespiegel am stärksten). Sichtbar mit
+  `node <scratchpad>/p5/view.mjs http://localhost:4173/ ultra 15600 "Lago di Como" <prefix> 40`
+  (Richtung 1 und 2): ferne Uferberge „schweben“ über einem hellen, fast weißen Band.
 
 | ID | Gruppe | Aufgabe | Status |
 |---|---|---|---|
-| P6.1 | 6A | Stoff-Detailmap für Trikot/Hose, Glanz der Hose | offen |
-| P6.2 | 6A | Haut: weiche Beleuchtung, Muskel-Normalen an Waden/Oberschenkeln | offen |
-| P6.3 | 6B | Bewegungsunschärfe bei Tempo (nur Ultra, schwach) | offen |
-| P6.4 | 6B | Abschluss-Vergleich mit dem Referenzbild | offen |
+| P6.1 | 6A | Lycra: Falten, Struktur und Glanz (Stoff-Plugin) | offen |
+| P6.2 | 6A | Fahrtwind-Unschärfe am Bildrand (nur Ultra) | offen |
+| P6.3 | 6A | Ferner See ohne weißes Band | offen |
+| P6.4 | 6B | Haut: weicher, warmer Schatten und Randlicht | offen |
+| P6.5 | 6C | Abschluss: Vergleich Phase 0 → Phase 6, Bildrate | offen |
 
-Phase 6 wird wie Phase 3 vor dem Start detailliert.
+**P6.1 Lycra: Falten, Struktur und Glanz**
+- Dateien: `apps/client/src/game/avatar/meshKit.ts`, `apps/client/src/game/avatar/cyclist.ts`,
+  `apps/client/src/game/avatar/materials.ts`, neu `apps/client/src/game/avatar/fabricPlugin.ts`
+- `MeshKit`: neues öffentliches Feld `kind: ((col: Color3) => number) | null = null` (wie `skin`). `vertex()`
+  schreibt zusätzlich UVs `[kind ? kind(col) : 1, 0]` in ein neues Array; `build()` setzt `vd.uvs`.
+  Bike-Meshes bleiben damit unverändert (Wert 1, das Plugin hängt nur am `cloth`-Material).
+- `cyclist.ts`: für `body` und `legs` `kit.kind = (c) => (sameHue(c, skin) ? 0 : 1)` – 0 = Haut, 1 = Stoff.
+  `sameHue`: lokale Hilfsfunktion, vergleicht die auf Summe 1 normierten RGB-Anteile mit Toleranz 0.02 (Ohren
+  `skin × 0.92` zählen so mit). Prüfen, dass Handschuhe, Socken, Schuhe, Hose und Trikot 1 bekommen
+  (einmal per `console.info` zählen, wie viele Vertices 0 sind, dann wieder entfernen).
+- `fabricPlugin.ts`: `export class FabricPlugin extends MaterialPluginBase` (Name `VeloFabric`, Priorität 200).
+  - Vertex: `varying vec3 vFabP; varying float vFabKind;` – `vFabP = positionUpdated; vFabKind = uvUpdated.x;`
+    (mit `#ifdef UV1`, sonst 1.0).
+  - `UPDATE_DIFFUSE`, nur Stoff (`vFabKind > 0.5`): Falten als gestreckte Rauschbänder
+    `float f = noise(vec3(vFabP.x * 18.0, vFabP.y * 55.0, vFabP.z * 18.0));`
+    `diffuseColor *= 0.9 + 0.16 * f;` und feines Gewebe `diffuseColor *= 0.97 + 0.06 * noise(vFabP * 420.0);`
+    (eigene kleine 3D-Value-Noise-Funktion in `CUSTOM_FRAGMENT_DEFINITIONS`).
+  - `BEFORE_FOG`, nur Stoff: Stoffglanz (Sheen) am Rand
+    `float rim = pow(1.0 - abs(dot(normalW, viewDirectionW)), 4.0);`
+    `color.rgb += vec3(0.55, 0.58, 0.65) * rim * 0.18 * clamp(dot(diffuseBase, vec3(0.333)), 0.0, 1.0);`
+    Dunkle Hose bekommt so einen leichten Lycra-Schimmer.
+- `materials.ts`: `new FabricPlugin(m.cloth)` beim Anlegen; `cloth.specularColor` auf 0.12, `specularPower` 20.
+- Abnahme: Screenshot `wall` und `forest` (`ultra`, `mittel`) plus Nahbild des Fahrers (Ausschnitt 2× vergrößert):
+  Trikot und Hose zeigen ruhige Faltenbänder und am Rand einen hellen Schimmer, Haut unverändert, kein
+  Flimmern zwischen zwei Bildern im Abstand von 1 s. Bildrate unverändert (±0.3 ms).
+
+**P6.2 Fahrtwind-Unschärfe am Bildrand (nur Ultra)**
+- Dateien: neu `apps/client/src/game/real/speedBlur.ts`, `apps/client/src/game/world.ts`
+- Keine Kamera-Bewegungsunschärfe (die Kamera fährt mit dem Fahrer, der würde mit verwischen), sondern eine
+  radiale Unschärfe zum Bildrand hin, Mitte und Fahrer bleiben scharf.
+- `speedBlur.ts`: `export class SpeedBlur { constructor(camera: Camera); setSpeed(mps: number): void; dispose() }`
+  mit einem `PostProcess('speed-blur', …)` (Fragment-Shader per `Effect.ShadersStore`):
+  ```glsl
+  vec2 d = vUV - vec2(0.5, 0.58);
+  float r = length(d * vec2(aspect, 1.0));
+  float w = smoothstep(0.32, 0.85, r) * strength;   // 0 in der Bildmitte
+  vec3 c = vec3(0.0);
+  for (int i = 0; i < 8; i++) c += texture2D(textureSampler, vUV - d * w * float(i) / 7.0).rgb;
+  gl_FragColor = vec4(c / 8.0, 1.0);
+  ```
+  `strength = clamp((kmh - 40.0) / 30.0, 0.0, 1.0) * 0.06`; bei `strength == 0` den Post-Process mit
+  `enabled = false` abschalten (kostet dann nichts).
+- `world.ts`: in `buildReal` nach `setupImagePipeline` nur bei `quality.level === 'ultra'`
+  `this.speedBlur = new SpeedBlur(this.camera)`; in `renderFrame` `this.speedBlur?.setSpeed(me.speedMps)`;
+  in `dispose` freigeben. Prüfen, dass der Effekt **nach** der Pipeline läuft (Reihenfolge der
+  Post-Processes an der Kamera) – sonst melden.
+- Abnahme: Screenshot `descent` (`ultra`) mit Tempo 70 km/h (Shot-Skript: `speedMps` in einer eigenen
+  Kopie auf 19.5 setzen) und 30 km/h: bei 70 km/h Bäume und Leitplanke am Rand leicht verwischt, Fahrer
+  und Straßenmitte scharf; bei 30 km/h keine Änderung. `hoch` unverändert. Bildrate bei 70 km/h ≤ +0.5 ms.
+
+**P6.3 Ferner See ohne weißes Band**
+- Dateien: `apps/client/src/game/real/water.ts` (falls nötig zusätzlich `HAZE_BEFORE_FOG` in
+  `apps/client/src/game/real/terrainMaterial.ts`)
+- Zuerst Ursache belegen (nur Messung, kein Fix): mit `view.mjs` (15600 m, Höhe 40, Richtung 1) je ein
+  Bild mit (a) Spiegel aus (`water.mirror.renderList = []`, per `page.evaluate` über
+  `window.__velo.world.real`), (b) Talnebel des Geländes aus, (c) Wasser ausgeblendet. Die Farbe des Bandes
+  (Pixelwert) in jedem Fall notieren. Ergebnis im Bericht als kleine Tabelle.
+- Erwartete Ursache und Fix: Das ferne Wasser spiegelt bei flachem Blick fast nur `SKY.fog` (Fresnel → 1),
+  heller als der Dunst an den Bergfüßen. Fix in `BEFORE_FOG` von water.ts:
+  - Reflexion mit der Entfernung dämpfen: `veloF *= mix(1.0, 0.55, smoothstep(2000.0, 12000.0, veloDist))`
+    (`veloDist` = Abstand Kamera–Pixel).
+  - Den Talnebel des Geländes gleich anwenden (gleiche Formel wie `HAZE_BEFORE_FOG`, Wasser liegt auf
+    Seehöhe, also `veloLow = 1`), damit Wasser und Bergfuß in derselben Entfernung denselben Dunst bekommen.
+  - Wenn die Messung eine andere Ursache zeigt: anhalten und melden.
+- Abnahme: `view.mjs`-Bilder Richtung 1 und 2 vorher/nachher plus `descent` und Lago 22300 m
+  (`ultra`, `mittel`): ferner See bläulich-grau und etwas dunkler als der Dunst, Bergfüße gehen ohne harte
+  Kante ins Wasser über; der nahe See (Spiegelung, Glitzern) unverändert.
+
+**P6.4 Haut: weicher, warmer Schatten und Randlicht**
+- Datei: `apps/client/src/game/avatar/fabricPlugin.ts` (nur die Haut-Zweige, `vFabKind < 0.5`)
+- `BEFORE_FOG`, nur Haut:
+  - Licht durch die Haut (Subsurface-Näherung): Schattenseite wärmer statt grau
+    `float lit = clamp(dot(diffuseBase, vec3(0.333)), 0.0, 1.0);`
+    `color.rgb += diffuseColor * vec3(0.16, 0.05, 0.03) * (1.0 - lit);`
+  - Warmes Randlicht gegen die Sonne: `color.rgb += vec3(1.0, 0.55, 0.4) * pow(1.0 - abs(dot(normalW,
+    viewDirectionW)), 3.0) * 0.08 * lit;`
+- `UPDATE_DIFFUSE`, nur Haut: leichte Farbunruhe `diffuseColor *= 0.96 + 0.08 * noise(vFabP * 60.0);`
+- Abnahme: Nahbild des Fahrers (`wall`, `ultra`, Ausschnitt 2×) vorher/nachher: Waden und Arme auf der
+  Schattenseite rötlich-warm statt grau, Gesicht nicht orange; Stoff unverändert.
+
+**P6.5 Abschluss** (Orchestrator)
+- Screenshots `wall`, `forest`, `descent` mit `ultra`, `hoch`, `mittel` gegen den Stand **vor Phase 0**
+  (`baseline/dist-p0`) und vor Phase 6; Bildrate Wald/Ort/Abfahrt auf Ultra und Mittel; Zusammenfassung
+  aller Phasen und offenen Punkte an den Nutzer.
 
 ---
 
