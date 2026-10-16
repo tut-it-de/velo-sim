@@ -120,8 +120,8 @@ Legende Status: `offen` · `läuft` · `fertig` · `verworfen`
 
 | ID | Gruppe | Aufgabe | Status |
 |---|---|---|---|
-| P1.1 | 1A | Neue Verfolger-Kamera | offen |
-| P1.2 | 1A | Tiefe, warme Sonne und Himmelsfarben | offen |
+| P1.1 | 1A | Neue Verfolger-Kamera | fertig |
+| P1.2 | 1A | Tiefe, warme Sonne und Himmelsfarben | fertig |
 | P1.3 | 1B | Kaskadenschatten (Bäume, Mauern, Häuser) | offen |
 | P1.4 | 1B | Filmische Tonwertkurve und Bildstimmung | offen |
 | P1.5 | 1C | Umgebungsverdeckung (SSAO) für Ultra | offen |

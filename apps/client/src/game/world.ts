@@ -60,6 +60,8 @@ export class GameWorld {
   private frameProvider?: (dt: number) => { me: RiderFrame; others: Array<RiderFrame & { id: string }> };
   private camPos?: Vector3;
   private camLook?: Vector3;
+  /** Current (eased) lens field of view in radians. */
+  private fov = 0.95;
   private disposed = false;
   private real: RealWorld | null = null;
   private dynamicResolution: DynamicResolution | null = null;
@@ -76,7 +78,7 @@ export class GameWorld {
     this.camera = new UniversalCamera('cam', new Vector3(0, 10, -10), this.scene);
     this.camera.minZ = 0.1;
     this.camera.maxZ = 22000;
-    this.camera.fov = 1.0;
+    this.camera.fov = this.fov;
     this.camera.inputs.clear();
     this.rider = new RiderAvatar(this.scene, 'me', look);
   }
@@ -235,6 +237,7 @@ export class GameWorld {
     let pos: Vector3;
     let look: Vector3;
     let bend = 0;
+    let k = 1;
     switch (this.cameraMode) {
       case 'side': {
         const ahead = t.positionAt(me.distanceM + 3, me.lateralM + 7);
@@ -262,12 +265,14 @@ export class GameWorld {
         const turn = t.positionAt(me.distanceM + 8, me.lateralM).heading - t.positionAt(me.distanceM - 7, me.lateralM).heading;
         const sharp = Math.min(1, Math.max(0, (Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn))) - 0.5) / 1.1));
         bend = sharp * sharp * (3 - 2 * sharp);
-        const behind = t.positionAt(me.distanceM - 7 + 2.5 * bend, me.lateralM - 0.4);
-        const ahead = t.positionAt(me.distanceM + 8 - 2 * bend, me.lateralM);
-        pos = new Vector3(behind.x, Math.max(behind.y, p.y) + 2.5, behind.z);
+        // Low and close, looking down the road: the rider fills the lower middle of the frame and the
+        // road runs towards the centre of the picture.
+        const behind = t.positionAt(me.distanceM - 4.6 + 1.6 * bend, me.lateralM - 0.25);
+        const ahead = t.positionAt(me.distanceM + 20 - 9 * bend, me.lateralM);
+        pos = new Vector3(behind.x, Math.max(behind.y, p.y) + 1.75, behind.z);
         // aim partly along the rider's heading rather than across the bend at the road ahead
         const w = 0.6 * bend;
-        look = new Vector3(ahead.x + (p.x + fx * 6 - ahead.x) * w, ahead.y + 0.9, ahead.z + (p.z + fz * 6 - ahead.z) * w);
+        look = new Vector3(ahead.x + (p.x + fx * 14 - ahead.x) * w, ahead.y + 1.15, ahead.z + (p.z + fz * 14 - ahead.z) * w);
       }
     }
     // Smooth the camera offset relative to the rider (not the absolute position),
@@ -279,10 +284,13 @@ export class GameWorld {
       this.camPos = relPos;
       this.camLook = relLook;
     } else {
-      const k = 1 - Math.exp(-dt * (this.cameraMode === 'pov' ? 14 : 4 + 5 * bend));
+      k = 1 - Math.exp(-dt * (this.cameraMode === 'pov' ? 14 : 4 + 5 * bend));
       this.camPos = Vector3.Lerp(this.camPos, relPos, k);
       this.camLook = Vector3.Lerp(this.camLook, relLook, k);
     }
+    // Narrower lens for the chase view, wider for the other modes; eased with the same factor.
+    this.fov += ((this.cameraMode === 'chase' ? 0.92 : 1.0) - this.fov) * k;
+    this.camera.fov = this.fov;
     this.camera.position.copyFrom(anchor.add(this.camPos));
     this.camera.setTarget(anchor.add(this.camLook));
   }

@@ -91,16 +91,17 @@ export class RealWorld {
     scene.fogColor = fog;
     scene.ambientColor = Color3.Black();
 
-    // Sun about 2.5 times the sky fill on level ground: warm direct light, blue-grey shade, earthy bounce.
+    // Warm late-afternoon sun about 3 times the sky fill on level ground: low amber direct light,
+    // cool blue-grey shade, earthy bounce from the ground.
     const hemi = new HemisphericLight('sky-light', new Vector3(0, 1, 0), scene);
-    hemi.intensity = 0.58;
-    hemi.diffuse = new Color3(0.76, 0.86, 1);
-    hemi.groundColor = new Color3(0.34, 0.31, 0.24);
+    hemi.intensity = 0.5;
+    hemi.diffuse = new Color3(0.64, 0.76, 1);
+    hemi.groundColor = new Color3(0.36, 0.3, 0.22);
     hemi.specular = Color3.Black();
     const sun = new DirectionalLight('sun', SUN_DIR.clone(), scene);
-    sun.intensity = 1.28;
-    sun.diffuse = new Color3(1, 0.93, 0.8);
-    sun.specular = new Color3(1, 0.93, 0.8);
+    sun.intensity = 1.55;
+    sun.diffuse = new Color3(1, 0.84, 0.64);
+    sun.specular = new Color3(1, 0.84, 0.64);
 
     const terrain = await RealTerrain.build(scene, data, field, corridor, quality, step);
 
