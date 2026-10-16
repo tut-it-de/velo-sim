@@ -334,7 +334,7 @@ Blumenbüschel am Straßenrand.
 | P3.5 | 3B | Wind-Shader-Plugin | fertig |
 | P3.4 | 3C | Billboards aus den 3D-Bäumen backen (zur Laufzeit, Farbe + Normale) | fertig |
 | P3.7 | 3D | Fernbereich: gebackene Billboards statt Canvas-Atlas, Artwahl, Instanzliste | fertig |
-| P3.6 | 3E | Nahbereich: 3D-Bäume als Thin Instances | offen |
+| P3.6 | 3E | Nahbereich: 3D-Bäume als Thin Instances | fertig |
 | P3.8 | 3F | Gras, Blumen und Farn am Straßenrand | offen |
 | P3.9 | 3G | Abnahme-Screenshots + Bildrate | offen |
 

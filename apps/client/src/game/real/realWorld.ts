@@ -24,6 +24,7 @@ import { buildRouteRibbon } from './roadRibbon';
 import { buildSideRoads } from './sideRoads';
 import { SkyDome } from './sky';
 import { RealTerrain } from './terrain';
+import { NearTrees } from './trees/nearTrees';
 import { buildVegetation, type Vegetation } from './vegetation';
 import { LakeWater } from './water';
 import { loadWorldData, type Flora, type Place, type WorldData } from './worldData';
@@ -61,6 +62,8 @@ export class RealWorld {
   /** Cascaded shadows follow the camera; the single shadow map of the older profiles follows the sun. */
   private cascaded = false;
   private readonly casters = new Set<Mesh>();
+  /** 3D trees next to the road (hoch and ultra only). */
+  private nearTrees: NearTrees | null = null;
 
   private constructor(
     private readonly scene: Scene,
@@ -129,14 +132,6 @@ export class RealWorld {
     const water = new LakeWater(scene, data, quality);
     // Created last: drawn after the landscape, so the depth test skips most sky pixels.
     const sky = new SkyDome(scene, REAL_CAMERA_MAX_Z * 0.85);
-    water.setReflected([
-      ...lodMasters(terrain.meshes),
-      ...buildings,
-      ...(landmarks.solid ? [landmarks.solid] : []),
-      ...(quality.level === 'hoch' || quality.level === 'ultra' ? vegetation.meshes : []),
-      sky.mesh,
-    ]);
-
     const world = new RealWorld(scene, data, corridor, sun, water, sky, vegetation);
     if (quality.cascades > 0) {
       // Cascades cover trees, walls and houses near the rider: their shadows fall over the road.
@@ -183,6 +178,17 @@ export class RealWorld {
       for (const m of ribbon.road) m.receiveShadows = true;
       world.shadow = sg;
     }
+    if (quality.level === 'hoch' || quality.level === 'ultra') {
+      // Needs the shadow generator (its casters list), so it is created after the shadow setup.
+      world.nearTrees = new NearTrees(scene, vegetation.instances, quality, world.shadow);
+    }
+    water.setReflected([
+      ...lodMasters(terrain.meshes),
+      ...buildings,
+      ...(landmarks.solid ? [landmarks.solid] : []),
+      ...(quality.level === 'hoch' || quality.level === 'ultra' ? vegetation.meshes : []),
+      sky.mesh,
+    ]);
     return world;
   }
 
@@ -217,7 +223,8 @@ export class RealWorld {
   update(dt: number, camera: Vector3, rider: Vector3): void {
     this.water.update(dt);
     this.sky.update(dt, camera.x, camera.z);
-    this.vegetation.setNearFade(camera, { inner: 0, outer: 0 });
+    this.nearTrees?.update(camera);
+    this.vegetation.setNearFade(camera, this.nearTrees?.fade ?? { inner: 0, outer: 0 });
     if (this.shadow && !this.cascaded) this.sun.position.copyFrom(rider).subtractInPlace(SUN_DIR.scale(70));
   }
 
@@ -226,10 +233,12 @@ export class RealWorld {
     this.water.material.unfreeze();
     this.sky.material.unfreeze();
     this.vegetation.afterFreeze();
+    this.nearTrees?.afterFreeze();
   }
 
   dispose(): void {
     this.water.dispose();
     this.shadow?.dispose();
+    this.nearTrees?.dispose();
   }
 }
