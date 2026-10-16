@@ -170,10 +170,10 @@ Legende Status: `offen` · `läuft` · `fertig` · `verworfen`
     `darkness = 0.32`, `bias = 0.003`, `normalBias = 0.02`, `depthClamp = true`.
   - `sun.autoUpdateExtends`/`shadowFrustumSize`/`shadowMinZ`/`shadowMaxZ` **nicht** setzen (nur im
     alten Zweig).
-  - Werfer: alle Baum-Meshes (`trees`), Gebäude (`buildings`), Mauern/Geländer/Laternen aus `ribbon`
-    (welche Felder `buildRouteRibbon` zurückgibt, in `roadRibbon.ts` nachsehen; **nicht** die
-    Straßenfläche), `landmarks.solid`. Fahrer kommen wie bisher über `addRider`.
-  - Empfänger: `ribbon.road`, Verge-Meshes, Mauern, `terrain.meshes` (nahe LOD), Gebäude.
+  - Werfer: alle Baum-Meshes (`trees`), Gebäude (`buildings`), aus `ribbon.other` alle Meshes, deren
+    Name **nicht** mit `verge-` beginnt (Mauern, Geländer, Laternen; `RibbonMeshes` hat nur `road`
+    und `other`), `landmarks.solid`. **Nicht** die Straßenfläche. Fahrer kommen wie bisher über `addRider`.
+  - Empfänger: `ribbon.road`, alle `ribbon.other`, `terrain.meshes` (nahe LOD), Gebäude.
     Bäume empfangen **keine** Schatten.
   - Feld `shadow` wird zu `ShadowGenerator | CascadedShadowGenerator`
     (`CascadedShadowGenerator` erbt von `ShadowGenerator`, Typ `ShadowGenerator` genügt).
