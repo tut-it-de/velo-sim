@@ -1,10 +1,11 @@
 import type { AbstractEngine, Engine } from '@babylonjs/core';
 
-export type GraphicsQuality = 'auto' | 'hoch' | 'mittel' | 'niedrig';
+export type GraphicsQuality = 'auto' | 'ultra' | 'hoch' | 'mittel' | 'niedrig';
 export type QualityLevel = Exclude<GraphicsQuality, 'auto'>;
 
 export const GRAPHICS_QUALITY_OPTIONS: Array<{ id: GraphicsQuality; label: string; hint: string }> = [
   { id: 'auto', label: 'Automatisch', hint: 'erkennt das Gerät und passt die Auflösung an' },
+  { id: 'ultra', label: 'Ultra', hint: 'Schatten von Bäumen und Häusern, Umgebungsverdeckung – nur starke Grafikkarten' },
   { id: 'hoch', label: 'Hoch', hint: 'Spiegelungen, dichter Wald, Schatten' },
   { id: 'mittel', label: 'Mittel', hint: 'für Laptops und iPad' },
   { id: 'niedrig', label: 'Niedrig', hint: 'für schwache Grafik' },
@@ -26,6 +27,12 @@ export interface QualityProfile {
   buildingDistance: number;
   /** Shadow-map size for riders, 0 = off. */
   shadowMap: number;
+  /** Shadow cascades for trees, walls and houses, 0 = rider shadow only. */
+  cascades: number;
+  /** Reach of the shadows in metres. */
+  shadowDistance: number;
+  /** Ambient occlusion: darkens corners and crevices (contact shadows). */
+  ssao: boolean;
   /** Fine ground detail and forest canopy relief in the terrain shader. */
   detail: boolean;
   /** Colour grading and vignette on top of the tone mapping. */
@@ -37,9 +44,10 @@ export interface QualityProfile {
 }
 
 const PROFILES: Record<QualityLevel, Omit<QualityProfile, 'dynamicResolution'>> = {
-  hoch: { level: 'hoch', dprCap: 1.75, terrainLod: [1400, 3400], mirror: 0.5, treeRadius: 320, treeDistance: 2600, buildingDistance: 4200, shadowMap: 1024, detail: true, grading: true, postProcess: true },
-  mittel: { level: 'mittel', dprCap: 1.3, terrainLod: [950, 2300], mirror: 0.3, treeRadius: 210, treeDistance: 1800, buildingDistance: 3000, shadowMap: 512, detail: true, grading: true, postProcess: false },
-  niedrig: { level: 'niedrig', dprCap: 1, terrainLod: [600, 1500], mirror: 0, treeRadius: 110, treeDistance: 1100, buildingDistance: 1900, shadowMap: 0, detail: false, grading: false, postProcess: false },
+  ultra: { level: 'ultra', dprCap: 2, terrainLod: [1400, 3400], mirror: 0.5, treeRadius: 380, treeDistance: 3200, buildingDistance: 4200, shadowMap: 2048, cascades: 3, shadowDistance: 160, ssao: true, detail: true, grading: true, postProcess: true },
+  hoch: { level: 'hoch', dprCap: 1.75, terrainLod: [1400, 3400], mirror: 0.5, treeRadius: 320, treeDistance: 2600, buildingDistance: 4200, shadowMap: 1024, cascades: 2, shadowDistance: 90, ssao: false, detail: true, grading: true, postProcess: true },
+  mittel: { level: 'mittel', dprCap: 1.3, terrainLod: [950, 2300], mirror: 0.3, treeRadius: 210, treeDistance: 1800, buildingDistance: 3000, shadowMap: 512, cascades: 0, shadowDistance: 0, ssao: false, detail: true, grading: true, postProcess: false },
+  niedrig: { level: 'niedrig', dprCap: 1, terrainLod: [600, 1500], mirror: 0, treeRadius: 110, treeDistance: 1100, buildingDistance: 1900, shadowMap: 0, cascades: 0, shadowDistance: 0, ssao: false, detail: false, grading: false, postProcess: false },
 };
 
 function isAppleTablet(): boolean {

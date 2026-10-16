@@ -69,8 +69,8 @@ Legende Status: `offen` · `läuft` · `fertig` · `verworfen`
 
 | ID | Gruppe | Aufgabe | Status |
 |---|---|---|---|
-| P0.1 | 0A | Qualitätsstufe „Ultra“ | offen |
-| P0.2 | 0A | Screenshot-Werkzeug ins Repo | offen |
+| P0.1 | 0A | Qualitätsstufe „Ultra“ | fertig |
+| P0.2 | 0A | Screenshot-Werkzeug ins Repo | fertig |
 
 **P0.1 Qualitätsstufe „Ultra“**
 - Dateien: `apps/client/src/game/real/quality.ts`, `apps/client/src/game/real/realWorld.ts`,

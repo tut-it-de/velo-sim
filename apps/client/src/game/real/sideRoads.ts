@@ -9,7 +9,7 @@ import type { WorldData } from './worldData';
 const TILE = 768;
 const MAX_STEP = 6;
 const LIFT = 0.12;
-const REACH: Record<QualityProfile['level'], number> = { hoch: 900, mittel: 600, niedrig: 300 };
+const REACH: Record<QualityProfile['level'], number> = { ultra: 1100, hoch: 900, mittel: 600, niedrig: 300 };
 
 /**
  * Village streets, farm lanes and forest tracks from OpenStreetMap, draped over the full-resolution

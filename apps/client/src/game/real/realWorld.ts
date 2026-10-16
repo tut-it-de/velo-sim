@@ -128,7 +128,7 @@ export class RealWorld {
       ...lodMasters(terrain.meshes),
       ...buildings,
       ...(landmarks.solid ? [landmarks.solid] : []),
-      ...(quality.level === 'hoch' ? trees : []),
+      ...(quality.level === 'hoch' || quality.level === 'ultra' ? trees : []),
       sky.mesh,
     ]);
 

@@ -216,7 +216,7 @@ export class LakeWater {
       const type = hdr ? Constants.TEXTURETYPE_HALF_FLOAT : undefined;
       const mirror = new MirrorTexture('lake-mirror', { ratio: quality.mirror }, scene, false, type, Texture.BILINEAR_SAMPLINGMODE);
       mirror.mirrorPlane = new Plane(0, -1, 0, wl);
-      mirror.refreshRate = quality.level === 'hoch' ? 1 : 2;
+      mirror.refreshRate = quality.level === 'hoch' || quality.level === 'ultra' ? 1 : 2;
       mirror.clearColor = Color3.FromHexString(SKY.fog).toColor4(1);
       mirror.wrapU = Texture.CLAMP_ADDRESSMODE;
       mirror.wrapV = Texture.CLAMP_ADDRESSMODE;
