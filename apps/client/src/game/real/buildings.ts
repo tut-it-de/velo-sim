@@ -3,7 +3,7 @@ import { SHOULDER, type RouteCorridor } from './corridor';
 import { applyDetail } from './detailMaps';
 import { MeshData } from './meshData';
 import type { QualityProfile } from './quality';
-import { facadeTexture, roofTexture } from './textures';
+import { facadeBump, facadeTexture, roofTexture } from './textures';
 import type { Architecture, Building } from './worldData';
 
 type RGB = [number, number, number];
@@ -489,6 +489,11 @@ export function buildBuildings(
     // facade units are 7.2 m (walls) and 6.2 m (height) wide, roof units 2 m; plaster tiles 3 m, roof tiles 2 m
     applyDetail(wallMat, scene, 'plaster', [7.2 / 3, 6.2 / 3], { diffuse: 0.3, bump: 0.4 });
     applyDetail(roofMat, scene, 'rooftile', [1, 1], { diffuse: 0.5, bump: 0.8 });
+    // window reveals: parallax from the bump map's alpha; it offsets diffuse and detail lookups too, so the reveals stay on the windows
+    wallMat.bumpTexture = facadeBump(scene, architecture);
+    wallMat.useParallax = true;
+    wallMat.useParallaxOcclusion = false;
+    wallMat.parallaxScaleBias = 0.035;
   }
 
   const chunks = new Map<string, Chunk>();

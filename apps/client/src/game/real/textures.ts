@@ -165,6 +165,35 @@ function shutter(ctx: CanvasRenderingContext2D, sx: number, top: number, sw: num
   for (let y = top + 4; y < bottom; y += 6) ctx.fillRect(sx + 2, y, sw - 4, 2);
 }
 
+/** Glazed opening of one window in the facade texture, canvas px (`floor`/`col` index the window axes). */
+interface WindowRect {
+  floor: number;
+  col: number;
+  cx: number;
+  x0: number;
+  top: number;
+  bottom: number;
+  ww: number;
+  wh: number;
+}
+
+/** Window openings of the facade texture, two axes × two floors, in the order floor-major, then column. */
+function windowRects(style: Architecture, w: number, h: number): WindowRect[] {
+  const mx = w / 7.2;
+  const my = h / 6.2;
+  const rects: WindowRect[] = [];
+  for (let floor = 0; floor < 2; floor++) {
+    for (let col = 0; col < 2; col++) {
+      const cx = (col + 0.5) * 3.6 * mx;
+      const bottom = h - (floor * 3.1 + 0.95) * my;
+      const top = h - (floor * 3.1 + 2.35) * my;
+      const ww = (style === 'german' ? 1.15 : 1.0) * mx;
+      rects.push({ floor, col, cx, x0: cx - ww / 2, top, bottom, ww, wh: bottom - top });
+    }
+  }
+  return rects;
+}
+
 /**
  * Plastered facade, two window axes × two floors (7.2 m × 6.2 m), near-white so the per-building
  * vertex colour sets the paint. Italian: green shutters, stone sills and a string course. German:
@@ -174,7 +203,6 @@ function shutter(ctx: CanvasRenderingContext2D, sx: number, top: number, sw: num
 export function facadeTexture(scene: Scene, style: Architecture = 'italian'): DynamicTexture {
   const tex = canvasTexture(scene, `facade-tex-${style}`, 512, 512, (ctx, w, h) => {
     const rng = createRng(5);
-    const mx = w / 7.2;
     const my = h / 6.2;
     plaster(ctx, rng, w, h, style === 'german' ? 6 : 14);
     if (style === 'italian') {
@@ -182,14 +210,10 @@ export function facadeTexture(scene: Scene, style: Architecture = 'italian'): Dy
       ctx.fillStyle = 'rgba(205,198,186,1)';
       for (const fy of [0, 3.1]) ctx.fillRect(0, h - (fy + 0.02) * my - 5, w, 6);
     }
+    const windows = windowRects(style, w, h);
     for (let floor = 0; floor < 2; floor++) {
       for (let col = 0; col < 2; col++) {
-        const cx = (col + 0.5) * 3.6 * mx;
-        const bottom = h - (floor * 3.1 + 0.95) * my;
-        const top = h - (floor * 3.1 + 2.35) * my;
-        const ww = (style === 'german' ? 1.15 : 1.0) * mx;
-        const x0 = cx - ww / 2;
-        const wh = bottom - top;
+        const { cx, x0, top, bottom, ww, wh } = windows[floor * 2 + col]!;
         if (style === 'italian') {
           const closed = (floor + col * 3) % 4 === 1;
           const green = (sx: number, sw: number) => shutter(ctx, sx, top, sw, bottom, '#4d6a48', 'rgba(20,35,20,0.45)');
@@ -267,6 +291,39 @@ export function facadeTexture(scene: Scene, style: Architecture = 'italian'): Dy
   tex.wrapU = Texture.WRAP_ADDRESSMODE;
   tex.wrapV = Texture.WRAP_ADDRESSMODE;
   return tex;
+}
+
+/**
+ * Height and normal map for the window reveals of `facadeTexture` (parallax facade). Same window layout.
+ * RGB is the normal (flat 128/128/255), alpha the height: wall 255, glazed opening 90 (0.18 m deep). The
+ * four edges of each opening get a 4 px band tilted 45° into the room, so reveals catch light and shade;
+ * the sill below the opening is raised to wall height.
+ */
+export function facadeBump(scene: Scene, style: Architecture = 'italian'): DynamicTexture {
+  const enc = (v: number) => Math.round(128 + 127 * v);
+  const normal = (nx: number, ny: number, alpha: number) => `rgba(${enc(0.7 * nx)},${enc(0.7 * ny)},${enc(0.7)},${alpha})`;
+  const opening = 90 / 255;
+  const band = 4;
+  return canvasTexture(scene, `facade-bump-${style}`, 512, 512, (ctx, w, h) => {
+    ctx.fillStyle = normal(0, 0, 1);
+    ctx.fillRect(0, 0, w, h);
+    for (const r of windowRects(style, w, h)) {
+      ctx.fillStyle = normal(0, 0, opening);
+      ctx.fillRect(r.x0, r.top, r.ww, r.wh);
+      // reveals: left faces +x, right faces -x, head faces down, inner sill faces up (canvas y grows downwards)
+      ctx.fillStyle = normal(1, 0, opening);
+      ctx.fillRect(r.x0, r.top, band, r.wh);
+      ctx.fillStyle = normal(-1, 0, opening);
+      ctx.fillRect(r.x0 + r.ww - band, r.top, band, r.wh);
+      ctx.fillStyle = normal(0, -1, opening);
+      ctx.fillRect(r.x0, r.top, r.ww, band);
+      ctx.fillStyle = normal(0, 1, opening);
+      ctx.fillRect(r.x0, r.bottom - band, r.ww, band);
+      // outer sill, top face up
+      ctx.fillStyle = normal(0, 1, 1);
+      ctx.fillRect(r.x0 - 4, r.bottom, r.ww + 8, band);
+    }
+  }, true);
 }
 
 /** Curved clay tiles ("coppi"), 2 m × 2 m per repeat, light so the vertex colour sets terracotta or stone grey. */
