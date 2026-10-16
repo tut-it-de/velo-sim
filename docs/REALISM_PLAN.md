@@ -747,13 +747,178 @@ Grundlagen aus dem Code (für alle Aufgaben):
 
 ### Phase 5 – Ferne, Himmel, See
 
+Ziel: Der Blick in die Ferne wirkt lebendig – Wolken mit Lichtrand und hohe Schleierwolken, verschneite
+Gipfel über der Baumgrenze, ein See mit feiner Kräuselung, Glitzern und Booten, Dörfer mit Balkonen,
+Kaminen und tiefen Fenstern.
+
+Grundlagen aus dem Code:
+- Höhen sind absolute Meter über Meer (`terrain.bin` / 10). Lago: Wasser 198 m, Gipfel bis 2384 m im
+  mittleren, bis 3580 m im Horizont-Raster. Alpe d'Huez bis 3970 m. Feldberg bis 878 m (kein Schnee).
+- Himmel: `sky.ts`, eigener `ShaderMaterial`, eine Cumulus-Schicht 1.8 km hoch (`fbm`, `veloSky` =
+  Zeit, Kamera x/z, Bedeckung 0.42). `mu = dot(d, sun)`.
+- See: `water.ts`, `WaterPlugin` mit analytischen Wellen (blenden über `veloFoot` aus, d. h. wenn ein
+  Pixel größer als ein Teil der Wellenlänge ist), Spiegel (`MirrorTexture`) auf Hoch/Ultra/Mittel.
+- Gelände: `terrainMaterial.ts`, `UPDATE_DIFFUSE` (Variablen `veloCol`, `veloUp`, `veloForest`,
+  `veloP`, `veloRock`). Alle drei Raster nutzen dasselbe Plugin.
+- Häuser: `buildings.ts`. Fassadentextur (`textures.ts`, `facadeTexture`) kachelt alle 7.2 m (u, ab
+  Anfang des Umrisses fortlaufend über `run`) und 6.2 m (v, ab `ground`). Fenster: Mitten bei 1.8 m und
+  5.4 m entlang u; Brüstung 0.95 m, Sturz 2.35 m über jeder Geschosslinie (0 und 3.1 m).
+- Weitere Vergleichsstellen für diese Phase: Lago 15600 m (See rechts), Lago 4500 m (Ort), Alpe d'Huez
+  (Distanz vom Orchestrator gewählt, Blick auf Gipfel).
+
 | ID | Gruppe | Aufgabe | Status |
 |---|---|---|---|
-| P5.1 | 5A | Zweischichtige Wolken mit Lichtrand, Schleierwolken | offen |
+| P5.1 | 5A | Cumulus mit Lichtrand, hohe Schleierwolken | offen |
 | P5.2 | 5A | Schnee und Fels an Gipfeln nach Höhe/Neigung | offen |
-| P5.3 | 5B | Seewellen (Normalmap) und Sonnenglitzern | offen |
+| P5.3 | 5B | Feine Seekräuselung (Normalmap) und Sonnenglitzern | offen |
 | P5.4 | 5B | Segelboote und Fähre auf dem See | offen |
-| P5.5 | 5C | Dichtere Dörfer: Balkone, Fensterlaibungen, Kamine | offen |
+| P5.5 | 5C | Balkone und Kamine | offen |
+| P5.6 | 5D | Fensterlaibungen (Parallax-Fassade) | offen |
+| P5.7 | 5E | Abnahme-Screenshots + Bildrate | offen |
+
+**P5.1 Cumulus mit Lichtrand, hohe Schleierwolken**
+- Datei: `apps/client/src/game/real/sky.ts` (nur `FRAGMENT` und der Doc-Kommentar darüber)
+- Lichtrand: im Cumulus-Zweig nach `cloud += …`:
+  `float edge = cover * (1.0 - cover) * 4.0;`
+  `cloud += vec3(1.0, 0.85, 0.6) * edge * pow(mu, 4.0) * 0.9;` – dünne Ränder leuchten zur Sonne hin.
+- Unterseiten: `shade` zusätzlich mit `mix(0.82, 1.0, smoothstep(0.0, 0.25, up))` multiplizieren
+  (tiefe Wolken am Horizont zeigen die dunklere Basis).
+- Schleierwolken (Cirrus) 7 km hoch, **vor** dem Cumulus-Block gemischt (liegen dahinter):
+  ```glsl
+  vec2 pc = d.xz * (7000.0 / max(up, 0.035));
+  vec2 qc = (pc + veloSky.yz * 0.3 + wind * 3.0);
+  qc = vec2(qc.x * 0.00011 + qc.y * 0.00004, qc.y * 0.00042 - qc.x * 0.00012); // lang gezogen, schräg
+  float ci = fbm(qc);
+  float cir = smoothstep(0.55, 0.85, ci) * 0.35 * smoothstep(0.03, 0.3, up);
+  vec3 cirCol = vec3(1.0, 0.98, 0.95) + vec3(1.0, 0.85, 0.6) * pow(mu, 6.0) * 0.5;
+  col = mix(col, cirCol, cir);
+  ```
+  (`wind` vor diesen Block ziehen, damit beide Schichten ihn nutzen.)
+- Abnahme: Screenshots `descent` und Lago 15600 m (`ultra`, `mittel`): dünne, lang gezogene Schleier
+  hoch am Himmel, Cumulus mit hellem Rand auf der Sonnenseite, keine harten Kanten oder Streifen am
+  Horizont. Bildrate unverändert (±0.3 ms).
+
+**P5.2 Schnee und Fels an Gipfeln**
+- Datei: `apps/client/src/game/real/terrainMaterial.ts` (nur `UPDATE_DIFFUSE`)
+- Direkt **nach** der Zeile `veloCol = mix(veloCol, … , veloRock);` (vor `#ifdef VELO_DETAIL` der
+  Detailmaps) einfügen:
+  ```glsl
+  // above the tree line: bare rock and scree, then snow on the gentler slopes
+  float veloH = vPositionW.y + 140.0 * (veloNoise(veloP * 0.0035) - 0.5);
+  float veloAlp = smoothstep(1850.0, 2150.0, veloH) * (1.0 - veloForest);
+  veloCol = mix(veloCol, vec3(0.55, 0.53, 0.5) * (0.8 + 0.4 * veloNoise(veloP * 0.02)), veloAlp * 0.85);
+  float veloSnow = smoothstep(2350.0, 2600.0, veloH) * smoothstep(0.5, 0.8, veloUp);
+  veloCol = mix(veloCol, vec3(0.93, 0.95, 1.0), veloSnow);
+  ```
+  `veloRock` danach nicht mehr verändern (die Detailmaps nutzen es weiter).
+- Feldberg (bis 878 m) bleibt dadurch unverändert – prüfen.
+- Abnahme: Screenshot `descent` (Lago, `ultra`, `mittel`) und Alpe d'Huez mit Blick auf Gipfel:
+  Gipfel über ~2400 m weiß mit Fels an steilen Flanken, kein harter waagrechter Rand an der Schneegrenze,
+  Schattenseiten bläulich (nicht grau-schwarz). Feldberg 3000 m unverändert.
+
+**P5.3 Feine Seekräuselung und Sonnenglitzern**
+- Dateien: `tools/texgen/texgen.py` (neuer Generator `ripples`), `apps/client/src/game/real/water.ts`
+- `ripples` (512², kachelbar, verlustfrei): Höhe = `fbm` mit 4 Oktaven, in x 2.5× gestreckt (Wind­
+  richtung), Normale über `height_to_normal(h, strength=2.0)`; Ausgabe RGBA mit R = nx, G = nz (beide
+  0.5 = flach), B = 1, A = 1 → `apps/client/public/textures/ripples.webp`. Kachelprüfung wie im Selftest.
+- `water.ts`:
+  - `LakeWater` lädt `ripples.webp` (Wrap, trilinear, Anisotropie 4), wenn `quality.detail`; der
+    Plugin bekommt sie wie den Spiegel als optionalen Sampler `veloRipples` mit Define `VELO_RIPPLES`.
+  - In `BEFORE_FOG`, nach der `veloFine`-Zeile und vor `veloSlope *= veloWind;`:
+    ```glsl
+    #ifdef VELO_RIPPLES
+    float veloMid = smoothstep(0.15, 0.6, veloFoot) * (1.0 - smoothstep(6.0, 25.0, veloFoot));
+    if (veloMid > 0.0) {
+      vec2 r1 = texture2D(veloRipples, veloP.xz / 9.0 + vec2(veloT * 0.02, veloT * 0.008)).rg;
+      vec2 r2 = texture2D(veloRipples, veloP.zx / 23.0 - vec2(veloT * 0.011, veloT * 0.017)).rg;
+      veloSlope += (r1 + r2 - 1.0) * 0.12 * veloMid;
+    }
+    #endif
+    ```
+  - Glitzern, nach der `veloSun`-Zeile:
+    ```glsl
+    vec2 veloCell = floor(veloP.xz * 1.5) + floor(veloT * 3.0);
+    float veloHash = fract(sin(dot(veloCell, vec2(12.9898, 78.233))) * 43758.5453);
+    float veloSpark = step(0.97, veloHash) * pow(max(dot(veloR, veloSunDir.xyz), 0.0), 25.0)
+      * (1.0 - smoothstep(0.3, 1.5, veloFoot)) * 6.0;
+    veloCol += ${SKY.sun als glslColor} * veloSpark * veloWind;
+    ```
+- Abnahme: Screenshot Lago 15600 m und `descent` (`ultra`, `mittel`): in mittlerer Entfernung feine
+  Kräuselung statt glatter Spiegelfläche, im Sonnenreflex einzelne helle Funken, kein Flimmern beim
+  Fahren (zwei Screenshots im Abstand von 1 s vergleichen: Funken wandern, aber keine flächigen Muster).
+
+**P5.4 Segelboote und Fähre auf dem See**
+- Dateien: neu `apps/client/src/game/real/lakeTraffic.ts`, `apps/client/src/game/real/realWorld.ts`
+  (Aufbau, `update`, Spiegelliste)
+- `export class LakeTraffic { readonly meshes: Mesh[]; update(dt: number): void }`, nur wenn
+  `data.lake.length > 0`, alle Stufen außer `niedrig`.
+- Plätze: Raster 150 m über die Begrenzung von `data.lake` (alle Punkte aller Ringe), Punkt ist
+  gültig, wenn `field.isWater` an ihm und an 8 Punkten im Kreis mit 120 m Radius gilt; nur Punkte bis
+  4 km Entfernung zur Route (`corridor.nearest(x, z, 4000)`). Davon zufällig (`createRng(777)`)
+  höchstens 24 Segelboote, Mindestabstand 250 m.
+- Segelboot (ein zusammengefügtes Mesh, Thin Instances, Länge 8 m): Rumpf als spitz zulaufendes
+  Prisma (`MeshData`, weiß `(0.92, 0.92, 0.9)`, 0.9 m hoch, 2.6 m breit), Mast Zylinder 11 m
+  `(0.75, 0.75, 0.75)`, Großsegel und Vorsegel als Dreiecke, beidseitig, `(0.96, 0.95, 0.9)`.
+  Vertexfarben, ein `StandardMaterial` mit `backFaceCulling = false`. Drehung zufällig,
+  jedes Boot neigt sich 8° zur Seite (Wind).
+- Fähre (ein Mesh, kein Thin Instance, 35 m lang): Rumpf weiß mit dunkelblauem Streifen
+  `(0.1, 0.18, 0.35)` an der Wasserlinie, zweistöckiger Aufbau, Brücke mit dunklen Fenstern.
+  Strecke: zwei gültige Plätze 2–5 km auseinander, deren Verbindung alle 50 m auf Wasser liegt (den
+  längsten so gefundenen Abschnitt nehmen). Fahrt mit 7 m/s hin und zurück, an den Enden 20 s Pause,
+  Drehung um y weich in Fahrtrichtung. Wenn keine Strecke gefunden: keine Fähre.
+- Alle Meshes: Unterkante 0.3 m unter dem Wasserspiegel (`data.waterLevel`), `isPickable = false`,
+  keine Schatten (zu weit weg).
+- `realWorld.ts`: öffentliches Feld `lakeTraffic: LakeTraffic | null`, in `build` nach `LakeWater`
+  anlegen, in `update()` `this.lakeTraffic?.update(dt)`, Meshes in `water.setReflected([...])` mit
+  aufnehmen.
+- Abnahme: Screenshot Lago 15600 m und `descent` (`ultra`, `mittel`): Boote auf dem Wasser (nicht an
+  Land, nicht schwebend), im Spiegel sichtbar; Fähre in einem Bild, dazu zwei Bilder im Abstand von 10 s,
+  auf denen sie sich bewegt hat.
+
+**P5.5 Balkone und Kamine**
+- Datei: `apps/client/src/game/real/buildings.ts`
+- Neues `MeshData` je Chunk (`extras`, mit Vertexfarben, ohne Textur), Material `building-extras`
+  (`specularColor 0.05`), Mesh `bld-extras-<key>` mit `addLODLevel(min(600, quality.buildingDistance), null)`.
+- Kamine (alle Stile): Häuser mit Satteldach oder Walmdach (`b.kind === 1`), wenn `hash(k + 23) < 0.7`.
+  Quader 0.55 × 0.55 auf dem Dach bei `rectPoint(rect, u0 + 0.3 (u1 - u0), v0 + 0.3 (v1 - v0))`, von
+  der Traufhöhe bis First + 0.7 m, Farbe = Fassadenfarbe × 0.9; Abdeckplatte 0.7 × 0.08 × 0.7 obendrauf
+  in Dachfarbe × 0.8.
+- Balkone (`italian` und `alpine`): Häuser mit `top - ground >= 5.6`, wenn `hash(k + 29) < 0.45`. An der
+  längsten Außenkante des Umrisses, vor einem Fenster des Obergeschosses: Stelle `t` auf der Kante mit
+  `(runStart + t) mod 7.2` = 1.8 oder 5.4 (der nächste solche Punkt zur Kantenmitte, mit `t` in
+  `[1.4, len - 1.4]`; `runStart` wie in `walls()` mitzählen; sonst kein Balkon).
+  - Platte: 2.4 m breit, 0.9 m tief (nach außen, Kantennormale wie in `walls()`), 0.12 m dick,
+    Oberseite bei `ground + 3.1 + 0.95 - 0.05`; Farbe `(0.82, 0.8, 0.76)`.
+  - Geländer: Handlauf (Quader 2.4 × 0.04 × 0.04 an der Vorderkante, 1.0 m über der Platte, plus zwei
+    seitliche 0.9 m lang) und 9 senkrechte Stäbe (0.025 × 1.0 × 0.025) entlang der Vorderkante;
+    `italian` dunkelgrün-schwarz `(0.1, 0.13, 0.1)`, `alpine` Holz `(0.42, 0.28, 0.16)` und Stäbe
+    0.08 breit.
+- Die Funktion `face()` / `MeshData.quad` für die Quader benutzen (Hilfsfunktion `box(md, center,
+  axisU, axisV, size, color)` in dieser Datei).
+- Abnahme: Screenshot Lago 4500 m und 15600 m (`ultra`, `mittel`), Alpe d'Huez in einem Ort: Kamine auf
+  den Dächern, Balkone vor Fenstern (nicht vor Wandflächen ohne Fenster, nicht in Nachbarhäusern),
+  Bildrate im Ort ±0.5 ms.
+
+**P5.6 Fensterlaibungen (Parallax-Fassade)**
+- Dateien: `apps/client/src/game/real/textures.ts`, `apps/client/src/game/real/buildings.ts` (nur die
+  Materialzeilen in `buildBuildings`)
+- `textures.ts`: neue `facadeBump(scene, style): DynamicTexture` (512², gleiche Fensteraufteilung wie
+  `facadeTexture` – die Fenster-Rechtecke in eine gemeinsame Hilfsfunktion `windowRects(style, w, h)`
+  ziehen und in beiden verwenden). Inhalt: Normal-Map (RGB = flach `(128, 128, 255)`) mit Höhe im Alpha:
+  Wand 255, Fensteröffnung 90 (0.18 m Tiefe), Fensterbank 255; an den vier Rändern jeder Öffnung die
+  Normalen entsprechend schräg (Breite 4 px), damit die Laibung Licht und Schatten bekommt.
+- `buildings.ts`: auf `ultra` und `hoch` `wallMat.bumpTexture = facadeBump(...)`,
+  `wallMat.useParallax = true`, `wallMat.useParallaxOcclusion = false`, `wallMat.parallaxScaleBias = 0.035`.
+  Die Detailmap bleibt.
+- Wenn Detailmap und `bumpTexture` sich gegenseitig stören (Babylon-Fehler oder Detail-Bump fehlt):
+  anhalten und melden.
+- Abnahme: Screenshot Lago 4500 m und 15600 m (`ultra`): Fenster wirken eingelassen, Laibung auf der
+  Sonnenseite hell, auf der Schattenseite dunkel; aus spitzem Winkel kein starkes Verzerren. Bildrate
+  im Ort ±0.5 ms.
+
+**P5.7 Abnahme Phase 5** (Orchestrator)
+- Screenshots `wall`, `forest`, `descent` mit `ultra`, `hoch`, `mittel`, dazu Lago 4500/15600 m und
+  Alpe d'Huez; Vorher/Nachher-Bilder an den Nutzer. Bildrate im Wald und im Ort messen.
 
 ### Phase 6 – Fahrer, Rad, Effekte
 
@@ -764,7 +929,7 @@ Grundlagen aus dem Code (für alle Aufgaben):
 | P6.3 | 6B | Bewegungsunschärfe bei Tempo (nur Ultra, schwach) | offen |
 | P6.4 | 6B | Abschluss-Vergleich mit dem Referenzbild | offen |
 
-Phasen 5–6 werden wie Phase 3 vor dem Start detailliert.
+Phase 6 wird wie Phase 3 vor dem Start detailliert.
 
 ---
 
