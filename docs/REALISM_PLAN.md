@@ -619,7 +619,7 @@ Grundlagen aus dem Code (für alle Aufgaben):
 | P4.2 | 4A | Felsböschung in Einschnitten (Geometrie-Rauheit + Fels im Shader) | fertig |
 | P4.3 | 4B | Blumenkästen auf Brüstungen, Oleander auf Mauern in Orten | fertig |
 | P4.4 | 4B | Mauerkrone mit Abdecksteinen, bewachsene Mauerfüße | fertig |
-| P4.5 | 4C | Abnahme-Screenshots + Bildrate | offen |
+| P4.5 | 4C | Abnahme-Screenshots + Bildrate | fertig |
 
 **P4.1 Leitpfosten außerorts, Begrenzungssteine in Kurven**
 - Dateien: neu `apps/client/src/game/real/roadsideProps.ts`, `apps/client/src/game/real/realWorld.ts`
