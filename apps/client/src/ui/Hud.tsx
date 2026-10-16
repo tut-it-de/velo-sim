@@ -2,26 +2,23 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { formatCoins } from '@velo/equipment';
 import { powerZone } from '@velo/metrics';
 import { MAX_DRAFT_REDUCTION } from '@velo/physics';
+import type { MinimapData } from '../game/real/realWorld';
 import { CAMERA_MODES, type CameraMode } from '../game/world';
-import type { RideSession } from '../ride/rideSession';
+import type { RideSession, RideSnapshot } from '../ride/rideSession';
+import { accountStore } from '../net/api';
 import { settingsStore } from '../state/settings';
 import { useStore } from '../state/store';
+import { ClimbPanel, gradeColor } from './ClimbPanel';
 import { fmt, formatDuration } from './components';
 import { ElevationProfile } from './ElevationProfile';
+import { Flag } from './Flag';
+import { Minimap } from './Minimap';
 import { WorkoutHud } from './WorkoutHud';
 import { ActiveSegments, SegmentToast } from './SegmentHud';
 
-function gradeColor(g: number): string {
-  if (g >= 8) return '#ef4444';
-  if (g >= 5) return '#f97316';
-  if (g >= 2) return '#eab308';
-  if (g <= -2) return '#3b82f6';
-  return '#8b949e';
-}
-
 function Metric({ label, value, unit, sub, accent }: { label: string; value: ReactNode; unit?: string; sub?: ReactNode; accent?: string }) {
   return (
-    <div className="hud-metric" style={accent ? { borderColor: accent } : undefined}>
+    <div className="hud-metric" style={accent ? { borderBottomColor: accent } : undefined}>
       <div className="hud-label">{label}</div>
       <div className="hud-value">
         {value}
@@ -32,13 +29,17 @@ function Metric({ label, value, unit, sub, accent }: { label: string; value: Rea
   );
 }
 
+const OTHER_COLOR = { bot: '#58a6ff', remote: '#3fb950' };
+
 export function Hud({
   session,
+  map,
   camera,
   onCamera,
   onFinish,
 }: {
   session: RideSession;
+  map: MinimapData | null;
   camera: CameraMode;
   onCamera: (m: CameraMode) => void;
   onFinish: () => void | Promise<void>;
@@ -48,36 +49,34 @@ export function Hud({
   const track = session.track;
   const zone = powerZone(s.power3s, settings.ftp);
   const paused = s.state === 'paused';
+  const lapFraction = s.lapDistanceM / track.length;
+  const avgKmh = s.movingS > 0 ? (s.distanceM / s.movingS) * 3.6 : 0;
+  const markers = s.others.map((b) => ({
+    id: b.id,
+    positionM: track.wrap(s.lapDistanceM + b.gapM),
+    color: b.remote ? OTHER_COLOR.remote : OTHER_COLOR.bot,
+  }));
 
   return (
     <div className="hud">
       <div className="hud-top">
         <div className="hud-panel hud-route">
           <div className="hud-route-name">{track.name}</div>
-          <div className="small">
-            Runde {s.lap} · {(s.lapDistanceM / 1000).toFixed(2)} / {(track.length / 1000).toFixed(1)} km
-          </div>
           <div className="hud-route-stats">
-            <span>⏱ {formatDuration(s.movingS)}</span>
-            <span>↔ {(s.distanceM / 1000).toFixed(2)} km</span>
-            <span>⛰ {Math.round(s.ascentM)} hm</span>
+            <span>{(track.length / 1000).toFixed(1)} km</span>
+            <span>{Math.round(track.elevationGain)} hm</span>
+            <span>Runde {s.lap}</span>
+          </div>
+          <div className="hud-route-bar" role="progressbar" aria-label="Rundenfortschritt" aria-valuenow={Math.round(lapFraction * 100)}>
+            <div style={{ width: `${lapFraction * 100}%` }} />
+          </div>
+          <div className="hud-sub">
+            {(s.lapDistanceM / 1000).toFixed(2)} / {(track.length / 1000).toFixed(1)} km
           </div>
         </div>
 
         <div className="hud-top-center">
-        <div className="hud-metrics">
-          <Metric
-            label="Leistung"
-            value={fmt(s.power3s)}
-            unit="W"
-            sub={`${(s.power3s / settings.weightKg).toFixed(1)} W/kg · Z${zone.zone}`}
-            accent={zone.color}
-          />
-          <Metric label="Speed" value={fmt(s.speedMps * 3.6, 1)} unit="km/h" />
-          <Metric label="Kadenz" value={fmt(s.cadence)} unit="rpm" />
-          <Metric label="Herzfrequenz" value={fmt(s.heartRate)} unit="bpm" />
-        </div>
-        <DraftBar draft={s.draft} />
+          <DraftBar draft={s.draft} />
         </div>
 
         <div className="hud-controls">
@@ -96,18 +95,15 @@ export function Hud({
       </div>
 
       <div className="hud-left">
-        <div className="hud-grade" style={{ background: gradeColor(s.gradePercent) }}>
-          {s.gradePercent >= 0 ? '' : '−'}
-          {Math.abs(s.gradePercent).toFixed(1)}
-          <span>%</span>
+        <ClimbPanel track={track} snapshot={s} />
+        <div className="hud-chips">
+          <div className="hud-chip">Ø {Math.round(s.avgPower)} W · NP {Math.round(s.normalizedPower)} W</div>
+          <div className="hud-chip">{Math.round(s.kilojoules)} kJ</div>
+          <div className={`hud-chip coins ${s.coinsDisabled ? 'disabled' : ''}`} title={s.coinsDisabled ? 'Mit dem Simulator gibt es keine Watt-Taler' : 'Watt-Taler dieser Fahrt'}>
+            🪙 {s.coinsDisabled ? 'Simulator – keine Taler' : formatCoins(s.coins)}
+          </div>
         </div>
-        {s.trainerGrade !== undefined && <div className="hud-chip">Trainer {s.trainerGrade.toFixed(1)} %</div>}
-        <div className="hud-chip">Ø {Math.round(s.avgPower)} W · NP {Math.round(s.normalizedPower)} W</div>
-        <div className="hud-chip">{Math.round(s.kilojoules)} kJ</div>
-        <div className={`hud-chip coins ${s.coinsDisabled ? 'disabled' : ''}`} title={s.coinsDisabled ? 'Mit dem Simulator gibt es keine Watt-Taler' : 'Watt-Taler dieser Fahrt'}>
-          🪙 {s.coinsDisabled ? 'Simulator – keine Taler' : formatCoins(s.coins)}
-        </div>
-        <ActiveSegments snapshot={s} />
+        <ActiveSegments snapshot={s} skipClimbs />
       </div>
 
       <SegmentToast result={s.lastResult} />
@@ -118,36 +114,10 @@ export function Hud({
         </div>
       )}
 
-      {(s.others.length > 0 || session.net) && (
-        <div className="hud-right hud-panel">
-          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
-            <span className="hud-label">Mitfahrer</span>
-            {session.net && <NetBadge session={session} />}
-          </div>
-          {[...s.others]
-            .sort((a, b) => Math.abs(a.gapM) - Math.abs(b.gapM))
-            .slice(0, 8)
-            .sort((a, b) => b.gapM - a.gapM)
-            .map((b) => (
-              <div key={b.id} className="hud-bot">
-                <span>
-                  {b.remote ? '🌐 ' : ''}
-                  {b.name}
-                </span>
-                <span className="muted">{b.wkg !== undefined ? `${b.wkg.toFixed(1)} W/kg` : b.power !== undefined ? `${Math.round(b.power)} W` : ''}</span>
-                <span className={b.gapM >= 0 ? 'ahead' : 'behind'}>
-                  {b.gapM >= 0 ? '+' : '−'}
-                  {Math.abs(b.gapM) >= 1000 ? `${(Math.abs(b.gapM) / 1000).toFixed(1)} km` : `${Math.round(Math.abs(b.gapM))} m`}
-                </span>
-                {b.remote && (
-                  <button className="rideon" title="Kudos geben" onClick={() => session.net?.sendRideOn(b.id)}>
-                    👋
-                  </button>
-                )}
-              </div>
-            ))}
-        </div>
-      )}
+      <div className="hud-right">
+        {(s.others.length > 0 || session.net) && <NearbyRiders session={session} snapshot={s} country={settings.country} name={settings.riderName} weightKg={settings.weightKg} />}
+        <Minimap track={track} map={map} positionM={s.lapDistanceM} others={markers} />
+      </div>
 
       {session.net && <ChatBox session={session} />}
       {session.net && <RideOnToast session={session} />}
@@ -155,14 +125,95 @@ export function Hud({
       {s.noTrainerData && !paused && <div className="hud-warning">Keine Leistungsdaten – ist der Trainer verbunden? (Geräte-Seite)</div>}
       {paused && <div className="hud-warning paused">Pausiert – „Weiter“ oder Taste P</div>}
 
-      <div className="hud-bottom hud-panel">
-        <ElevationProfile
-          track={track}
-          positionM={s.lapDistanceM}
-          height={78}
-          markers={s.others.map((b) => ({ id: b.id, positionM: track.wrap(s.lapDistanceM + b.gapM), color: b.remote ? '#3fb950' : '#58a6ff' }))}
-        />
+      <div className="hud-bottom">
+        <div className="hud-metrics hud-metrics-left">
+          <Metric label="Speed" value={fmt(s.speedMps * 3.6, 1)} unit="km/h" />
+          <Metric
+            label="Leistung"
+            value={fmt(s.power3s)}
+            unit="W"
+            sub={`${(s.power3s / settings.weightKg).toFixed(1)} W/kg · Z${zone.zone}`}
+            accent={zone.color}
+          />
+          <Metric label="Kadenz" value={fmt(s.cadence)} unit="rpm" />
+          <Metric label="Herzfrequenz" value={fmt(s.heartRate)} unit="bpm" accent={s.heartRate ? '#f85149' : undefined} />
+        </div>
+        <div className="hud-panel hud-profile">
+          <ElevationProfile track={track} positionM={s.lapDistanceM} height={70} markers={markers} />
+        </div>
+        <div className="hud-metrics hud-metrics-right">
+          <Metric label="Distanz" value={(s.distanceM / 1000).toFixed(2)} unit="km" sub={`⛰ ${Math.round(s.ascentM)} hm`} />
+          <Metric label="Zeit" value={formatDuration(s.movingS)} sub={s.movingS >= 10 ? `Ø ${avgKmh.toFixed(1)} km/h` : undefined} />
+          <Metric
+            label="Steigung"
+            value={`${s.gradePercent < 0 ? '−' : ''}${Math.abs(s.gradePercent).toFixed(1)}`}
+            unit="%"
+            sub={s.trainerGrade !== undefined ? `Trainer ${s.trainerGrade.toFixed(1)} %` : undefined}
+            accent={gradeColor(s.gradePercent)}
+          />
+        </div>
       </div>
+    </div>
+  );
+}
+
+/** "+0:12" — the time gap, from the distance and the riders' speeds (distance when standing). */
+function formatGap(gapM: number, speedMps: number): string {
+  const sign = gapM >= 0 ? '+' : '−';
+  const abs = Math.abs(gapM);
+  if (speedMps < 1 || abs / speedMps >= 3600) return `${sign}${abs >= 1000 ? `${(abs / 1000).toFixed(1)} km` : `${Math.round(abs)} m`}`;
+  return `${sign}${formatDuration(abs / speedMps)}`;
+}
+
+/** Riders around me, ahead at the top, with flag, W/kg and time gap; I am in the list too. */
+function NearbyRiders({
+  session,
+  snapshot: s,
+  country,
+  name,
+  weightKg,
+}: {
+  session: RideSession;
+  snapshot: RideSnapshot;
+  country: string;
+  name: string;
+  weightKg: number;
+}) {
+  const account = useStore(accountStore);
+  const near = [...s.others].sort((a, b) => Math.abs(a.gapM) - Math.abs(b.gapM)).slice(0, 7);
+  const rows = [
+    ...near.map((o) => ({ ...o, me: false })),
+    { id: 'me', name: account.user?.name ?? name, country, gapM: 0, speedMps: s.speedMps, wkg: s.power3s / weightKg, remote: false, power: undefined, me: true },
+  ].sort((a, b) => b.gapM - a.gapM);
+  return (
+    <div className={`hud-panel hud-riders ${session.net ? 'online' : ''}`}>
+      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
+        <span className="hud-label">In der Nähe</span>
+        {session.net && <NetBadge session={session} />}
+      </div>
+      {rows.map((r) => (
+        <div key={r.id} className={`hud-bot ${r.me ? 'me' : ''}`}>
+          <Flag code={r.country} size={18} />
+          <span className="hud-bot-name" title={r.remote ? 'online' : r.me ? 'du' : 'Pacer-Bot'}>
+            {r.name}
+          </span>
+          <span className="hud-bot-wkg">
+            {r.wkg !== undefined ? r.wkg.toFixed(1) : r.power !== undefined ? Math.round(r.power) : ''}
+            <small>{r.wkg !== undefined ? 'W/kg' : r.power !== undefined ? 'W' : ''}</small>
+          </span>
+          <span className={r.me ? 'gap' : r.gapM >= 0 ? 'gap ahead' : 'gap behind'} title={`${Math.round(Math.abs(r.gapM))} m`}>
+            {r.me ? '' : formatGap(r.gapM, Math.max(0, (s.speedMps + r.speedMps) / 2))}
+          </span>
+          {session.net &&
+            (r.remote ? (
+              <button className="rideon" title="Kudos geben" onClick={() => session.net?.sendRideOn(r.id)}>
+                👋
+              </button>
+            ) : (
+              <span />
+            ))}
+        </div>
+      ))}
     </div>
   );
 }

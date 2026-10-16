@@ -17,6 +17,8 @@ export interface RiderInfo {
   id: string;
   name: string;
   loadout: LoadoutDTO;
+  /** ISO 3166-1 alpha-2 country code for the flag next to the name. */
+  country?: string;
   /** Set for server-side bots and load-test clients. */
   bot?: boolean;
 }
@@ -25,7 +27,7 @@ export interface RiderInfo {
 export type RiderTuple = [string, number, number, number, number, number];
 
 export type ClientMessage =
-  | { type: 'hello'; v: number; token?: string; name: string; routeId: string; loadout: LoadoutDTO; weightKg: number; bot?: boolean; simulated?: boolean }
+  | { type: 'hello'; v: number; token?: string; name: string; country?: string; routeId: string; loadout: LoadoutDTO; weightKg: number; bot?: boolean; simulated?: boolean }
   | { type: 'state'; d: number; v: number; p: number; c: number; lat: number; hr?: number }
   | { type: 'chat'; text: string }
   | { type: 'rideOn'; to: string }
@@ -53,6 +55,11 @@ export type ServerMessage =
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isStr = (v: unknown, max = 200): v is string => typeof v === 'string' && v.length <= max;
 
+/** Normalises an ISO 3166-1 alpha-2 country code ("de" → "DE"); anything else becomes undefined. */
+export function countryCode(v: unknown): string | undefined {
+  return typeof v === 'string' && /^[a-z]{2}$/i.test(v) ? v.toUpperCase() : undefined;
+}
+
 function isLoadout(v: unknown): v is LoadoutDTO {
   if (!v || typeof v !== 'object') return false;
   const l = v as Record<string, unknown>;
@@ -79,6 +86,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
         v: o.v,
         token: o.token as string | undefined,
         name: o.name.trim().slice(0, 24) || 'Fahrer',
+        country: countryCode(o.country),
         routeId: o.routeId,
         loadout: o.loadout,
         weightKg: Math.min(200, Math.max(30, o.weightKg)),

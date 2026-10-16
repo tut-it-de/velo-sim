@@ -4,6 +4,7 @@ import { accountStore, fetchOnline, login, logout, refreshAccount, register } fr
 import { GRAPHICS_QUALITY_OPTIONS } from '../game/real/quality';
 import { settingsStore, updateSettings, type Settings } from '../state/settings';
 import { useStore } from '../state/store';
+import { COUNTRIES, Flag } from './Flag';
 
 function NumberField({ k, min, max, step = 1 }: { k: keyof Settings; min: number; max: number; step?: number }) {
   const settings = useStore(settingsStore);
@@ -34,6 +35,17 @@ export function SettingsPage() {
           <div className="form">
             <label>Name</label>
             <input value={s.riderName} maxLength={24} onChange={(e) => updateSettings({ riderName: e.target.value })} style={{ maxWidth: 260 }} />
+            <label>Land</label>
+            <div className="row">
+              <select value={s.country} onChange={(e) => updateSettings({ country: e.target.value })} style={{ maxWidth: 260 }}>
+                {COUNTRIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <Flag code={s.country} size={24} />
+            </div>
             <label>Gewicht (kg)</label>
             <NumberField k="weightKg" min={35} max={160} step={0.5} />
             <label>Größe (cm)</label>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { encodeTuple, parseClientMessage } from '../src';
+import { countryCode, encodeTuple, parseClientMessage } from '../src';
 
 const loadout = { bike: 'bike-basis', wheels: 'wheels-basis', jersey: 'jersey-club-orange' };
 
@@ -7,6 +7,16 @@ describe('parseClientMessage', () => {
   it('accepts a valid hello and normalises values', () => {
     const m = parseClientMessage(JSON.stringify({ type: 'hello', v: 1, name: '  Ali  ', routeId: 'kuestenrunde', loadout, weightKg: 500 }));
     expect(m).toEqual({ type: 'hello', v: 1, token: undefined, name: 'Ali', routeId: 'kuestenrunde', loadout, weightKg: 200, bot: false, simulated: false });
+  });
+
+  it('keeps a valid country code and drops anything else', () => {
+    const hello = (country: unknown) =>
+      parseClientMessage(JSON.stringify({ type: 'hello', v: 1, name: 'Ali', country, routeId: 'kuestenrunde', loadout, weightKg: 75 }));
+    expect(hello('de')).toMatchObject({ country: 'DE' });
+    expect((hello('DEU') as { country?: string }).country).toBeUndefined();
+    expect((hello('<b>') as { country?: string }).country).toBeUndefined();
+    expect(countryCode(42)).toBeUndefined();
+    expect(countryCode('it')).toBe('IT');
   });
 
   it('accepts state updates', () => {

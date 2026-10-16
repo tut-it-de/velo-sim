@@ -60,7 +60,7 @@ export class MultiplayerClient extends Emitter<NetEvents> {
 
   constructor(
     private readonly serverUrl: string,
-    private readonly hello: { name: string; routeId: string; loadout: LoadoutDTO; weightKg: number; token?: string; simulated?: boolean },
+    private readonly hello: { name: string; country?: string; routeId: string; loadout: LoadoutDTO; weightKg: number; token?: string; simulated?: boolean },
   ) {
     super();
   }

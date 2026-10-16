@@ -151,6 +151,10 @@ packages/
 - **Fahren → Freie Fahrt:** Strecke wählen, optional Pacer-Bots, los. Die Steigung geht (gedämpft durch die Trainer-Schwierigkeit) an den KICKR.
 - **Fahren → Workout:** Workout aus der Bibliothek wählen, `.zwo` importieren oder im Editor bauen, dann eine Strecke wählen.
   Im Workout hält der Trainer die Watt (ERG), freie Abschnitte laufen im SIM-Modus.
+- **HUD:** oben links die Strecke mit Rundenfortschritt, oben rechts die Fahrer in der Nähe (Flagge, W/kg,
+  Zeitabstand) und die Karte mit Nordpfeil, links das Anstiegs-Panel (ab 1,5 km vor einer Bergwertung:
+  Länge, Ø-Steigung, Profil, Restdistanz, Zeit gegen die Bestzeit), unten Speed/Leistung/Kadenz/Puls und
+  Distanz/Zeit/Steigung. Das Land für die Flagge stellst du unter **Profil** ein.
 - Tasten während der Fahrt: **C** Kamera wechseln, **P** Pause; im Simulator ↑/↓ Watt, ←/→ Kadenz.
 - **Aktivitäten:** gespeicherte Fahrten, FIT-Export für Strava, Garmin Connect, intervals.icu.
 

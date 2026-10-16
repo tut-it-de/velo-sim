@@ -25,6 +25,7 @@ export interface Rider {
   id: string;
   userId?: string;
   name: string;
+  country?: string;
   loadout: LoadoutDTO;
   weightKg: number;
   bot: boolean;
@@ -64,7 +65,7 @@ export class Room {
   }
 
   info(r: Rider): RiderInfo {
-    return { id: r.id, name: r.name, loadout: r.loadout, bot: r.bot || undefined };
+    return { id: r.id, name: r.name, country: r.country, loadout: r.loadout, bot: r.bot || undefined };
   }
 
   join(r: Rider, authenticated: boolean): void {
@@ -223,6 +224,7 @@ export class Game {
       id: randomUUID().slice(0, 12),
       userId: user?.id,
       name: user?.name ?? hello.name,
+      country: hello.country,
       loadout: hello.loadout,
       weightKg: hello.weightKg,
       bot: !!hello.bot,

@@ -203,6 +203,7 @@ function RideView({
       st.rideOnline && serverBase()
         ? new MultiplayerClient(serverBase(), {
             name: accountStore.get().user?.name ?? st.riderName,
+            country: st.country,
             routeId,
             loadout: garage.loadout,
             weightKg: st.weightKg,
@@ -281,6 +282,7 @@ function RideView({
       {session && world && (
         <Hud
           session={session}
+          map={world.minimap}
           camera={camera}
           onCamera={(mode) => {
             world.setCameraMode(mode);

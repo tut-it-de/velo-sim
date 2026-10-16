@@ -24,6 +24,7 @@ export type RideState = 'riding' | 'paused' | 'finished';
 export interface BotInfo {
   id: string;
   name: string;
+  country?: string;
   wkg: number;
   look: RiderLook;
 }
@@ -53,7 +54,7 @@ export interface RideSnapshot {
   trainerGrade?: number;
   noTrainerData: boolean;
   /** Pacer bots and other online riders, with the gap to me along the loop (+ = ahead). */
-  others: Array<{ id: string; name: string; wkg?: number; gapM: number; remote: boolean; power?: number }>;
+  others: Array<{ id: string; name: string; country?: string; wkg?: number; gapM: number; speedMps: number; remote: boolean; power?: number }>;
   workout?: PlayerState & { name: string };
   activeSegments: Array<ActiveSegment & { bestS?: number }>;
   lastResult?: SegmentOutcome;
@@ -123,9 +124,9 @@ interface Bot extends BotInfo {
 }
 
 const BOT_PRESETS: Array<Omit<BotInfo, 'id'>> = [
-  { name: 'Pacer Lena', wkg: 2.0, look: { jersey: '#2e7dd7', frame: '#e8e8e8', helmet: '#2e7dd7' } },
-  { name: 'Pacer Jonas', wkg: 2.8, look: { jersey: '#2fa84f', frame: '#1d1d1d', helmet: '#ffffff' } },
-  { name: 'Pacer Mia', wkg: 3.5, look: { jersey: '#d63a3a', frame: '#c9a227', helmet: '#d63a3a' } },
+  { name: 'Pacer Lena', country: 'AT', wkg: 2.0, look: { jersey: '#2e7dd7', frame: '#e8e8e8', helmet: '#2e7dd7' } },
+  { name: 'Pacer Jonas', country: 'DE', wkg: 2.8, look: { jersey: '#2fa84f', frame: '#1d1d1d', helmet: '#ffffff' } },
+  { name: 'Pacer Mia', country: 'IT', wkg: 3.5, look: { jersey: '#d63a3a', frame: '#c9a227', helmet: '#d63a3a' } },
 ];
 
 /**
@@ -460,10 +461,20 @@ export class RideSession {
       trainerGrade: this.lastTrainerGrade,
       noTrainerData: stale,
       others: [
-        ...this.bots.map((b) => ({ id: b.id, name: b.name, wkg: b.wkg, gapM: b.state.distanceM - this.state.distanceM, remote: false })),
+        ...this.bots.map((b) => ({
+          id: b.id,
+          name: b.name,
+          country: b.country,
+          wkg: b.wkg,
+          gapM: b.state.distanceM - this.state.distanceM,
+          speedMps: b.state.speedMps,
+          remote: false,
+        })),
         ...[...(this.net?.riders.values() ?? [])].flatMap((r) => {
           const pos = this.net!.position(r.info.id);
-          return pos ? [{ id: r.info.id, name: r.info.name, gapM: wrapGap(pos.d - this.state.distanceM, this.track.length), remote: true, power: pos.p }] : [];
+          if (!pos) return [];
+          const gapM = wrapGap(pos.d - this.state.distanceM, this.track.length);
+          return [{ id: r.info.id, name: r.info.name, country: r.info.country, gapM, speedMps: pos.v, remote: true, power: pos.p }];
         }),
       ],
       workout: this.player ? { ...this.player.state, name: this.player.workout.name } : undefined,

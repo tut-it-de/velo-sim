@@ -3,6 +3,8 @@ import { Store, loadJson, saveJson } from './store';
 
 export interface Settings {
   riderName: string;
+  /** ISO 3166-1 alpha-2 country code, shown as a flag next to the name. */
+  country: string;
   weightKg: number;
   heightCm: number;
   /** Functional Threshold Power in watts — workouts are defined relative to it. */
@@ -25,6 +27,7 @@ const KEY = 'velo.settings.v1';
 
 export const DEFAULT_SETTINGS: Settings = {
   riderName: 'Fahrer',
+  country: 'DE',
   weightKg: 75,
   heightCm: 178,
   ftp: 200,

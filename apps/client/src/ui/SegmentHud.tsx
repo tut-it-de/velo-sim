@@ -11,12 +11,13 @@ function delta(s: number): string {
   return abs < 60 ? `${sign}${abs.toFixed(1)} s` : `${sign}${formatDuration(abs)}`;
 }
 
-/** Live timing for the segment(s) currently being ridden. */
-export function ActiveSegments({ snapshot }: { snapshot: RideSnapshot }) {
-  if (snapshot.activeSegments.length === 0) return null;
+/** Live timing for the segment(s) currently being ridden (climbs can be left to the climb panel). */
+export function ActiveSegments({ snapshot, skipClimbs = false }: { snapshot: RideSnapshot; skipClimbs?: boolean }) {
+  const list = skipClimbs ? snapshot.activeSegments.filter((a) => a.segment.type !== 'climb') : snapshot.activeSegments;
+  if (list.length === 0) return null;
   return (
     <>
-      {snapshot.activeSegments.map((a) => {
+      {list.map((a) => {
         const len = a.segment.endM - a.segment.startM;
         // Compare against the PB pro rata — good enough for a live indication.
         const live = a.bestS !== undefined ? a.elapsedS - a.bestS * a.progress : undefined;
