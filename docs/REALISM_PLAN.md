@@ -328,8 +328,8 @@ Blumenbüschel am Straßenrand.
 
 | ID | Gruppe | Aufgabe | Status |
 |---|---|---|---|
-| P3.1 | 3A | Blatt- und Rindentexturen (Python, wie Phase 2) | offen |
-| P3.2 | 3A | Prozeduraler Baumgenerator `treeGen.ts` + Studio-Ansicht | offen |
+| P3.1 | 3A | Blatt- und Rindentexturen (Python, wie Phase 2) | fertig |
+| P3.2 | 3A | Prozeduraler Baumgenerator `treeGen.ts` + Studio-Ansicht | fertig |
 | P3.3 | 3B | Artenparameter (8 Bäume, 2 Büsche) im Studio abstimmen | offen |
 | P3.5 | 3B | Wind-Shader-Plugin | offen |
 | P3.4 | 3C | Billboards aus den 3D-Bäumen backen (zur Laufzeit, Farbe + Normale) | offen |
@@ -363,6 +363,9 @@ P3.7 läuft vor P3.6, weil es die Instanzliste liefert; P3.6, P3.7 und P3.8 änd
   (0 am Stammfuß … 1 an den Zweigspitzen), `uv2.y` = Phase je Ast (0…2π). Farbe (vertex color) = Tönung.
 - Texturen liegen in `apps/client/public/textures/` und werden über
   `${import.meta.env.BASE_URL}textures/<name>.webp` geladen (wie `detailMaps.ts`).
+  Atlas-Texturen (`leaves`, `bark`, `grass`) mit `invertY = false` laden: die UVs aus `treeGen.ts`
+  sind im Bildraum (v = 0 ist die oberste Zeile des Atlas). `leafColor`/`barkColor` sind Tönungen
+  nahe 1 – die Farbe steckt schon in der Textur.
 - Blending-Hash für Überblendungen (in allen Shadern identisch, „interleaved gradient noise“):
   `float veloIgn(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }`
   angewendet auf `gl_FragCoord.xy`.
@@ -430,7 +433,8 @@ P3.7 läuft vor P3.6, weil es die Instanzliste liefert; P3.6, P3.7 und P3.8 änd
   `env.ts` (`SUN_DIR`), Hemisphärenlicht wie `realWorld.ts`, Schatten (ShadowGenerator 2048).
   Ohne `species`: alle Arten aus `species.ts` nebeneinander mit je drei Seeds. Kamera ArcRotate.
   Materialien: Holz `StandardMaterial` mit `bark.webp`, Laub `StandardMaterial` mit `leaves.webp`,
-  `MATERIAL_ALPHATEST`, `alphaCutOff = 0.4`, `backFaceCulling = false`, `twoSidedLighting = true`,
+  `MATERIAL_ALPHATEST`, `alphaCutOff = 0.4`, `backFaceCulling = false`, `twoSidedLighting = false`
+  (die Kartennormalen zeigen schon aus der Krone heraus; Umdrehen macht die Hälfte der Karten dunkel),
   `useAlphaFromDiffuseTexture = true`. Fehlen die Texturen noch (P3.1 läuft parallel): einfarbig
   rendern statt abzubrechen.
 - Abnahme: Test grün; Screenshot `treestudio.html` (beide Arten, je drei Seeds) im Scratchpad;
@@ -450,6 +454,11 @@ P3.7 läuft vor P3.6, weil es die Instanzliste liefert; P3.6, P3.7 und P3.8 änd
   - `cypress` 8–16, schmale Säule (Breite ≤ 18 % der Höhe), sehr dicht, fast kein Holz sichtbar.
   - `oleander` 2–4, Busch mit vielen Trieben aus dem Boden, rosa Blüten.
   - `laurel` 2.5–5, dichter runder Busch.
+- Bekannte Punkte aus 3A: Fichtenkarten zeigen eckige Kartenränder mit gelbem Saum; Kronen innen
+  sehr dunkel (Studio ohne Tonwertkurve – Helligkeit im Spiel prüfen, nicht im Studio erzwingen);
+  Blattzellen Lärche (6) und Zypresse (7) in `texgen.py` nachbessern (Lärche: Nadelbüschel statt
+  Sterne, Zypresse: schuppige Zweigfächer statt Ovale) – dafür darf P3.3 `tools/texgen/texgen.py`
+  und `leaves.webp` ändern.
 - Abnahme: Studio-Screenshot aller Arten (je 3 Seeds), Dreiecke je Art im Bericht (Tabelle),
   Test grün. Der Orchestrator zeigt das Bild dem Nutzer, bevor 3C startet.
 

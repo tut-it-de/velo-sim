@@ -57,3 +57,22 @@ Eine nicht kachelbare Rampe dient als Gegenprobe und muss den Test scheitern las
 Speicherformat: Die Detail-Maps werden verlustfrei als WebP gespeichert. Verlustbehaftetes WebP
 (auch q100) verdoppelt den Unterschied über die Kachelnaht ungefähr (ca. 0.03 statt ca. 0.015),
 das wäre als feine Linie im Raster sichtbar. Der Selbsttest prüft deshalb auch die wieder geladene Datei.
+
+## Farbtexturen (Blätter, Rinde, Gras)
+
+Drei Farbtexturen (Albedo, sRGB, Alpha gerade, nicht vormultipliziert) erzeugt
+`noise.pack_albedo(rgb, alpha)`. Die Farbe transparenter Pixel wird über `noise.dilate()` nach außen
+ausgeblutet, damit Mipmaps keine dunklen Ränder bekommen. Jede Zelle wird einzeln ausgeblutet.
+
+| Datei | Größe | Raster | Inhalt |
+|---|---|---|---|
+| `leaves.webp` | 2048×2048 | 4×4 Zellen à 512² | 0 Edelkastanie, 1 Buche, 2 Platane, 3 Olive, 4 Palmwedel, 5 Fichtenzweig, 6 Lärchenbüschel, 7 Zypresse, 8 Oleander (mit Blüten), 9 Lorbeer; 10–15 leer. Alpha = Silhouette, 8 px Rand frei. |
+| `bark.webp` | 1024×1024 | 2×2 Zellen à 512² | 0 gefurcht, 1 glatt grau mit Flecken, 2 schuppig rotbraun, 3 Palmstamm mit Ringen. Deckend, jede Zelle in u und v kachelbar. |
+| `grass.webp` | 2048×512 | 4×1 Zellen à 512² | 0 Grasbüschel grün, 1 trockenes Gras, 2 Gras mit weißen und gelben Blüten, 3 Farnwedel. Alpha = Silhouette. |
+
+Die Zellen werden nicht mit Sichtbarkeitsvorgaben, sondern über die Deckung gesteuert: Die
+Blattgröße wird pro Zelle so lange angepasst, bis die deckende Fläche (Alpha > 0.5) zwischen 45 und
+65 % liegt (`_fill_cell`). Der Zufall ist festgelegt (Seed je Zelle), das Ergebnis ist reproduzierbar.
+
+Neue Generatoren mit eigener Größe: `@generator('<name>', size=(w, h))`, die Funktion bekommt dann
+das Tupel `(w, h)` und liefert Form `(h, w, 4)`.

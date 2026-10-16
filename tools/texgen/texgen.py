@@ -8,8 +8,9 @@ Usage, from the repository root:
 
 Output: apps/client/public/textures/<name>.webp (folder is created if missing).
 Generators are registered with @generator('<name>') in the section at the end
-of this file. Each one takes the size n and returns uint8 RGBA of shape (n, n, 4),
-normally via noise.pack_detail.
+of this file. Without a size argument a generator takes the side n (int) and returns
+uint8 RGBA of shape (n, n, 4), normally via noise.pack_detail. With
+@generator('<name>', size=(w, h)) it takes the tuple (w, h) and returns shape (h, w, 4).
 """
 
 import os
@@ -27,27 +28,40 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 TEXTURE_DIR = os.path.join(REPO_ROOT, "apps", "client", "public", "textures")
 
-# name -> generator function fn(n) -> uint8 RGBA (n, n, 4)
+# name -> generator function fn(n) or fn((w, h)) -> uint8 RGBA (h, w, 4)
 GENERATORS = {}
+# name -> None for square SIZE textures, or (w, h) for generators with their own size
+SIZES = {}
 
 SEAM_LIMIT = 0.02   # max mean absolute difference across the wrap seam
 SEAM_RATIO = 3.0    # seam difference must be within this factor of the inner difference
 
 
-def generator(name):
-    """Register a texture generator under the given name."""
+def generator(name, size=None):
+    """Register a texture generator under the given name.
+
+    size=None: square SIZE x SIZE, the function takes n.
+    size=(w, h): the function takes the tuple (w, h).
+    """
     def register(fn):
         if name in GENERATORS:
             raise ValueError(f"generator '{name}' is already registered")
         GENERATORS[name] = fn
+        SIZES[name] = size
         return fn
     return register
 
 
-def build(name, n=SIZE):
+def build(name):
     """Run one generator and write its WebP. Returns the output path."""
-    rgba = GENERATORS[name](n)
-    expected = (n, n, 4)
+    size = SIZES[name]
+    if size is None:
+        rgba = GENERATORS[name](SIZE)
+        expected = (SIZE, SIZE, 4)
+    else:
+        w, h = size
+        rgba = GENERATORS[name](size)
+        expected = (h, w, 4)
     if not isinstance(rgba, np.ndarray) or rgba.dtype != np.uint8 or rgba.shape != expected:
         raise ValueError(f"generator '{name}' must return uint8 array of shape {expected}")
     path = os.path.join(TEXTURE_DIR, name + ".webp")
@@ -499,6 +513,486 @@ def forestfloor(n):
     rough = np.clip(rough, 0.0, 1.0)
     return noise.pack_detail(lum, height, rough, strength=4.0)
 
+
+
+# --- Leaves, bark and grass (albedo, straight alpha, see noise.pack_albedo) ---
+# Shapes are drawn in pixels with a 1 px antialiased edge. Each cell is built on its own
+# canvas and bled separately, so colour never crosses from one cell into another.
+
+LEAF_CELL = 512                      # side of one cell of the 4 x 4 leaf atlas
+LEAF_MARGIN = 8                      # free border inside each cell, nothing drawn there
+LEAF_COVER = (0.45, 0.65)            # accepted opaque coverage per cell (alpha > 0.5)
+LEAF_AIM = 0.55                      # coverage the scale search aims at
+FREE_CELL_RGB = np.array([0.30, 0.42, 0.20])
+
+CHESTNUT = (0.24, 0.42, 0.14)
+BEECH = (0.34, 0.52, 0.22)
+PLANE = (0.40, 0.54, 0.22)
+OLIVE = (0.56, 0.62, 0.48)
+PALM = (0.24, 0.44, 0.16)
+PALM_STEM = (0.36, 0.42, 0.20)
+SPRUCE = (0.10, 0.24, 0.13)
+LARCH = (0.64, 0.76, 0.34)
+CYPRESS = (0.14, 0.24, 0.16)
+OLEANDER = (0.20, 0.38, 0.18)
+OLEANDER_FLOWER = (0.92, 0.46, 0.62)
+LAUREL = (0.14, 0.34, 0.13)
+
+
+def _canvas(h, w):
+    """Empty colour (h, w, 3) and alpha (h, w) arrays."""
+    return np.zeros((h, w, 3)), np.zeros((h, w))
+
+
+def _paint(rgb, alpha, cx, cy, theta, d_fn, reach, base, shade=None):
+    """Composite one shape over the canvas with straight alpha ('over').
+
+    The shape sits at (cx, cy) in canvas pixels and is rotated by theta. d_fn(lx, ly) gives
+    the signed distance in pixels in the shape's own frame (x along the leaf, y across,
+    positive inside). Alpha is clipped over one pixel for antialiasing. shade(lx, ly, d)
+    returns a brightness factor per pixel. reach is the radius that contains the shape.
+    """
+    h, w = alpha.shape
+    R = reach + 2.0
+    x0 = max(0, int(np.floor(cx - R)))
+    x1 = min(w, int(np.ceil(cx + R)) + 1)
+    y0 = max(0, int(np.floor(cy - R)))
+    y1 = min(h, int(np.ceil(cy + R)) + 1)
+    if x1 <= x0 or y1 <= y0:
+        return
+    ys = np.arange(y0, y1) + 0.5
+    xs = np.arange(x0, x1) + 0.5
+    Y, X = np.meshgrid(ys, xs, indexing="ij")
+    dx = X - cx
+    dy = Y - cy
+    c, s = np.cos(theta), np.sin(theta)
+    lx = dx * c + dy * s
+    ly = -dx * s + dy * c
+    d = d_fn(lx, ly)
+    a = np.clip(d + 0.5, 0.0, 1.0)
+    if not a.any():
+        return
+    f = np.ones(a.shape) if shade is None else np.broadcast_to(shade(lx, ly, d), a.shape)
+    col = np.asarray(base, dtype=np.float64)[None, None, :] * f[..., None]
+    old_a = alpha[y0:y1, x0:x1]
+    old_rgb = rgb[y0:y1, x0:x1]
+    out_a = a + old_a * (1.0 - a)
+    num = col * a[..., None] + old_rgb * (old_a * (1.0 - a))[..., None]
+    rgb[y0:y1, x0:x1] = num / np.maximum(out_a, 1e-9)[..., None]
+    alpha[y0:y1, x0:x1] = out_a
+
+
+def _lance_d(L, W, p=0.8, teeth=0):
+    """Lanceolate leaf: base at x = -L/2, tip at x = +L/2, widest width W. Optional saw teeth."""
+    def d_fn(x, y):
+        t = np.clip((x + L / 2) / L, 0.0, 1.0)
+        hw = (W / 2) * np.sin(np.pi * t ** p) ** 0.9
+        if teeth:
+            hw = hw * (0.88 + 0.12 * np.abs(np.sin(np.pi * teeth * t)))
+        d = hw - np.abs(y)
+        return np.minimum(d, np.minimum(x + L / 2, L / 2 - x))
+    return d_fn
+
+
+def _ellipse_d(rx, ry):
+    """Ellipse with semi-axes rx (along x) and ry."""
+    def d_fn(x, y):
+        q = np.sqrt((x / rx) ** 2 + (y / ry) ** 2)
+        return (1.0 - q) * min(rx, ry)
+    return d_fn
+
+
+def _lobed_d(R, lobes=5, depth=0.4):
+    """Palmate leaf with `lobes` rounded lobes; sinuses go down to (1 - depth) * R."""
+    def d_fn(x, y):
+        r = np.hypot(x, y)
+        th = np.arctan2(y, x)
+        edge = R * (1.0 - depth + depth * np.abs(np.cos(lobes / 2.0 * th)) ** 1.6)
+        return edge - r
+    return d_fn
+
+
+def _disc_d(r):
+    """Disc of radius r around the origin."""
+    def d_fn(x, y):
+        return r - np.hypot(x, y)
+    return d_fn
+
+
+def _leaf_shade(half_len, half_w, veins=0, gloss=0.0):
+    """Brightness factor: lighter midrib, optional lateral veins, optional glossy stripe."""
+    def shade(x, y, d):
+        u = np.clip(x / half_len, -1.0, 1.0)
+        v = np.clip(y / half_w, -1.0, 1.0)
+        f = 1.0 - 0.05 * u
+        f = f + 0.10 * np.exp(-(v / 0.08) ** 2)
+        if veins:
+            f = f + 0.06 * np.sin(np.pi * (veins * 0.5 * (u + 1.0) - 1.5 * np.abs(v)))
+        if gloss:
+            f = f + gloss * np.exp(-((v + 0.15) / 0.22) ** 2)
+        return f
+    return shade
+
+
+def _place(rng, reach):
+    """Random centre inside the cell, with the whole shape inside the margin. None if it does not fit."""
+    lo = LEAF_MARGIN + reach
+    hi = LEAF_CELL - LEAF_MARGIN - reach
+    if lo > hi:
+        return None
+    return rng.uniform(lo, hi, size=2)
+
+
+def _draw_lance(n, L, W, base, teeth=0, veins=0):
+    def draw(rng, rgb, alpha, scale):
+        for _ in range(n):
+            L_i = L * scale * rng.uniform(0.9, 1.1)
+            W_i = W * scale * rng.uniform(0.9, 1.1)
+            reach = L_i / 2 + 1.0
+            theta = rng.uniform(0.0, 2 * np.pi)
+            tone = rng.uniform(0.9, 1.1)
+            p = _place(rng, reach)
+            if p is None:
+                continue
+            _paint(rgb, alpha, p[0], p[1], theta, _lance_d(L_i, W_i, teeth=teeth), reach,
+                   np.array(base) * tone, _leaf_shade(L_i / 2, W_i / 2, veins))
+    return draw
+
+
+def _draw_ellipses(n, rx, ry, base, veins=0, gloss=0.0, angle=None):
+    def draw(rng, rgb, alpha, scale):
+        for _ in range(n):
+            rx_i = rx * scale * rng.uniform(0.9, 1.1)
+            ry_i = ry * scale * rng.uniform(0.9, 1.1)
+            reach = rx_i + 1.0
+            if angle is None:
+                theta = rng.uniform(0.0, 2 * np.pi)
+            else:
+                theta = angle + rng.uniform(-0.4, 0.4)
+            tone = rng.uniform(0.9, 1.1)
+            p = _place(rng, reach)
+            if p is None:
+                continue
+            _paint(rgb, alpha, p[0], p[1], theta, _ellipse_d(rx_i, ry_i), reach,
+                   np.array(base) * tone, _leaf_shade(rx_i, ry_i, veins, gloss))
+    return draw
+
+
+def _draw_plane(n, R, base):
+    def draw(rng, rgb, alpha, scale):
+        for _ in range(n):
+            R_i = R * scale * rng.uniform(0.9, 1.1)
+            reach = R_i + 1.0
+            theta = rng.uniform(0.0, 2 * np.pi)
+            tone = rng.uniform(0.9, 1.1)
+            p = _place(rng, reach)
+            if p is None:
+                continue
+            # Radial veins run out into the five lobes.
+            shade = lambda x, y, d: 1.0 + 0.08 * np.cos(5.0 * np.arctan2(y, x))
+            _paint(rgb, alpha, p[0], p[1], theta, _lobed_d(R_i), reach,
+                   np.array(base) * tone, shade)
+    return draw
+
+
+def _draw_sprigs(n, branch, needle_L, needle_W, base, spread=0.6, step=4.0):
+    """Conifer sprigs: a short stem with needles on both sides, pointing forward."""
+    def draw(rng, rgb, alpha, scale):
+        Ln = needle_L * scale
+        Wn = needle_W * scale
+        for _ in range(n):
+            ang = rng.uniform(0.0, np.pi)
+            tone = rng.uniform(0.9, 1.1)
+            p = _place(rng, branch / 2 + Ln + 2)
+            if p is None:
+                continue
+            ax = np.array([np.cos(ang), np.sin(ang)])
+            for s_ in np.linspace(-branch / 2, branch / 2, 24):
+                q = p + ax * s_
+                _paint(rgb, alpha, q[0], q[1], 0.0, _disc_d(1.6), 2.6, np.array(base) * 0.6)
+            for s_ in np.arange(-branch / 2, branch / 2, step):
+                q = p + ax * s_
+                for side in (1.0, -1.0):
+                    na = ang + side * spread * rng.uniform(0.9, 1.1)
+                    c = q + np.array([np.cos(na), np.sin(na)]) * Ln / 2
+                    _paint(rgb, alpha, c[0], c[1], na, _lance_d(Ln, Wn, p=0.5), Ln / 2 + 1,
+                           np.array(base) * tone * rng.uniform(0.95, 1.05),
+                           _leaf_shade(Ln / 2, Wn / 2))
+    return draw
+
+
+def _draw_larch(n, needle_L, needle_W, base, needles=7):
+    """Larch: bright tufts, several needles fanning out from one point."""
+    def draw(rng, rgb, alpha, scale):
+        Ln = needle_L * scale
+        Wn = needle_W * scale
+        for _ in range(n):
+            tone = rng.uniform(0.9, 1.1)
+            p = _place(rng, Ln + 2)
+            if p is None:
+                continue
+            start = rng.uniform(0.0, 2 * np.pi)
+            for k in range(needles):
+                na = start + k * 2 * np.pi / needles + rng.uniform(-0.25, 0.25)
+                c = p + np.array([np.cos(na), np.sin(na)]) * Ln / 2
+                _paint(rgb, alpha, c[0], c[1], na, _lance_d(Ln, Wn, p=0.5), Ln / 2 + 1,
+                       np.array(base) * tone, _leaf_shade(Ln / 2, Wn / 2))
+    return draw
+
+
+def _draw_oleander(rng, rgb, alpha, scale):
+    _draw_lance(110, 80, 12, OLEANDER)(rng, rgb, alpha, scale)
+    # Four flower heads of about a dozen small pink florets each.
+    for _ in range(4):
+        p = _place(rng, 18.0 * scale + 4.0)
+        if p is None:
+            continue
+        for _ in range(12):
+            off = rng.normal(0.0, 7.0 * scale, size=2)
+            r = 4.0 * scale * rng.uniform(0.9, 1.1)
+            q = p + off
+            _paint(rgb, alpha, q[0], q[1], 0.0, _disc_d(r), r + 1.0,
+                   np.array(OLEANDER_FLOWER) * rng.uniform(0.9, 1.1))
+
+
+def _draw_palm(rng, rgb, alpha, scale):
+    """One palm frond: an arched rachis from the lower-left to the upper-right corner, with pinnae."""
+    p0 = np.array([14.0, 14.0])
+    p1 = np.array([498.0, 498.0])
+    dv = p1 - p0
+    tdir = dv / np.linalg.norm(dv)
+    nrm = np.array([-tdir[1], tdir[0]])
+
+    def pt(t):
+        return p0 + dv * t + nrm * (40.0 * np.sin(np.pi * t))
+
+    for t in np.linspace(0.0, 1.0, 120):
+        q = pt(t)
+        _paint(rgb, alpha, q[0], q[1], 0.0, _disc_d(4.0 * scale), 4.0 * scale + 1.0,
+               np.array(PALM_STEM))
+    for t in np.arange(0.03, 0.99, 0.006):
+        bp = pt(t)
+        tang = pt(min(t + 1e-3, 1.0)) - pt(max(t - 1e-3, 0.0))
+        tang = tang / np.linalg.norm(tang)
+        env = np.sin(np.pi * t) ** 0.5
+        for side in (1.0, -1.0):
+            ang = np.arctan2(tang[1], tang[0]) + side * rng.uniform(0.8, 1.0)
+            Lp = 150.0 * scale * rng.uniform(0.85, 1.1) * (0.35 + 0.65 * env)
+            Wp = 20.0 * scale * rng.uniform(0.9, 1.1)
+            tone = rng.uniform(0.9, 1.1)
+            dirv = np.array([np.cos(ang), np.sin(ang)])
+            tip = bp + dirv * Lp
+            if not (np.all(tip >= LEAF_MARGIN) and np.all(tip <= LEAF_CELL - LEAF_MARGIN)):
+                continue
+            c = bp + dirv * Lp / 2
+            _paint(rgb, alpha, c[0], c[1], ang, _lance_d(Lp, Wp, p=0.6), Lp / 2 + 1,
+                   np.array(PALM) * tone, _leaf_shade(Lp / 2, Wp / 2, veins=4))
+
+
+def _fill_cell(seed, draw):
+    """Draw one leaf cell, scaling the leaves until the coverage is in range.
+
+    draw(rng, rgb, alpha, scale) is run again with the same seed for each try, so the result
+    is deterministic. Returns (rgb, alpha, coverage).
+    """
+    scale = 1.0
+    best = None
+    last = 0.0
+    for _ in range(14):
+        rgb, alpha = _canvas(LEAF_CELL, LEAF_CELL)
+        draw(np.random.default_rng(seed), rgb, alpha, scale)
+        cov = float((alpha > 0.5).mean())
+        last = cov
+        if 0.50 <= cov <= 0.60:
+            return rgb, alpha, cov
+        # Keep the first result inside the accepted range, in case the search plateaus.
+        if best is None and LEAF_COVER[0] <= cov <= LEAF_COVER[1]:
+            best = (rgb, alpha, cov)
+        if scale > 3.0:
+            break
+        scale *= np.sqrt(LEAF_AIM / max(cov, 1e-3))
+    if best is None:
+        raise ValueError(f"leaf cell coverage {last:.3f} outside {LEAF_COVER} (seed {seed})")
+    return best
+
+
+def _finish_cell(rgb, alpha, default):
+    """Give transparent pixels the mean colour of the opaque ones (or default) before bleeding."""
+    opaque = alpha > 0.5
+    mean = rgb[opaque].mean(axis=0) if opaque.any() else np.asarray(default, dtype=np.float64)
+    return np.where(opaque[..., None], rgb, mean)
+
+
+LEAF_DRAWS = [
+    _draw_lance(16, 280, 90, CHESTNUT, teeth=14, veins=10),    # 0 chestnut
+    _draw_ellipses(75, 34, 22, BEECH, veins=3),                # 1 beech
+    _draw_plane(14, 75, PLANE),                                # 2 plane
+    _draw_lance(180, 80, 16, OLIVE),                           # 3 olive
+    _draw_palm,                                                # 4 palm frond
+    _draw_sprigs(90, 70, 28, 5, SPRUCE),                       # 5 spruce
+    _draw_larch(150, 30, 5, LARCH, needles=6),                 # 6 larch
+    _draw_ellipses(260, 22, 7, CYPRESS, angle=np.pi / 2),      # 7 cypress
+    _draw_oleander,                                            # 8 oleander
+    _draw_ellipses(60, 42, 21, LAUREL, gloss=0.12),            # 9 laurel
+]
+
+
+@generator('leaves', size=(2048, 2048))
+def leaves(size):
+    """Leaf tufts seen from above, 4 x 4 cells of 512 px. Cells 10-15 stay empty."""
+    w, h = size
+    out = np.zeros((h, w, 4), dtype=np.uint8)
+    per_row = w // LEAF_CELL
+    for i in range(per_row * (h // LEAF_CELL)):
+        r, c = divmod(i, per_row)
+        if i < len(LEAF_DRAWS):
+            rgb, alpha, _ = _fill_cell(100 + i, LEAF_DRAWS[i])
+        else:
+            rgb, alpha = _canvas(LEAF_CELL, LEAF_CELL)
+        rgb = _finish_cell(rgb, alpha, FREE_CELL_RGB)
+        tile = noise.pack_albedo(rgb, alpha)
+        out[r * LEAF_CELL:(r + 1) * LEAF_CELL, c * LEAF_CELL:(c + 1) * LEAF_CELL] = tile
+    return out
+
+
+def _bark_cell(kind, n=512):
+    """One bark cell of n x n, tileable in both directions (periodic noise, integer repeats)."""
+    seed = 300 + kind * 10
+    yy, xx = np.indices((n, n)).astype(np.float64)
+    x = xx / n
+    y = yy / n
+    grain = noise.fbm(n, octaves=4, base_freq=48, seed=seed + 1).astype(np.float64)
+    warp = noise.fbm(n, octaves=3, base_freq=3, seed=seed + 2).astype(np.float64)
+    if kind == 0:
+        # Furrowed: 10 vertical folds per cell, slightly wavy. Grey-brown.
+        ridge = np.abs(np.sin(np.pi * (10.0 * x + 0.25 * (warp - 0.5))))
+        lum = 0.34 + 0.14 * ridge ** 0.6 + 0.05 * (grain - 0.5)
+        tint = np.array([1.0, 0.97, 0.92])
+    elif kind == 1:
+        # Smooth grey with darker lichen blotches.
+        spots = noise.fbm(n, octaves=4, base_freq=6, seed=seed + 3).astype(np.float64)
+        m = np.clip((spots - 0.6) / 0.05, 0.0, 1.0)
+        lum = 0.62 + 0.04 * (grain - 0.5)
+        lum = lum * (1.0 - 0.35 * m)
+        tint = np.array([1.0, 1.0, 0.98])
+    elif kind == 2:
+        # Scaly: rounded plates from a Voronoi grid of 10 x 10, reddish brown.
+        f1, _, cid = noise.voronoi(n, cells=100, seed=seed + 4)
+        rng = np.random.default_rng(seed + 5)
+        tone = rng.uniform(-0.08, 0.08, 100)
+        dome = np.clip(1.0 - f1.astype(np.float64) / 0.85, 0.0, 1.0) ** 0.5
+        lum = 0.40 + 0.10 * (dome - 0.5) + tone[cid] + 0.06 * (grain - 0.5)
+        tint = np.array([1.0, 0.82, 0.68])
+    else:
+        # Palm trunk: horizontal leaf-scar rings, 8 per cell, light grey-brown.
+        ring = np.abs(np.sin(np.pi * (8.0 * y + 0.08 * (warp - 0.5))))
+        lum = 0.52 + 0.14 * ring ** 0.5 + 0.05 * (grain - 0.5)
+        tint = np.array([1.0, 0.94, 0.84])
+    rgb = np.clip(lum, 0.0, 1.0)[..., None] * tint[None, None, :]
+    return rgb
+
+
+@generator('bark', size=(1024, 1024))
+def bark(size):
+    """2 x 2 cells of 512 px, opaque, each cell tileable in v (and in u)."""
+    w, h = size
+    out = np.zeros((h, w, 4), dtype=np.uint8)
+    per_row = w // 512
+    for i in range(per_row * (h // 512)):
+        r, c = divmod(i, per_row)
+        rgb = _bark_cell(i)
+        tile = noise.pack_albedo(rgb, np.ones((512, 512)))
+        out[r * 512:(r + 1) * 512, c * 512:(c + 1) * 512] = tile
+    return out
+
+
+def _grass_blade(rng, rgb, alpha, base_x, height, lean, width0, colors, bend=0.0):
+    """One blade: a bent stroke from the bottom edge, tapering to the tip."""
+    P0 = np.array([base_x, 500.0])
+    tip_x = float(np.clip(base_x + lean, LEAF_MARGIN, LEAF_CELL - LEAF_MARGIN))
+    P2 = np.array([tip_x, 500.0 - height])
+    P1 = P0 + np.array([(P2[0] - P0[0]) * 0.2 + bend, -height * 0.55])
+    color = np.array(colors[int(rng.integers(len(colors)))]) * rng.uniform(0.92, 1.08)
+    n_pts = int(height / 1.5) + 2   # about 1.5 px between stamps, so the blade is a solid stroke
+    for k in range(n_pts):
+        t = k / (n_pts - 1)
+        q = (1 - t) ** 2 * P0 + 2 * (1 - t) * t * P1 + t * t * P2
+        r = width0 * (1 - t) ** 0.9 + 0.4
+        _paint(rgb, alpha, q[0], q[1], 0.0, _disc_d(r), r + 1.0, color)
+    return P2
+
+
+def _grass_cell(kind):
+    rng = np.random.default_rng(400 + kind)
+    rgb, alpha = _canvas(LEAF_CELL, LEAF_CELL)
+    if kind == 3:
+        # Fern: arched fronds with paired leaflets.
+        fern = [(0.20, 0.44, 0.18), (0.27, 0.52, 0.23)]
+        for _ in range(5):
+            base_x = 256.0 + rng.normal(0.0, 16.0)
+            height = rng.uniform(280.0, 420.0)
+            lean = rng.uniform(-150.0, 150.0)
+            bend = rng.uniform(-60.0, 60.0)
+            P0 = np.array([base_x, 500.0])
+            P2 = P0 + np.array([lean, -height])
+            P1 = P0 + np.array([lean * 0.15 + bend, -height * 0.6])
+            color = np.array(fern[int(rng.integers(2))]) * rng.uniform(0.92, 1.08)
+            n_stem = int(height / 1.5) + 2
+            for k in range(n_stem):
+                t = k / (n_stem - 1)
+                q = (1 - t) ** 2 * P0 + 2 * (1 - t) * t * P1 + t * t * P2
+                tg = 2 * (1 - t) * (P1 - P0) + 2 * t * (P2 - P1)
+                tg = tg / np.linalg.norm(tg)
+                _paint(rgb, alpha, q[0], q[1], 0.0, _disc_d(1.4), 2.4, color)
+                if k >= 3 and k % 4 == 0 and k < n_stem - 3:
+                    Lf = 46.0 * (1.0 - t) ** 0.7 + 8.0
+                    for side in (1.0, -1.0):
+                        na = np.arctan2(tg[1], tg[0]) + side * 0.9 * rng.uniform(0.9, 1.1)
+                        c = q + np.array([np.cos(na), np.sin(na)]) * Lf / 2
+                        _paint(rgb, alpha, c[0], c[1], na, _lance_d(Lf, Lf * 0.28, p=0.6),
+                               Lf / 2 + 1, color * rng.uniform(0.95, 1.05),
+                               _leaf_shade(Lf / 2, Lf * 0.14))
+        return rgb, alpha
+
+    if kind == 0:
+        colors = [(0.34, 0.56, 0.20), (0.26, 0.46, 0.15), (0.42, 0.60, 0.24)]
+    elif kind == 1:
+        colors = [(0.70, 0.60, 0.34), (0.62, 0.50, 0.27), (0.76, 0.66, 0.40)]
+    else:
+        colors = [(0.34, 0.56, 0.20), (0.26, 0.46, 0.15), (0.42, 0.60, 0.24)]
+    count = 110 if kind != 1 else 90
+    tips = []
+    for _ in range(count):
+        base_x = 256.0 + rng.normal(0.0, 22.0)
+        height = rng.uniform(170.0, 450.0)
+        lean = rng.uniform(-200.0, 200.0)
+        bend = rng.uniform(-40.0, 40.0)
+        tip = _grass_blade(rng, rgb, alpha, base_x, height, lean, 3.4, colors, bend)
+        tips.append(tip)
+    if kind == 2:
+        # White and yellow flowers at the tips of about a quarter of the blades.
+        for k in range(0, len(tips), 4):
+            tip = tips[k]
+            yellow = rng.random() < 0.4
+            petal = (0.95, 0.80, 0.25) if yellow else (0.96, 0.95, 0.90)
+            for j in range(5):
+                a = 2 * np.pi * j / 5 + rng.uniform(-0.2, 0.2)
+                q = tip + np.array([np.cos(a), np.sin(a)]) * 4.0
+                _paint(rgb, alpha, q[0], q[1], 0.0, _disc_d(3.0), 4.0, petal)
+            _paint(rgb, alpha, tip[0], tip[1], 0.0, _disc_d(1.8), 2.8, (0.90, 0.70, 0.20))
+    return rgb, alpha
+
+
+@generator('grass', size=(2048, 512))
+def grass(size):
+    """Four cells of 512 px in a row: green tuft, dry grass, flowering grass, fern."""
+    w, h = size
+    out = np.zeros((h, w, 4), dtype=np.uint8)
+    for i in range(w // 512):
+        rgb, alpha = _grass_cell(i)
+        rgb = _finish_cell(rgb, alpha, (0.3, 0.42, 0.2))
+        out[:, i * 512:(i + 1) * 512] = noise.pack_albedo(rgb, alpha)
+    return out
 
 
 if __name__ == "__main__":

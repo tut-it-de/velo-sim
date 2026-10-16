@@ -158,3 +158,50 @@ def save_webp(path, rgba, quality=90, lossless=False):
         Image.fromarray(rgba).save(path, "WEBP", lossless=True, method=6)
     else:
         Image.fromarray(rgba).save(path, "WEBP", quality=quality, method=6)
+
+
+def dilate(rgb, alpha, steps=32):
+    """Bleed colour from opaque pixels into transparent ones.
+
+    rgb is float (h, w, 3), alpha float (h, w). A pixel counts as opaque when alpha > 0.5.
+    Each step sets every non-opaque pixel that touches an opaque one (3 x 3 neighbourhood)
+    to the mean colour of those opaque neighbours and counts it as opaque from then on.
+    Stops when everything is filled or after `steps` steps. Alpha is not changed.
+    Returns float64 (h, w, 3). Not periodic: the edges are not wrapped.
+    """
+    out = np.array(rgb, dtype=np.float64)
+    known = np.asarray(alpha, dtype=np.float64) > 0.5
+    h, w = known.shape
+    for _ in range(steps):
+        if known.all():
+            break
+        k = known.astype(np.float64)
+        col = out * k[..., None]
+        kp = np.pad(k, 1)
+        cp = np.pad(col, ((1, 1), (1, 1), (0, 0)))
+        cnt = np.zeros((h, w))
+        acc = np.zeros((h, w, 3))
+        for dy in range(3):
+            for dx in range(3):
+                cnt += kp[dy:dy + h, dx:dx + w]
+                acc += cp[dy:dy + h, dx:dx + w]
+        grow = (~known) & (cnt > 0)
+        if not grow.any():
+            break
+        out[grow] = acc[grow] / cnt[grow][:, None]
+        known = known | grow
+    return out
+
+
+def pack_albedo(rgb, alpha, steps=32):
+    """Pack a colour texture as uint8 RGBA (h, w, 4), straight (not premultiplied) alpha.
+
+    rgb is float in [0, 1] (sRGB), alpha float in [0, 1]. The colour of transparent pixels is
+    bled outwards with dilate(), so mipmaps do not pick up dark fringes.
+    """
+    rgb = np.asarray(rgb, dtype=np.float64)
+    alpha = np.clip(np.asarray(alpha, dtype=np.float64), 0.0, 1.0)
+    bled = dilate(rgb, alpha, steps=steps)
+    rgba = np.concatenate([bled, alpha[..., None]], axis=-1)
+    rgba = np.clip(rgba, 0.0, 1.0)
+    return (rgba * 255.0 + 0.5).astype(np.uint8)
