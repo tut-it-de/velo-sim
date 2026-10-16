@@ -68,6 +68,30 @@ const UPDATE_DIFFUSE = /* glsl */ `
 #endif
   float veloRock = smoothstep(0.3, 0.55, 1.0 - veloUp) * (1.0 - 0.7 * veloForest);
   veloCol = mix(veloCol, vec3(0.47, 0.45, 0.42) * (0.85 + 0.3 * veloNoise(veloP * 0.05)), veloRock);
+#ifdef VELO_DETAIL
+  // detail maps near the camera: R = brightness (applied as a multiplier around 0.5), A/G = normal X/Y (0.5 neutral)
+  float veloDetailFade = 1.0 - smoothstep(60.0, 120.0, veloDist);
+  if (veloDetailFade > 0.0) {
+    float veloRockW = veloRock * veloDetailFade;
+    float veloLitterW = veloForest * (1.0 - smoothstep(40.0, 240.0, veloDist)) * veloDetailFade;
+    // rock: triplanar brightness, so steep faces show the layering too
+    vec3 veloTw = pow(abs(normalW), vec3(4.0));
+    veloTw /= (veloTw.x + veloTw.y + veloTw.z);
+    float veloRockR = texture2D(veloRockMap, vPositionW.zy / 3.0).r * veloTw.x
+      + texture2D(veloRockMap, vPositionW.xz / 3.0).r * veloTw.y
+      + texture2D(veloRockMap, vPositionW.xy / 3.0).r * veloTw.z;
+    veloCol *= mix(1.0, 2.0 * veloRockR, veloRockW);
+    // leaf litter: planar on the ground
+    float veloLeafR = texture2D(veloFloorMap, vPositionW.xz / 3.0).r;
+    veloCol *= mix(1.0, 2.0 * veloLeafR, veloLitterW);
+    // light normal disturbance from the same maps (planar, strength 0.6)
+    vec4 veloRockN = texture2D(veloRockMap, vPositionW.xz / 3.0);
+    vec4 veloLeafN = texture2D(veloFloorMap, vPositionW.xz / 3.0);
+    normalW = normalize(normalW
+      + vec3((veloRockN.a - 0.5) * 2.0, 0.0, (veloRockN.g - 0.5) * 2.0) * 0.6 * veloRockW
+      + vec3((veloLeafN.a - 0.5) * 2.0, 0.0, (veloLeafN.g - 0.5) * 2.0) * 0.6 * veloLitterW);
+  }
+#endif
   veloCol *= 1.0 - 0.32 * (1.0 - smoothstep(veloMap.w - 0.6, veloMap.w + 0.35, vPositionW.y));
   baseColor.rgb = veloCol;
 }
@@ -92,6 +116,30 @@ const HAZE_BEFORE_FOG = /* glsl */ `
 }
 `;
 
+/** Detail maps of the terrain (rock layering and forest floor, see tools/texgen). */
+interface DetailMaps {
+  rock: Texture;
+  floor: Texture;
+}
+
+const detailMapCache = new WeakMap<Scene, DetailMaps>();
+
+/** Loads the rock and forest-floor detail maps once per scene (tiling, trilinear, anisotropy 8). */
+function loadDetailMaps(scene: Scene): DetailMaps {
+  const cached = detailMapCache.get(scene);
+  if (cached) return cached;
+  const load = (name: string): Texture => {
+    const tex = new Texture(`${import.meta.env.BASE_URL}textures/${name}.webp`, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE);
+    tex.wrapU = Texture.WRAP_ADDRESSMODE;
+    tex.wrapV = Texture.WRAP_ADDRESSMODE;
+    tex.anisotropicFilteringLevel = 8;
+    return tex;
+  };
+  const maps = { rock: load('rock'), floor: load('forestfloor') };
+  detailMapCache.set(scene, maps);
+  return maps;
+}
+
 /**
  * Colours the terrain from a world-space colour map (one texel per grid vertex: land-cover albedo with
  * baked mountain shadows, alpha = forest cover) plus procedural detail, canopy relief and rock on
@@ -100,15 +148,17 @@ const HAZE_BEFORE_FOG = /* glsl */ `
 export class TerrainPlugin extends MaterialPluginBase {
   private readonly map: Vector4;
   private readonly size: Vector4;
+  private readonly detail: boolean;
 
   constructor(
     material: Material,
     private readonly texture: Texture,
     grid: WorldGrid,
     waterLevel: number,
-    private readonly detail: boolean,
+    private readonly detailMaps: DetailMaps | null,
   ) {
     super(material, 'VeloTerrain', 200, { VELO_DETAIL: false });
+    this.detail = detailMaps !== null;
     this.map = new Vector4(grid.x0, grid.z0, 1 / grid.step, waterLevel);
     this.size = new Vector4(1 / grid.nx, 1 / grid.nz, 0, 0);
     this._enable(true);
@@ -134,26 +184,32 @@ export class TerrainPlugin extends MaterialPluginBase {
 
   override getSamplers(samplers: string[]): void {
     samplers.push('veloColorMap');
+    if (this.detail) samplers.push('veloRockMap', 'veloFloorMap');
   }
 
   override bindForSubMesh(ubo: UniformBuffer): void {
     ubo.updateVector4('veloMap', this.map);
     ubo.updateVector4('veloSize', this.size);
     ubo.setTexture('veloColorMap', this.texture);
+    if (this.detailMaps) {
+      ubo.setTexture('veloRockMap', this.detailMaps.rock);
+      ubo.setTexture('veloFloorMap', this.detailMaps.floor);
+    }
   }
 
   override getActiveTextures(active: BaseTexture[]): void {
     active.push(this.texture);
+    if (this.detailMaps) active.push(this.detailMaps.rock, this.detailMaps.floor);
   }
 
   override hasTexture(texture: BaseTexture): boolean {
-    return texture === this.texture;
+    return texture === this.texture || (this.detailMaps !== null && (texture === this.detailMaps.rock || texture === this.detailMaps.floor));
   }
 
   override getCustomCode(shaderType: string) {
     if (shaderType !== 'fragment') return null;
     return {
-      CUSTOM_FRAGMENT_DEFINITIONS: `uniform sampler2D veloColorMap;\n${NOISE_GLSL}`,
+      CUSTOM_FRAGMENT_DEFINITIONS: `uniform sampler2D veloColorMap;\n#ifdef VELO_DETAIL\nuniform sampler2D veloRockMap;\nuniform sampler2D veloFloorMap;\n#endif\n${NOISE_GLSL}`,
       CUSTOM_FRAGMENT_UPDATE_DIFFUSE: UPDATE_DIFFUSE,
       CUSTOM_FRAGMENT_BEFORE_FOG: HAZE_BEFORE_FOG,
     };
@@ -169,6 +225,6 @@ export function createTerrainMaterial(scene: Scene, name: string, grid: WorldGri
   mat.diffuseColor = Color3.White();
   mat.specularColor = new Color3(0.02, 0.02, 0.02);
   mat.specularPower = 8;
-  new TerrainPlugin(mat, tex, grid, waterLevel, detail);
+  new TerrainPlugin(mat, tex, grid, waterLevel, detail ? loadDetailMaps(scene) : null);
   return mat;
 }

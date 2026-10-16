@@ -255,8 +255,8 @@ Fassadenfarben erhalten.
 | P2.3 | 2B | Bruchstein-/Mauer-Detailmap | fertig |
 | P2.4 | 2B | Putz- und Ziegel-Detailmaps | fertig |
 | P2.5 | 2B | Fels- und Waldboden-Detailmaps | fertig |
-| P2.6 | 2C | Detailmaps an Straße, Mauern, Häusern | offen |
-| P2.7 | 2C | Detailmaps im Gelände (Weltkoordinaten) | offen |
+| P2.6 | 2C | Detailmaps an Straße, Mauern, Häusern | fertig |
+| P2.7 | 2C | Detailmaps im Gelände (Weltkoordinaten) | fertig |
 | P2.8 | 2D | Abnahme-Screenshots Phase 2 | offen |
 
 **P2.1 Texturgenerator-Grundgerüst**

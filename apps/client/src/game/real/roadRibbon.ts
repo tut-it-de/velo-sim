@@ -14,6 +14,7 @@ import {
 import { smoothstep } from '../noise';
 import { EDGE, ROW_STRIDE, SHOULDER, VERGE_BLEND, WALL_THICK, type RouteCorridor } from './corridor';
 import { SKY, TO_SUN } from './env';
+import { applyDetail } from './detailMaps';
 import { MeshData } from './meshData';
 import { NOISE_GLSL } from './terrainMaterial';
 import type { RealTerrain } from './terrain';
@@ -23,6 +24,8 @@ import type { Architecture } from './worldData';
 const CHUNK_ROWS = 96;
 const VERGE_COLS = 12;
 const STONE_REPEAT = 2.5;
+/** Asphalt detail tiles across the road: the U range spans roughly 9 m of road and shoulder, one tile per 1.5 m. */
+const ROAD_DETAIL_ACROSS = 6;
 const PARAPET_H = 0.85;
 const PARAPET_W = 0.42;
 
@@ -128,7 +131,13 @@ export interface RibbonMeshes {
  * Road surface, verges (cut and fill slopes that blend into the terrain), lake walls with parapets,
  * retaining walls, guardrails and street lamps along the lap.
  */
-export function buildRouteRibbon(scene: Scene, c: RouteCorridor, terrain: RealTerrain, markings: Architecture = 'italian'): RibbonMeshes {
+export function buildRouteRibbon(
+  scene: Scene,
+  c: RouteCorridor,
+  terrain: RealTerrain,
+  markings: Architecture = 'italian',
+  detail = false,
+): RibbonMeshes {
   const texRepeat = roadTextureRepeat(markings);
   const t = c.track;
   const field = c.field;
@@ -153,6 +162,11 @@ export function buildRouteRibbon(scene: Scene, c: RouteCorridor, terrain: RealTe
   const stoneMat = new StandardMaterial('stone', scene);
   stoneMat.diffuseTexture = stoneTexture(scene);
   stoneMat.specularColor = new Color3(0.03, 0.03, 0.03);
+  if (detail) {
+    // fine asphalt grain and stone courses on top of the base textures (one tile per 1.5 m along the lap, 2 m for stone)
+    for (const m of [openMat, townMat]) applyDetail(m, scene, 'asphalt', [ROAD_DETAIL_ACROSS, texRepeat / 1.5], { diffuse: 0.45, bump: 0.5 });
+    applyDetail(stoneMat, scene, 'drystone', [STONE_REPEAT / 2, STONE_REPEAT / 2], { diffuse: 0.6, bump: 1 });
+  }
   const railMat = new StandardMaterial('guardrail', scene);
   railMat.diffuseColor = new Color3(0.66, 0.68, 0.7);
   railMat.specularColor = new Color3(0.55, 0.55, 0.55);

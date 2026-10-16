@@ -109,7 +109,7 @@ export class RealWorld {
     const terrain = await RealTerrain.build(scene, data, field, corridor, quality, step);
 
     await step('Straße, Mauern und Leitplanken …');
-    const ribbon = buildRouteRibbon(scene, corridor, terrain, data.look.architecture);
+    const ribbon = buildRouteRibbon(scene, corridor, terrain, data.look.architecture, quality.level === 'ultra' || quality.level === 'hoch');
 
     await step('Häuser und Kirchen …');
     const buildings = buildBuildings(scene, data.buildings, corridor, quality, data.look.architecture);

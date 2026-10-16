@@ -1,5 +1,6 @@
 import { Color3, StandardMaterial, type Mesh, type Scene } from '@babylonjs/core';
 import { SHOULDER, type RouteCorridor } from './corridor';
+import { applyDetail } from './detailMaps';
 import { MeshData } from './meshData';
 import type { QualityProfile } from './quality';
 import { facadeTexture, roofTexture } from './textures';
@@ -368,6 +369,12 @@ export function buildBuildings(
   roofMat.specularColor = new Color3(0.05, 0.05, 0.05);
   roofMat.backFaceCulling = false;
   roofMat.twoSidedLighting = true;
+  // detail maps add a texture read per pixel on the largest surfaces, so only the two top profiles get them
+  if (quality.level === 'ultra' || quality.level === 'hoch') {
+    // facade units are 7.2 m (walls) and 6.2 m (height) wide, roof units 2 m; plaster tiles 3 m, roof tiles 2 m
+    applyDetail(wallMat, scene, 'plaster', [7.2 / 3, 6.2 / 3], { diffuse: 0.3, bump: 0.4 });
+    applyDetail(roofMat, scene, 'rooftile', [1, 1], { diffuse: 0.5, bump: 0.8 });
+  }
 
   const chunks = new Map<string, Chunk>();
   const wl = corridor.field.waterLevel;
