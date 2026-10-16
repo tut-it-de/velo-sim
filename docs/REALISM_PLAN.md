@@ -122,8 +122,8 @@ Legende Status: `offen` · `läuft` · `fertig` · `verworfen`
 |---|---|---|---|
 | P1.1 | 1A | Neue Verfolger-Kamera | fertig |
 | P1.2 | 1A | Tiefe, warme Sonne und Himmelsfarben | fertig |
-| P1.3 | 1B | Kaskadenschatten (Bäume, Mauern, Häuser) | offen |
-| P1.4 | 1B | Filmische Tonwertkurve und Bildstimmung | offen |
+| P1.3 | 1B | Kaskadenschatten (Bäume, Mauern, Häuser) | fertig |
+| P1.4 | 1B | Filmische Tonwertkurve und Bildstimmung | fertig |
 | P1.5 | 1C | Umgebungsverdeckung (SSAO) für Ultra | offen |
 | P1.6 | 1C | Höhendunst in Tälern | offen |
 | P1.7 | 1D | Abnahme-Screenshots Phase 1 | offen |
@@ -199,6 +199,9 @@ Legende Status: `offen` · `läuft` · `fertig` · `verworfen`
 - Abnahme: Screenshots aller drei Stellen mit `hoch` und `mittel`. Der Orchestrator vergleicht mit
   dem Stand nach P1.2: Himmel nicht ausgebrannt, Schatten nicht schwarz, Grün nicht neongrün. Wenn zu
   dunkel: `exposure` in Schritten von 0.1 anheben (max. 1.7) und erneut prüfen.
+- Ergebnis (Orchestrator): Mit ACES lagen Waldboden und Schattenseiten fast schwarz, auch auf „Mittel“
+  (also nicht durch die Kaskadenschatten). Übernommen: `exposure = 1.7`; zusätzlich in `realWorld.ts`
+  `hemi.intensity` 0.5 → 0.7 (Himmelsfüllung für die Schattenseiten). Kontrast bleibt 1.06.
 
 **P1.5 Umgebungsverdeckung (SSAO) für Ultra**
 - Dateien: `apps/client/src/game/real/grading.ts`, `apps/client/src/game/world.ts` (nur Aufruf)

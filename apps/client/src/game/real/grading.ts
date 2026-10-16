@@ -12,10 +12,11 @@ import type { QualityProfile } from './quality';
 type ImageDefines = Parameters<ImageProcessingConfiguration['prepareDefines']>[0];
 
 /**
- * Film-like image: the standard photographic tone curve (ACES crushed the shadows of these
- * flat-lit assets), a touch of exposure and contrast, warm highlights and cool shadows, a mild
- * vignette and dithering against banding in the sky. On 'hoch' an HDR pipeline does this in one
- * post-process pass together with MSAA and a faint bloom on sun glints and bright clouds; otherwise
+ * Film-like image: an ACES tone curve with a filmic shoulder (the light is warm and no longer flat,
+ * so the shadows are no longer crushed and the sky and sun glints keep their detail), a touch of
+ * exposure and contrast, warm highlights and cool shadows, a mild vignette and dithering against
+ * banding in the sky. On 'hoch' and 'ultra' an HDR pipeline does this in one post-process pass together
+ * with MSAA and a faint bloom on sun glints and bright clouds ('ultra' adds a light sharpen); otherwise
  * the same image processing runs inside the materials (no extra passes, the canvas keeps its MSAA).
  * Must run before the materials are compiled and frozen.
  */
@@ -26,26 +27,31 @@ export function setupImagePipeline(scene: Scene, camera: Camera, quality: Qualit
     pipeline.samples = 4;
     pipeline.fxaaEnabled = false;
     pipeline.bloomEnabled = true;
-    pipeline.bloomThreshold = 0.92;
-    pipeline.bloomWeight = 0.18;
+    pipeline.bloomThreshold = 0.85;
+    pipeline.bloomWeight = 0.22;
     pipeline.bloomKernel = 48;
     pipeline.bloomScale = 0.5;
     pipeline.imageProcessingEnabled = true;
+    if (quality.level === 'ultra') {
+      pipeline.chromaticAberrationEnabled = false;
+      pipeline.sharpenEnabled = true;
+      pipeline.sharpen.edgeAmount = 0.25;
+    }
   }
   const ip = scene.imageProcessingConfiguration;
   ip.isEnabled = true;
   ip.toneMappingEnabled = true;
-  ip.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_STANDARD;
-  ip.exposure = 1.12;
-  ip.contrast = 1.12;
+  ip.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
+  ip.exposure = 1.7;
+  ip.contrast = 1.06;
   if (quality.grading) {
     const curves = new ColorCurves();
-    curves.globalSaturation = -4;
-    curves.highlightsHue = 38;
-    curves.highlightsDensity = 14;
-    curves.shadowsHue = 215;
-    curves.shadowsDensity = 22;
-    curves.shadowsSaturation = 6;
+    curves.globalSaturation = 6;
+    curves.highlightsHue = 40;
+    curves.highlightsDensity = 22;
+    curves.shadowsHue = 210;
+    curves.shadowsDensity = 18;
+    curves.shadowsSaturation = 10;
     ip.colorCurves = curves;
     ip.colorCurvesEnabled = true;
     ip.vignetteEnabled = true;

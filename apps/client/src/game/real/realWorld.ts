@@ -1,4 +1,5 @@
 import {
+  CascadedShadowGenerator,
   Color3,
   Color4,
   DirectionalLight,
@@ -57,6 +58,8 @@ function lodMasters(meshes: Mesh[]): Mesh[] {
  */
 export class RealWorld {
   private shadow: ShadowGenerator | null = null;
+  /** Cascaded shadows follow the camera; the single shadow map of the older profiles follows the sun. */
+  private cascaded = false;
   private readonly casters = new Set<Mesh>();
 
   private constructor(
@@ -94,7 +97,7 @@ export class RealWorld {
     // Warm late-afternoon sun about 3 times the sky fill on level ground: low amber direct light,
     // cool blue-grey shade, earthy bounce from the ground.
     const hemi = new HemisphericLight('sky-light', new Vector3(0, 1, 0), scene);
-    hemi.intensity = 0.5;
+    hemi.intensity = 0.7;
     hemi.diffuse = new Color3(0.64, 0.76, 1);
     hemi.groundColor = new Color3(0.36, 0.3, 0.22);
     hemi.specular = Color3.Black();
@@ -134,7 +137,37 @@ export class RealWorld {
     ]);
 
     const world = new RealWorld(scene, data, corridor, sun, water, sky);
-    if (quality.shadowMap > 0) {
+    if (quality.cascades > 0) {
+      // Cascades cover trees, walls and houses near the rider: their shadows fall over the road.
+      const csm = new CascadedShadowGenerator(quality.shadowMap, sun);
+      csm.numCascades = quality.cascades;
+      csm.shadowMaxZ = quality.shadowDistance;
+      csm.lambda = 0.85;
+      csm.stabilizeCascades = true;
+      csm.cascadeBlendPercentage = 0.1;
+      csm.autoCalcDepthBounds = false;
+      csm.usePercentageCloserFiltering = true;
+      csm.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
+      csm.darkness = 0.32;
+      csm.bias = 0.003;
+      csm.normalBias = 0.02;
+      csm.depthClamp = true;
+      const casterList = csm.getShadowMap()?.renderList;
+      // Alpha-tested tree billboards cast leaf-shaped shadows; verges blend into the terrain and stay out.
+      const casters: Mesh[] = [
+        ...trees,
+        ...buildings,
+        ...ribbon.other.filter((m) => !m.name.startsWith('verge-')),
+        ...(landmarks.solid ? [landmarks.solid] : []),
+      ];
+      for (const m of casters) casterList?.push(m);
+      for (const m of ribbon.road) m.receiveShadows = true;
+      for (const m of ribbon.other) m.receiveShadows = true;
+      for (const m of terrain.meshes) m.receiveShadows = true;
+      for (const m of buildings) m.receiveShadows = true;
+      world.shadow = csm;
+      world.cascaded = true;
+    } else if (quality.shadowMap > 0) {
       const sg = new ShadowGenerator(quality.shadowMap, sun);
       sg.usePercentageCloserFiltering = true;
       sg.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
@@ -183,7 +216,7 @@ export class RealWorld {
   update(dt: number, camera: Vector3, rider: Vector3): void {
     this.water.update(dt);
     this.sky.update(dt, camera.x, camera.z);
-    if (this.shadow) this.sun.position.copyFrom(rider).subtractInPlace(SUN_DIR.scale(70));
+    if (this.shadow && !this.cascaded) this.sun.position.copyFrom(rider).subtractInPlace(SUN_DIR.scale(70));
   }
 
   /** Materials that animate every frame must not stay frozen after `scene.freezeMaterials()`. */
