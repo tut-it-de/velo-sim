@@ -615,8 +615,8 @@ Grundlagen aus dem Code (für alle Aufgaben):
 
 | ID | Gruppe | Aufgabe | Status |
 |---|---|---|---|
-| P4.1 | 4A | Leitpfosten außerorts, Begrenzungssteine in Kurven | offen |
-| P4.2 | 4A | Felsböschung in Einschnitten (Geometrie-Rauheit + Fels im Shader) | offen |
+| P4.1 | 4A | Leitpfosten außerorts, Begrenzungssteine in Kurven | fertig |
+| P4.2 | 4A | Felsböschung in Einschnitten (Geometrie-Rauheit + Fels im Shader) | fertig |
 | P4.3 | 4B | Blumenkästen auf Brüstungen, Oleander auf Mauern in Orten | offen |
 | P4.4 | 4B | Mauerkrone mit Abdecksteinen, bewachsene Mauerfüße | offen |
 | P4.5 | 4C | Abnahme-Screenshots + Bildrate | offen |
@@ -685,6 +685,10 @@ Grundlagen aus dem Code (für alle Aufgaben):
 - Abnahme: Screenshot `forest` und `wall` (`ultra`, `mittel`) und Großer Feldberg 3000 m: In
   Einschnitten über ~2 m graue, gestufte Felsflächen statt glatter Wiese; keine Löcher oder Risse
   zwischen Böschung und Gelände; Grasbüschel am Bankett unverändert.
+
+- Ergebnis (Orchestrator, 4A): Am Lago 298 Leitpfosten und 367 Begrenzungssteine. Einschnitte mit Fels sind
+  selten (am Lago etwa 2 % der Böschungs-Vertices). Gut zu sehen bei 9300 m (Fels links) und 8700 m (Steine
+  in der Kurve). An den drei Vergleichsstellen ändert sich kaum etwas. Bildrate im Wald unverändert (14,5 ms).
 
 **P4.3 Blumenkästen auf Brüstungen, Oleander auf Mauern in Orten**
 - Datei: `apps/client/src/game/real/roadsideProps.ts` (nur ergänzen, P4.1 nicht ändern)

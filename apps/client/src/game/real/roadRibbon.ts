@@ -8,10 +8,11 @@ import {
   StandardMaterial,
   Texture,
   Vector3,
+  VertexBuffer,
   type Material,
   type Scene,
 } from '@babylonjs/core';
-import { smoothstep } from '../noise';
+import { Noise2D, smoothstep } from '../noise';
 import { EDGE, ROW_STRIDE, SHOULDER, VERGE_BLEND, WALL_THICK, type RouteCorridor } from './corridor';
 import { SKY, TO_SUN } from './env';
 import { applyDetail } from './detailMaps';
@@ -178,6 +179,8 @@ export function buildRouteRibbon(
   const posts: number[] = [];
   const lamps: number[] = [];
   const nTmp: [number, number, number] = [0, 0, 0];
+  // roughness of the cut slopes (P4.2), one noise field per build
+  const noise = new Noise2D(9137);
   let chunkId = 0;
 
   for (const run of drawnRuns(c)) {
@@ -223,6 +226,7 @@ export function buildRouteRibbon(
       // --- verges, blending from the road edge into the natural terrain ---
       const verge = new MeshData();
       const blend: number[] = [];
+      const rock: number[] = [];
       const cols = VERGE_COLS + 2;
       for (let side = 0; side < 2; side++) {
         const sg = side === 0 ? -1 : 1;
@@ -236,23 +240,38 @@ export function buildRouteRibbon(
           const o0 = hw + SHOULDER + (edge === EDGE.wall ? WALL_THICK : 0);
           const ext = Math.max(o0 + 1, c.ext[side]![r]!);
           const mid = c.mid[side]![r]!;
-          const verts: Array<[number, number, number, number]> = [];
+          // [x, y, z, blend, rock]; rock marks the cut slopes (only real verges, not lake shores)
+          const verts: Array<[number, number, number, number, number]> = [];
+          let prevO = 0;
+          let prevY = 0;
           for (let q = 0; q <= VERGE_COLS; q++) {
             const o = o0 + (ext - o0) * Math.pow(q / VERGE_COLS, 1.4);
-            const x = f.x + sg * f.rx * o;
-            const z = f.z + sg * f.rz * o;
+            let x = f.x + sg * f.rx * o;
+            let z = f.z + sg * f.rz * o;
             const sink = 0.15 * smoothstep(o0 + 2, ext, o);
             const y = c.profile(r, side, o, field.dem(x, z), f.y, edge) - sink;
             const w = Number.isNaN(mid) ? smoothstep(o0 + 1, o0 + VERGE_BLEND, o) : 0;
-            verts.push([x, y, z, w]);
+            // cut weight: a few metres into a cutting, fading out where the verge blends into the terrain
+            const cut = edge0 === EDGE.verge
+              ? smoothstep(1.2, 3.5, y - f.y) * smoothstep(o0 + 2.5, o0 + 4, o) * (1 - smoothstep(o0 + 0.6 * VERGE_BLEND, o0 + VERGE_BLEND, o))
+              : 0;
+            const slope = q === 0 ? 0 : (y - prevY) / (o - prevO);
+            prevO = o;
+            prevY = y;
+            // rough cut face: push the point sideways (layered by height, so the bands run horizontally)
+            const d = cut * 0.45 * noise.fbm((x + z) * 0.12, y * 0.7, 3);
+            x += sg * f.rx * d;
+            z += sg * f.rz * d;
+            verts.push([x, y, z, w, cut * smoothstep(0.35, 0.8, slope)]);
           }
           const last = verts[verts.length - 1]!;
-          verts.push([last[0], last[1] - 3, last[2], 0]);
+          verts.push([last[0], last[1] - 3, last[2], 0, 0]);
           if (side === 0) verts.reverse();
           bases.push(verge.vertexCount);
           for (const v of verts) {
             verge.vertex(v[0], v[1], v[2]);
             blend.push(v[3]);
+            rock.push(v[4]);
           }
         }
         for (let k = 0; k < rows.length - 1; k++) {
@@ -278,7 +297,13 @@ export function buildRouteRibbon(
         verge.nor[v * 3 + 2] = nz / len;
       }
       const vm = verge.build(scene, `verge-${id}`, terrain.nearMaterial);
-      if (vm) other.push(vm);
+      if (vm) {
+        // rock weight per vertex in UV2.x, read by TerrainPlugin (terrainMaterial.ts)
+        const uv2 = new Float32Array(verge.vertexCount * 2);
+        for (let v = 0; v < verge.vertexCount; v++) uv2[v * 2] = rock[v]!;
+        vm.setVerticesData(VertexBuffer.UV2Kind, uv2, false, 2);
+        other.push(vm);
+      }
 
       // --- lake walls with parapet, retaining walls, guardrails ---
       const walls = new MeshData(true);

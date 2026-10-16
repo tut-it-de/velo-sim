@@ -66,7 +66,8 @@ const UPDATE_DIFFUSE = /* glsl */ `
 #else
   veloCol *= mix(1.0, 0.92, veloForest);
 #endif
-  float veloRock = smoothstep(0.3, 0.55, 1.0 - veloUp) * (1.0 - 0.7 * veloForest);
+  // veloCut: road verges in a cutting (uv2.x from roadRibbon.ts) are rock as well
+  float veloRock = max(smoothstep(0.3, 0.55, 1.0 - veloUp) * (1.0 - 0.7 * veloForest), veloCut);
   veloCol = mix(veloCol, vec3(0.47, 0.45, 0.42) * (0.85 + 0.3 * veloNoise(veloP * 0.05)), veloRock);
 #ifdef VELO_DETAIL
   // detail maps near the camera: R = brightness (applied as a multiplier around 0.5), A/G = normal X/Y (0.5 neutral)
@@ -168,6 +169,11 @@ export class TerrainPlugin extends MaterialPluginBase {
     return 'VeloTerrainPlugin';
   }
 
+  /** uv2 carries the rock weight of the cut verges, so the attribute has to be declared (as in BillboardPlugin). */
+  override prepareDefinesBeforeAttributes(defines: MaterialDefines): void {
+    (defines as unknown as Record<string, boolean>)['_needUVs'] = true;
+  }
+
   override prepareDefines(defines: MaterialDefines): void {
     (defines as unknown as Record<string, boolean>)['VELO_DETAIL'] = this.detail;
   }
@@ -206,10 +212,17 @@ export class TerrainPlugin extends MaterialPluginBase {
     return texture === this.texture || (this.detailMaps !== null && (texture === this.detailMaps.rock || texture === this.detailMaps.floor));
   }
 
-  override getCustomCode(shaderType: string) {
+  override getCustomCode(shaderType: string): Record<string, string> | null {
+    if (shaderType === 'vertex') {
+      return {
+        CUSTOM_VERTEX_DEFINITIONS: 'varying float veloCut;\n',
+        // meshes without uv2 (the ground) get 0
+        CUSTOM_VERTEX_MAIN_END: '#ifdef UV2\nveloCut = uv2Updated.x;\n#else\nveloCut = 0.0;\n#endif\n',
+      };
+    }
     if (shaderType !== 'fragment') return null;
     return {
-      CUSTOM_FRAGMENT_DEFINITIONS: `uniform sampler2D veloColorMap;\n#ifdef VELO_DETAIL\nuniform sampler2D veloRockMap;\nuniform sampler2D veloFloorMap;\n#endif\n${NOISE_GLSL}`,
+      CUSTOM_FRAGMENT_DEFINITIONS: `varying float veloCut;\nuniform sampler2D veloColorMap;\n#ifdef VELO_DETAIL\nuniform sampler2D veloRockMap;\nuniform sampler2D veloFloorMap;\n#endif\n${NOISE_GLSL}`,
       CUSTOM_FRAGMENT_UPDATE_DIFFUSE: UPDATE_DIFFUSE,
       CUSTOM_FRAGMENT_BEFORE_FOG: HAZE_BEFORE_FOG,
     };
