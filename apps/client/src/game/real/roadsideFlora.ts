@@ -1,6 +1,6 @@
 import { Color3, Material, Mesh, StandardMaterial, Texture, VertexData, type Scene } from '@babylonjs/core';
 import { createRng } from '../noise';
-import { EDGE, ROW_STRIDE, SHOULDER, type RouteCorridor } from './corridor';
+import { EDGE, ROW_STRIDE, SHOULDER, WALL_THICK, type RouteCorridor } from './corridor';
 import type { BuildingIndex } from './heightField';
 import type { QualityLevel, QualityProfile } from './quality';
 import { LAND_CLASS } from './worldData';
@@ -22,6 +22,9 @@ const CHUNK = 50;
 const CELL_COUNT = 4;
 const BUSH_WIDTH: [number, number] = [0.6, 1.0];
 const BUSH_HEIGHT: [number, number] = [0.35, 0.7];
+/** Small tufts at the foot of walls and on their crowns. */
+const WALL_TUFT_WIDTH: [number, number] = [0.3, 0.6];
+const WALL_TUFT_HEIGHT: [number, number] = [0.2, 0.45];
 /** Distance from the road edge (beyond the shoulder), metres. */
 const EDGE_NEAR = 0.2;
 const EDGE_FAR = 2.8;
@@ -120,7 +123,7 @@ export async function buildRoadsideFlora(
   let bushes = 0;
   for (let r = 0; r < corridor.rows; r++) {
     // out-and-back sections are already planted by their first pass
-    if (corridor.urban[r] || corridor.covered[r]) continue;
+    if (corridor.covered[r]) continue;
     const i = corridor.sampleOf(r);
     const h = track.headings[i]!;
     // forward along the track and lateral (right) direction, as in the corridor analysis
@@ -128,30 +131,57 @@ export async function buildRoadsideFlora(
     const fz = Math.cos(h);
     const lx = Math.cos(h);
     const lz = -Math.sin(h);
-    for (let side = 0; side < 2; side++) {
-      if (corridor.edge[side]![r] !== EDGE.verge) continue;
-      const sg = side === 0 ? -1 : 1;
-      const roadEdge = corridor.hw[side]![r]! + SHOULDER;
-      const expected = setting.density * rowLength;
+    const countOf = (perMetre: number): number => {
+      const expected = perMetre * rowLength;
       let count = Math.floor(expected);
       if (rng() < expected - count) count++;
-      for (let n = 0; n < count; n++) {
+      return count;
+    };
+    /** Places `n` tufts between lateral offsets o0 and o1 (metres from the centre line) on one side. */
+    const scatter = (
+      side: number,
+      n: number,
+      o0: number,
+      o1: number,
+      cellOf: (forest: boolean) => number,
+      width: [number, number],
+      height: [number, number],
+    ) => {
+      const sg = side === 0 ? -1 : 1;
+      for (let k = 0; k < n; k++) {
         const along = (rng() - 0.5) * rowLength;
-        const o = roadEdge + EDGE_NEAR + rng() * (EDGE_FAR - EDGE_NEAR);
+        const o = o0 + rng() * (o1 - o0);
         const x = track.xs[i]! + fx * along + sg * lx * o;
         const z = track.zs[i]! + fz * along + sg * lz * o;
         if (field.isWater(x, z) || buildings.find(x, z, 0.8) >= 0) continue;
         const y = corridor.surface(x, z);
         const forest = field.classAt(x, z) === LAND_CLASS.forest;
-        const cell = pickCell(rng, forest);
-        const width = BUSH_WIDTH[0] + rng() * (BUSH_WIDTH[1] - BUSH_WIDTH[0]);
-        const height = BUSH_HEIGHT[0] + rng() * (BUSH_HEIGHT[1] - BUSH_HEIGHT[0]);
+        const cell = cellOf(forest);
+        const w = width[0] + rng() * (width[1] - width[0]);
+        const hgt = height[0] + rng() * (height[1] - height[0]);
         const shade = 0.9 + rng() * 0.2;
         const key = `${Math.floor(x / CHUNK)},${Math.floor(z / CHUNK)}`;
         let c = chunks.get(key);
         if (!c) chunks.set(key, (c = { pos: [], nor: [], uv: [], col: [], idx: [] }));
-        addBush(c, x, y, z, cell, width, height, shade);
+        addBush(c, x, y, z, cell, w, hgt, shade);
         bushes++;
+      }
+    };
+    for (let side = 0; side < 2; side++) {
+      const edge = corridor.edge[side]![r];
+      const roadEdge = corridor.hw[side]![r]! + SHOULDER;
+      if (edge === EDGE.verge && !corridor.urban[r]) {
+        scatter(side, countOf(setting.density), roadEdge + EDGE_NEAR, roadEdge + EDGE_FAR, (forest) => pickCell(rng, forest), BUSH_WIDTH, BUSH_HEIGHT);
+      } else if (edge === EDGE.wall) {
+        // green and fern at the foot of the wall, on the road side (also in towns)
+        const wallFace = roadEdge;
+        const grassOrFern = () => (rng() < 0.75 ? 0 : 3);
+        scatter(side, countOf(0.5 * setting.density), wallFace - 0.2, wallFace - 0.05, grassOrFern, WALL_TUFT_WIDTH, WALL_TUFT_HEIGHT);
+        // and on the crown of the wall, outside towns
+        if (!corridor.urban[r]) {
+          const crown = wallFace + WALL_THICK;
+          scatter(side, countOf(0.5 * setting.density), crown + 0.2, crown + 1.2, grassOrFern, WALL_TUFT_WIDTH, WALL_TUFT_HEIGHT);
+        }
       }
     }
   }

@@ -617,8 +617,8 @@ Grundlagen aus dem Code (für alle Aufgaben):
 |---|---|---|---|
 | P4.1 | 4A | Leitpfosten außerorts, Begrenzungssteine in Kurven | fertig |
 | P4.2 | 4A | Felsböschung in Einschnitten (Geometrie-Rauheit + Fels im Shader) | fertig |
-| P4.3 | 4B | Blumenkästen auf Brüstungen, Oleander auf Mauern in Orten | offen |
-| P4.4 | 4B | Mauerkrone mit Abdecksteinen, bewachsene Mauerfüße | offen |
+| P4.3 | 4B | Blumenkästen auf Brüstungen, Oleander auf Mauern in Orten | fertig |
+| P4.4 | 4B | Mauerkrone mit Abdecksteinen, bewachsene Mauerfüße | fertig |
 | P4.5 | 4C | Abnahme-Screenshots + Bildrate | offen |
 
 **P4.1 Leitpfosten außerorts, Begrenzungssteine in Kurven**
@@ -734,6 +734,11 @@ Grundlagen aus dem Code (für alle Aufgaben):
   Büschel bei `o = hw + SHOULDER + WALL_THICK + 0.2 … + 1.2` auf `corridor.surface`.
 - Abnahme: Screenshot `wall` (`ultra`, `hoch`, `mittel`): helle Abdeckplatten mit Schatten darunter,
   dunklerer Mauerfuß, einzelne Büschel davor; nichts ragt in die Fahrbahn (Fahrerlinie frei).
+
+- Ergebnis (Orchestrator, 4B): Blumenkästen jede 2. Reihe (8 m) statt jede 4., sonst zu spärlich.
+  Abdeckplatten `(0.7, 0.67, 0.62)` statt `(0.8, 0.77, 0.72)` (in der Sonne fast weiß), Moos am Mauerfuß
+  `(0.6, 0.68, 0.52)` (vorher kaum sichtbar). Bildrate im Ort (15600 m, Ultra) 15,65 ms statt 15,39 ms;
+  die Ausreißer (p95 32 ms) an dieser Stelle gab es schon vor Phase 4.
 
 **P4.5 Abnahme Phase 4** (Orchestrator)
 - Screenshots `wall`, `forest`, `descent` mit `ultra`, `hoch`, `mittel` plus Großer Feldberg 3000 m

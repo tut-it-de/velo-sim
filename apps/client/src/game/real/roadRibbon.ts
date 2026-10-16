@@ -29,6 +29,11 @@ const STONE_REPEAT = 2.5;
 const ROAD_DETAIL_ACROSS = 6;
 const PARAPET_H = 0.85;
 const PARAPET_W = 0.42;
+/** Coping stones on top of walls: thickness, and overhang beyond the wall face on each side. */
+const CAP_T = 0.1;
+const CAP_OVER = 0.05;
+/** Vertex colour at the foot of a wall (damp, mossy stone); the rest of the face stays white. */
+const MOSS = [0.6, 0.68, 0.52] as const;
 
 interface Row {
   /** Corridor row. */
@@ -163,10 +168,15 @@ export function buildRouteRibbon(
   const stoneMat = new StandardMaterial('stone', scene);
   stoneMat.diffuseTexture = stoneTexture(scene);
   stoneMat.specularColor = new Color3(0.03, 0.03, 0.03);
+  // coping stones: plain light stone, same detail map as the wall face (P4.4)
+  const capMat = new StandardMaterial('wall-cap', scene);
+  capMat.diffuseColor = new Color3(0.7, 0.67, 0.62);
+  capMat.specularColor = new Color3(0.03, 0.03, 0.03);
   if (detail) {
     // fine asphalt grain and stone courses on top of the base textures (one tile per 1.5 m along the lap, 2 m for stone)
     for (const m of [openMat, townMat]) applyDetail(m, scene, 'asphalt', [ROAD_DETAIL_ACROSS, texRepeat / 1.5], { diffuse: 0.45, bump: 0.5 });
     applyDetail(stoneMat, scene, 'drystone', [STONE_REPEAT / 2, STONE_REPEAT / 2], { diffuse: 0.6, bump: 1 });
+    applyDetail(capMat, scene, 'drystone', [STONE_REPEAT / 2, STONE_REPEAT / 2], { diffuse: 0.6, bump: 1 });
   }
   const railMat = new StandardMaterial('guardrail', scene);
   railMat.diffuseColor = new Color3(0.66, 0.68, 0.7);
@@ -306,7 +316,8 @@ export function buildRouteRibbon(
       }
 
       // --- lake walls with parapet, retaining walls, guardrails ---
-      const walls = new MeshData(true);
+      const walls = new MeshData(true, true);
+      const caps = new MeshData(true);
       const rail = new MeshData();
       for (let side = 0; side < 2; side++) {
         const sg = side === 0 ? -1 : 1;
@@ -343,10 +354,60 @@ export function buildRouteRibbon(
           }
           return null;
         };
+        // crown of a wall or parapet, if this row has one (P4.4)
+        const crownOf = (k: number): number | null => {
+          const r = rows[k]!.r;
+          const edge = c.edge[side]![r]!;
+          if (edge === EDGE.wall) return frames[k]!.y + c.wallH[side]![r]!;
+          if (edge === EDGE.parapet || edge === EDGE.lake) return frames[k]!.y + PARAPET_H;
+          return null;
+        };
         for (let k = 0; k < rows.length - 1; k++) {
           const pa = profileOf(k);
           const pb = profileOf(k + 1);
           const r = rows[k]!.r;
+          const ca = crownOf(k);
+          const cb = crownOf(k + 1);
+          if (ca !== null && cb !== null) {
+            // coping slab on the crown, overhanging the wall face by CAP_OVER on both sides (P4.4)
+            const fa = frames[k]!;
+            const fb = frames[k + 1]!;
+            const thick = c.edge[side]![r] === EDGE.wall ? WALL_THICK : PARAPET_W;
+            const oa = c.hw[side]![r]! + SHOULDER;
+            const ob = c.hw[side]![rows[k + 1]!.r]! + SHOULDER;
+            // one slab corner: row frame, lateral offset o, height y; dir ±1 = outward normal of a side face, 0 = none
+            const at = (fr: Frame, d: number, o: number, y: number, dir: number, ny: number) =>
+              caps.vertex(fr.x + sg * fr.rx * o, y, fr.z + sg * fr.rz * o, dir * sg * fr.rx, ny, dir * sg * fr.rz, d / STONE_REPEAT, o / STONE_REPEAT);
+            const loA = oa - CAP_OVER;
+            const hiA = oa + thick + CAP_OVER;
+            const loB = ob - CAP_OVER;
+            const hiB = ob + thick + CAP_OVER;
+            const a0 = ca!;
+            const a1 = ca! + CAP_T;
+            const b0 = cb!;
+            const b1 = cb! + CAP_T;
+            const dA = rows[k]!.d;
+            const dB = rows[k + 1]!.d;
+            // top
+            caps.quad(at(fa, dA, loA, a1, 0, 1), at(fa, dA, hiA, a1, 0, 1), at(fb, dB, hiB, b1, 0, 1), at(fb, dB, loB, b1, 0, 1), 0, 1, 0);
+            // bottom
+            caps.quad(at(fa, dA, loA, a0, 0, -1), at(fa, dA, hiA, a0, 0, -1), at(fb, dB, hiB, b0, 0, -1), at(fb, dB, loB, b0, 0, -1), 0, -1, 0);
+            // road-side face (outward normal -sg·r) and outer face (+sg·r)
+            for (const dir of [-1, 1]) {
+              const lo = dir < 0;
+              const oA = lo ? loA : hiA;
+              const oB = lo ? loB : hiB;
+              caps.quad(
+                at(fa, dA, oA, a0, dir, 0),
+                at(fa, dA, oA, a1, dir, 0),
+                at(fb, dB, oB, b1, dir, 0),
+                at(fb, dB, oB, b0, dir, 0),
+                dir * sg * fa.rx,
+                0,
+                dir * sg * fa.rz,
+              );
+            }
+          }
           if (pa && pb && pa.length === pb.length) {
             const fa = frames[k]!;
             const fb = frames[k + 1]!;
@@ -360,7 +421,9 @@ export function buildRouteRibbon(
                 const nz = facing * fr.rz;
                 const u = d / STONE_REPEAT;
                 const v = vertical ? p[1] / STONE_REPEAT : p[0] / STONE_REPEAT;
-                return walls.vertex(x, p[1], z, nx, vertical ? 0 : 1, nz, u, v);
+                // damp foot on the road side: only the vertices at foot height (f.y - 0.05) are tinted
+                const foot = Math.abs(p[1] - (fr.y - 0.05)) < 1e-6 ? MOSS : [1, 1, 1];
+                return walls.vertex(x, p[1], z, nx, vertical ? 0 : 1, nz, u, v, foot[0], foot[1], foot[2]);
               };
               const a0 = pt(fa, rows[k]!.d, pa[q]!);
               const a1 = pt(fa, rows[k]!.d, pa[q + 1]!);
@@ -397,6 +460,8 @@ export function buildRouteRibbon(
       }
       const wm = walls.build(scene, `walls-${id}`, stoneMat);
       if (wm) other.push(wm);
+      const cm = caps.build(scene, `wall-caps-${id}`, capMat);
+      if (cm) other.push(cm);
       const rm = rail.build(scene, `rail-${id}`, railMat);
       if (rm) other.push(rm);
     }
