@@ -330,8 +330,8 @@ Blumenbüschel am Straßenrand.
 |---|---|---|---|
 | P3.1 | 3A | Blatt- und Rindentexturen (Python, wie Phase 2) | fertig |
 | P3.2 | 3A | Prozeduraler Baumgenerator `treeGen.ts` + Studio-Ansicht | fertig |
-| P3.3 | 3B | Artenparameter (8 Bäume, 2 Büsche) im Studio abstimmen | offen |
-| P3.5 | 3B | Wind-Shader-Plugin | offen |
+| P3.3 | 3B | Artenparameter (8 Bäume, 2 Büsche) im Studio abstimmen | fertig |
+| P3.5 | 3B | Wind-Shader-Plugin | fertig |
 | P3.4 | 3C | Billboards aus den 3D-Bäumen backen (zur Laufzeit, Farbe + Normale) | offen |
 | P3.7 | 3D | Fernbereich: gebackene Billboards statt Canvas-Atlas, Artwahl, Instanzliste | offen |
 | P3.6 | 3E | Nahbereich: 3D-Bäume als Thin Instances | offen |
@@ -365,7 +365,9 @@ P3.7 läuft vor P3.6, weil es die Instanzliste liefert; P3.6, P3.7 und P3.8 änd
   `${import.meta.env.BASE_URL}textures/<name>.webp` geladen (wie `detailMaps.ts`).
   Atlas-Texturen (`leaves`, `bark`, `grass`) mit `invertY = false` laden: die UVs aus `treeGen.ts`
   sind im Bildraum (v = 0 ist die oberste Zeile des Atlas). `leafColor`/`barkColor` sind Tönungen
-  nahe 1 – die Farbe steckt schon in der Textur.
+  nahe 1 – die Farbe steckt schon in der Textur. Für Alpha-Test (`leaves`, `grass`, Impostor-Atlas)
+  muss `texture.hasAlpha = true` gesetzt sein, sonst ignoriert Babylon den Alphakanal und die
+  Karten erscheinen als volle Quadrate (Ursache der „eckigen Fichtenkarten“ aus 3A).
 - Blending-Hash für Überblendungen (in allen Shadern identisch, „interleaved gradient noise“):
   `float veloIgn(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }`
   angewendet auf `gl_FragCoord.xy`.

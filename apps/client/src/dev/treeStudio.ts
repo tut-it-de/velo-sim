@@ -1,6 +1,6 @@
 /**
  * Tree studio (dev page, treestudio.html): procedural trees from trees/species.ts in the ride lighting.
- * Query: species=<id> (one species, with seed=<n>), seed=<n> (default 1), wind=0|1 (reserved for P3.5, no motion yet).
+ * Query: species=<id> (one species, with seed=<n>), seed=<n> (default 1), wind=0|1 (1: wood and leaves sway in the wind).
  * Without species: every species of the table side by side, three seeds each.
  */
 import {
@@ -25,10 +25,12 @@ import { SUN_DIR } from '../game/real/env';
 import { SPECIES } from '../game/real/trees/species';
 import { generateTree, triangleCount } from '../game/real/trees/treeGen';
 import type { GeomPart, SpeciesId, SpeciesParams } from '../game/real/trees/types';
+import { WindPlugin } from '../game/real/trees/windPlugin';
 
 const q = new URLSearchParams(location.search);
 const oneSpecies = q.get('species');
 const seed = Number(q.get('seed') ?? 1);
+const wind = q.get('wind') === '1';
 const SEEDS = [1, 2, 3];
 const SPACING = 34;
 
@@ -76,6 +78,8 @@ const loadTexture = (name: string, onError: () => void): Texture => {
 const materials: { wood: StandardMaterial[]; leaves: StandardMaterial[] } = { wood: [], leaves: [] };
 const barkTex = loadTexture('bark', () => materials.wood.forEach((m) => (m.diffuseTexture = null)));
 const leafTex = loadTexture('leaves', () => materials.leaves.forEach((m) => (m.diffuseTexture = null)));
+// without hasAlpha, Babylon ignores the texture alpha and the cards render as full squares
+leafTex.hasAlpha = true;
 
 /** One wood and one leaf material per species, tinted with the species colours from species.ts. */
 function speciesMaterials(id: SpeciesId, p: SpeciesParams): { wood: StandardMaterial; leaves: StandardMaterial } {
@@ -94,6 +98,11 @@ function speciesMaterials(id: SpeciesId, p: SpeciesParams): { wood: StandardMate
   leaves.alphaCutOff = 0.4;
   leaves.diffuseColor = new Color3(p.leafColor[0], p.leafColor[1], p.leafColor[2]);
   leaves.diffuseTexture = leafTex;
+  if (wind) {
+    // trees: amplitude 0.15 m at the tips, the stem foot stays fixed (weight from uv2.x)
+    new WindPlugin(wood, { strength: 0.15 });
+    new WindPlugin(leaves, { strength: 0.15 });
+  }
   materials.wood.push(wood);
   materials.leaves.push(leaves);
   return { wood, leaves };
@@ -155,5 +164,8 @@ camera.wheelPrecision = 20;
 camera.attachControl(canvas, true);
 camera.minZ = 0.5;
 
-engine.runRenderLoop(() => scene.render());
+engine.runRenderLoop(() => {
+  if (wind) WindPlugin.update(scene, engine.getDeltaTime() / 1000);
+  scene.render();
+});
 window.addEventListener('resize', () => engine.resize());

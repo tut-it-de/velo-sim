@@ -722,19 +722,26 @@ def _draw_sprigs(n, branch, needle_L, needle_W, base, spread=0.6, step=4.0):
 
 
 def _draw_larch(n, needle_L, needle_W, base, needles=7):
-    """Larch: bright tufts, several needles fanning out from one point."""
+    """Larch: soft tufts of needles on short shoots. The needles of one tuft point the same way
+    (a brush, not a star), with a thin shoot through the middle."""
     def draw(rng, rgb, alpha, scale):
         Ln = needle_L * scale
         Wn = needle_W * scale
         for _ in range(n):
             tone = rng.uniform(0.9, 1.1)
-            p = _place(rng, Ln + 2)
+            p = _place(rng, Ln * 0.8 + 2)
             if p is None:
                 continue
-            start = rng.uniform(0.0, 2 * np.pi)
+            ang = rng.uniform(0.0, 2 * np.pi)
+            ax = np.array([np.cos(ang), np.sin(ang)])
+            for s_ in np.linspace(-Ln * 0.4, Ln * 0.4, 10):
+                q = p + ax * s_
+                _paint(rgb, alpha, q[0], q[1], 0.0, _disc_d(1.2), 2.2, np.array(base) * 0.55)
             for k in range(needles):
-                na = start + k * 2 * np.pi / needles + rng.uniform(-0.25, 0.25)
-                c = p + np.array([np.cos(na), np.sin(na)]) * Ln / 2
+                off = (k / (needles - 1) - 0.5) * Ln * 0.5
+                na = ang + (k / (needles - 1) - 0.5) * 0.5 + rng.uniform(-0.06, 0.06)
+                start = p + ax * off
+                c = start + np.array([np.cos(na), np.sin(na)]) * Ln / 2
                 _paint(rgb, alpha, c[0], c[1], na, _lance_d(Ln, Wn, p=0.5), Ln / 2 + 1,
                        np.array(base) * tone, _leaf_shade(Ln / 2, Wn / 2))
     return draw
@@ -830,8 +837,8 @@ LEAF_DRAWS = [
     _draw_lance(180, 80, 16, OLIVE),                           # 3 olive
     _draw_palm,                                                # 4 palm frond
     _draw_sprigs(90, 70, 28, 5, SPRUCE),                       # 5 spruce
-    _draw_larch(150, 30, 5, LARCH, needles=6),                 # 6 larch
-    _draw_ellipses(260, 22, 7, CYPRESS, angle=np.pi / 2),      # 7 cypress
+    _draw_larch(110, 26, 3.5, LARCH, needles=9),               # 6 larch
+    _draw_sprigs(120, 52, 14, 8, CYPRESS, spread=0.22, step=3.0),  # 7 cypress
     _draw_oleander,                                            # 8 oleander
     _draw_ellipses(60, 42, 21, LAUREL, gloss=0.12),            # 9 laurel
 ]
