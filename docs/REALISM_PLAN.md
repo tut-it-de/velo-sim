@@ -768,8 +768,8 @@ Grundlagen aus dem Code:
 
 | ID | Gruppe | Aufgabe | Status |
 |---|---|---|---|
-| P5.1 | 5A | Cumulus mit Lichtrand, hohe Schleierwolken | offen |
-| P5.2 | 5A | Schnee und Fels an Gipfeln nach Höhe/Neigung | offen |
+| P5.1 | 5A | Cumulus mit Lichtrand, hohe Schleierwolken | fertig |
+| P5.2 | 5A | Schnee und Fels an Gipfeln nach Höhe/Neigung | fertig |
 | P5.3 | 5B | Feine Seekräuselung (Normalmap) und Sonnenglitzern | offen |
 | P5.4 | 5B | Segelboote und Fähre auf dem See | offen |
 | P5.5 | 5C | Balkone und Kamine | offen |

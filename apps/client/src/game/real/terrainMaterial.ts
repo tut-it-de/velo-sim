@@ -69,6 +69,12 @@ const UPDATE_DIFFUSE = /* glsl */ `
   // veloCut: road verges in a cutting (uv2.x from roadRibbon.ts) are rock as well
   float veloRock = max(smoothstep(0.3, 0.55, 1.0 - veloUp) * (1.0 - 0.7 * veloForest), veloCut);
   veloCol = mix(veloCol, vec3(0.47, 0.45, 0.42) * (0.85 + 0.3 * veloNoise(veloP * 0.05)), veloRock);
+  // above the tree line: bare rock and scree, then snow on the gentler slopes
+  float veloH = vPositionW.y + 140.0 * (veloNoise(veloP * 0.0035) - 0.5);
+  float veloAlp = smoothstep(1850.0, 2150.0, veloH) * (1.0 - veloForest);
+  veloCol = mix(veloCol, vec3(0.55, 0.53, 0.5) * (0.8 + 0.4 * veloNoise(veloP * 0.02)), veloAlp * 0.85);
+  float veloSnow = smoothstep(2350.0, 2600.0, veloH) * smoothstep(0.5, 0.8, veloUp);
+  veloCol = mix(veloCol, vec3(0.93, 0.95, 1.0), veloSnow);
 #ifdef VELO_DETAIL
   // detail maps near the camera: R = brightness (applied as a multiplier around 0.5), A/G = normal X/Y (0.5 neutral)
   float veloDetailFade = 1.0 - smoothstep(60.0, 120.0, veloDist);
