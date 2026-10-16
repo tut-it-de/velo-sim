@@ -595,12 +595,146 @@ P3.7 läuft vor P3.6, weil es die Instanzliste liefert; P3.6, P3.7 und P3.8 änd
 
 ### Phase 4 – Straßenrand
 
+Ziel: Der Rand der Straße erzählt, wo man ist – Leitpfosten und Begrenzungssteine außerorts,
+Felsböschungen in Einschnitten, Mauerkronen mit Abdecksteinen, Grün am Mauerfuß, Blumenkästen und
+Oleander in den Orten. Alles wird einmal beim Laden entlang des Korridors platziert (wie
+`roadsideFlora.ts`), als Thin Instances oder wenige zusammengefasste Meshes; keine Arbeit pro Bild.
+
+Grundlagen aus dem Code (für alle Aufgaben):
+- `RouteCorridor` (`corridor.ts`): pro Reihe `r` (alle 4 m) und Seite (`0` links, `1` rechts)
+  `hw` (halbe Fahrbahnbreite), `edge` (`EDGE.verge|lake|wall|rail|parapet`), `wallH`, `urban[r]`,
+  `covered[r]` (zweiter Durchgang auf Hin-und-zurück-Stücken – dort nichts platzieren),
+  `sampleOf(r)` → Track-Index `i`; `surface(x, z)` = Bodenhöhe; `field.isWater(x, z)`.
+- Richtungen wie in `roadsideFlora.ts`: `h = track.headings[i]`, vorwärts `(sin h, cos h)`,
+  rechts `(cos h, -sin h)`; Seite `sg = side === 0 ? -1 : 1`.
+- Krümmung wie in `corridor.ts` (Abschnitt 4): `dh = wrapAngle(headings[(i+6)%n] - headings[(i-6+n)%n])`,
+  `radius = 24 / max(|dh|, 1e-3)`; `dh > 0` = Rechtskurve, Außenseite ist dann links (`side 0`).
+- Ausrichtung von Thin Instances wie `streetLamps` in `roadRibbon.ts`: lokales x zeigt quer zur Straße,
+  `Quaternion.RotationAxisToRef(Vector3.Up(), heading (+π für rechts), q)`.
+- Stil der Region: `data.look.architecture` (`'italian' | 'german' | 'alpine'`).
+
 | ID | Gruppe | Aufgabe | Status |
 |---|---|---|---|
-| P4.1 | 4A | Leitpfosten alle 50 m außerorts, Begrenzungssteine in Kurven | offen |
-| P4.2 | 4A | Felsböschung an steilen Einschnitten (Material + Geometrie-Rauheit) | offen |
-| P4.3 | 4B | Blumenkästen/Oleander an Mauern in Orten | offen |
+| P4.1 | 4A | Leitpfosten außerorts, Begrenzungssteine in Kurven | offen |
+| P4.2 | 4A | Felsböschung in Einschnitten (Geometrie-Rauheit + Fels im Shader) | offen |
+| P4.3 | 4B | Blumenkästen auf Brüstungen, Oleander auf Mauern in Orten | offen |
 | P4.4 | 4B | Mauerkrone mit Abdecksteinen, bewachsene Mauerfüße | offen |
+| P4.5 | 4C | Abnahme-Screenshots + Bildrate | offen |
+
+**P4.1 Leitpfosten außerorts, Begrenzungssteine in Kurven**
+- Dateien: neu `apps/client/src/game/real/roadsideProps.ts`, `apps/client/src/game/real/realWorld.ts`
+  (nur Aufruf und Schattenlisten)
+- `roadsideProps.ts`: `export async function buildRoadsideProps(scene, corridor, buildings: BuildingIndex,
+  architecture: Architecture, quality: QualityProfile): Promise<Mesh[]>` (async, weil P4.3 hier
+  später Texturen lädt). Lokale Hilfsfunktion `wrapAngle` (wie in `corridor.ts`, dort nicht exportiert).
+- Leitpfosten (alle Stile, alle Qualitätsstufen):
+  - Nur Reihen mit `!urban[r] && !covered[r]`, nur Seiten mit `edge === EDGE.verge`.
+  - Abstand 50 m, in Kurven mit `radius < 150` 25 m: pro Seite die gefahrene Strecke seit dem letzten
+    Pfosten mitzählen (Reihenlänge `ROW_STRIDE * track.step`), bei Erreichen setzen.
+  - Fuß bei `o = hw + SHOULDER + 0.6`, `y = corridor.surface(x, z)`; überspringen, wenn
+    `field.isWater` oder `buildings.find(x, z, 0.8) >= 0`.
+  - Geometrie (drei Thin-Instance-Meshes mit denselben Matrizen): Pfosten weiß
+    `Box 0.12 × 0.75 × 0.12` (Mitte y 0.375, Farbe `(0.92, 0.92, 0.9)`), schwarzes Band
+    `Box 0.125 × 0.25 × 0.125` (Mitte y 0.875, `(0.05, 0.05, 0.05)`), Rückstrahler
+    `Box 0.07 × 0.15 × 0.13` (Mitte y 0.86, steht vorn und hinten 0.003 m aus dem Band, also längs
+    der Straße sichtbar). Rückstrahler: `german`/`alpine` weiß `(0.95, 0.95, 0.9)`; `italian` rechte
+    Seite rot `(0.8, 0.08, 0.05)`, linke weiß – dafür zwei Rückstrahler-Meshes. Rückstrahler mit
+    `emissiveColor` = 0.3 × Farbe. `specularColor` Pfosten 0.15, sonst 0.05.
+- Begrenzungssteine (nur `italian` und `alpine`, alle Qualitätsstufen):
+  - Außerhalb von Orten, auf der **Außenseite** von Kurven mit `radius < 70`, nur `edge === EDGE.verge`,
+    eine Reihe = ein Stein (alle 4 m), Fuß bei `o = hw + SHOULDER + 0.35`.
+  - `Box 0.25 (quer) × 0.45 × 0.2`, Mitte y 0.2 (5 cm im Boden), Farbe `(0.84, 0.82, 0.78)`, pro
+    Stein Helligkeit ±6 % über eine Instanzfarbe (`thinInstanceSetBuffer('color', …, 4)`), Drehung um
+    y zusätzlich ±0.08 rad (Zufall aus `createRng(4242)`).
+- Alle Meshes: `isPickable = false`, `receiveShadows = true`, Thin-Instance-Puffer statisch
+  (`staticBuffer = true`), danach `thinInstanceRefreshBoundingInfo()`.
+- `realWorld.ts`: nach der Flora-Stufe `const props = await buildRoadsideProps(scene, corridor,
+  buildingIndex, data.look.architecture, quality);`. Im Kaskaden-Zweig `...props` zu den `casters`.
+  Sonst nichts ändern.
+- Abnahme: Screenshot `descent` (Lago, `ultra`) und Großer Feldberg 3000 m (`ultra`,
+  Route-Argument `"Großer Feldberg"`): Leitpfosten in gleichmäßigem Abstand, stehen auf dem Boden
+  (nicht schwebend, nicht in Mauern oder Leitplanken), keine in Orten. In einer Lago-Haarnadel
+  (16500 m) Begrenzungssteine an der Außenseite. Bildrate ±0.5 ms.
+
+**P4.2 Felsböschung in Einschnitten**
+- Dateien: `apps/client/src/game/real/roadRibbon.ts` (nur der Abschnitt `--- verges …`),
+  `apps/client/src/game/real/terrainMaterial.ts` (nur `TerrainPlugin`)
+- `roadRibbon.ts`, Schleife über `q` im Böschungs-Abschnitt (Seiten mit `edge === EDGE.verge`, nicht
+  `lake`):
+  - Einschnitt-Gewicht `cut = smoothstep(1.2, 3.5, y - f.y) * smoothstep(o0 + 2.5, o0 + 4, o)
+    * (1 - smoothstep(o0 + 0.6 * VERGE_BLEND, o0 + VERGE_BLEND, o))` – erst ab 2.5 m hinter dem
+    Bankett (Gras aus P3.8 bleibt unberührt), läuft vor dem Übergang ins Gelände aus.
+  - Rauheit: `Noise2D` aus `../noise` (einmal pro Aufruf `new Noise2D(9137)`),
+    `d = cut * 0.45 * noise.fbm((x + z) * 0.12, y * 0.7, 3)` (y-lastig → waagrechte Schichten);
+    Punkt seitlich verschieben: `x += sg * f.rx * d`, `z += sg * f.rz * d`.
+  - Fels-Hinweis pro Vertex: Steilheit zum vorigen Punkt `slope = (y_q - y_{q-1}) / (o_q - o_{q-1})`
+    (bei `q = 0` 0), `rock = cut * smoothstep(0.35, 0.8, slope)`. In einem eigenen Array sammeln
+    (wie `blend`), auch für den angehängten Fußpunkt (0). Nach `verge.build` mit
+    `vm.setVerticesData(VertexBuffer.UV2Kind, Float32Array mit (rock, 0) pro Vertex, false, 2)`.
+- `terrainMaterial.ts` (`TerrainPlugin`):
+  - `prepareDefines`: zusätzlich `(defines as unknown as Record<string, boolean>)['_needUVs'] = true`
+    (wie `BillboardPlugin` in `vegetation.ts`), damit `UV2` für Meshes mit uv2 gesetzt wird.
+  - Vertex: `CUSTOM_VERTEX_DEFINITIONS` `varying float veloCut;`, `CUSTOM_VERTEX_MAIN_END`
+    `#ifdef UV2\nveloCut = uv2Updated.x;\n#else\nveloCut = 0.0;\n#endif`.
+    Fragment: `varying float veloCut;` in die Definitionen.
+  - `float veloRock = …;` wird zu `float veloRock = max(smoothstep(0.3, 0.55, 1.0 - veloUp) *
+    (1.0 - 0.7 * veloForest), veloCut);` – dadurch bekommen Einschnitte die Felsfarbe und (mit
+    `VELO_DETAIL`) die Schichtung aus `rock.webp`.
+  - Gelände-Meshes ohne uv2 bleiben unverändert (`veloCut = 0`). Wenn `uv2Updated` im Vertex-Shader
+    nicht existiert oder `UV2` trotz `_needUVs` nicht gesetzt wird: anhalten und melden.
+- Abnahme: Screenshot `forest` und `wall` (`ultra`, `mittel`) und Großer Feldberg 3000 m: In
+  Einschnitten über ~2 m graue, gestufte Felsflächen statt glatter Wiese; keine Löcher oder Risse
+  zwischen Böschung und Gelände; Grasbüschel am Bankett unverändert.
+
+**P4.3 Blumenkästen auf Brüstungen, Oleander auf Mauern in Orten**
+- Datei: `apps/client/src/game/real/roadsideProps.ts` (nur ergänzen, P4.1 nicht ändern)
+- Blumenkästen (alle Stufen außer `niedrig`):
+  - Reihen mit `urban[r]` und `edge === EDGE.parapet` oder `edge === EDGE.lake` (Brüstung), jede
+    4. Reihe (16 m), nicht auf `covered`. Kasten mittig auf der Brüstung: `o = hw + SHOULDER +
+    PARAPET_W / 2` (Werte aus `roadRibbon.ts`: `PARAPET_H = 0.85`, `PARAPET_W = 0.42` – als lokale
+    Konstanten übernehmen), Boden auf `y = f.y + 0.85`.
+  - Kasten: `Box 0.9 (längs) × 0.22 × 0.3`, Terrakotta `(0.62, 0.3, 0.18)`; darauf Blumen als zwei
+    gekreuzte Karten 0.9 × 0.35 mit Zelle 2 (Blumen) aus `grass.webp` (Ladeweise und UV-Zellen wie
+    `loadGrass`/`addBush` in `roadsideFlora.ts`, Material ebenfalls Alpha-Test 0.4). Karten nicht über
+    Thin Instances, sondern in 50-m-Chunks zusammengefasst wie in `roadsideFlora.ts`, LOD 80 m.
+- Oleander (nur `ultra` und `hoch`, Stil `italian`):
+  - Reihen mit `urban[r]` und `edge === EDGE.wall`, jede 3. Reihe (12 m), auf der Mauerkrone:
+    `o = hw + SHOULDER + WALL_THICK + 0.9`, `y = f.y + wallH[side][r]`; nicht wenn
+    `buildings.find(x, z, 1.5) >= 0`.
+  - Geometrie aus `generateTree(SPECIES.oleander!, seed)` mit drei Varianten (Seeds 1–3), Materialien
+    wie in `nearTrees.ts` (Rinde `bark.webp`, Blätter `leaves.webp` mit `hasAlpha = true`,
+    Alpha-Test 0.4, `diffuseColor` = `leafColor` der Art). Kein Wind (statisch, bleibt eingefroren).
+  - Pro Variante und 100-m-Chunk ein Mesh mit Thin Instances (Drehung zufällig, Größe 0.85–1.15),
+    `addLODLevel(150, null)`; alle Oleander-Meshes werfen Schatten (sie gehen über die Rückgabe in
+    `casters`).
+- Abnahme: Screenshot in einem Ort am See (Bellagio, Distanz vom Orchestrator gewählt, `ultra` und
+  `mittel`): Blumenkästen sitzen auf der Brüstung, Oleander auf den Mauern, nichts schwebt oder steckt
+  in Häusern. Bildrate im Ort ±1 ms.
+
+**P4.4 Mauerkrone mit Abdecksteinen, bewachsene Mauerfüße**
+- Dateien: `apps/client/src/game/real/roadRibbon.ts` (nur Abschnitt `--- lake walls …` und
+  Materialien), `apps/client/src/game/real/roadsideFlora.ts`
+- Abdecksteine (`roadRibbon.ts`): eigenes `MeshData` `caps` mit Material `wall-cap`
+  (`diffuseColor (0.8, 0.77, 0.72)`, gleiche Detailmap wie `stoneMat`). Für jedes Reihenpaar mit
+  `edge` `wall`, `parapet` oder `lake` auf beiden Reihen eine Platte über der Krone: innen 0.05 m
+  über die Mauer hinaus, außen 0.05 m, Dicke 0.1 m, Unterkante = bisherige Krone (`top` bzw.
+  `f.y + PARAPET_H`). Vier Flächen (oben, innen, außen, unten) mit `quad` und passender Normale.
+  Die Mauer selbst bleibt unverändert.
+- Mauerfuß (`roadRibbon.ts`): `walls` mit Vertexfarben (`new MeshData(true, true)`); Vertices auf
+  Fußhöhe (`f.y - 0.05`) bekommen `(0.72, 0.8, 0.66)` (feucht, bemoost), alle anderen `(1, 1, 1)`.
+  Bei Brüstungen am See nur die Straßenseite.
+- Grün am Mauerfuß (`roadsideFlora.ts`): zusätzlich zu den `EDGE.verge`-Seiten auch Seiten mit
+  `EDGE.wall` (auch in Orten): Büschel auf dem Bankett direkt vor der Mauer
+  (`o = hw + SHOULDER - 0.2 … hw + SHOULDER - 0.05`), Dichte 0.5 × `setting.density`, nur Zellen 0
+  (grün) und 3 (Farn), Breite 0.3–0.6, Höhe 0.2–0.45. Auf der Mauerkrone (außerhalb von Orten):
+  Büschel bei `o = hw + SHOULDER + WALL_THICK + 0.2 … + 1.2` auf `corridor.surface`.
+- Abnahme: Screenshot `wall` (`ultra`, `hoch`, `mittel`): helle Abdeckplatten mit Schatten darunter,
+  dunklerer Mauerfuß, einzelne Büschel davor; nichts ragt in die Fahrbahn (Fahrerlinie frei).
+
+**P4.5 Abnahme Phase 4** (Orchestrator)
+- Screenshots `wall`, `forest`, `descent` mit `ultra`, `hoch`, `mittel` plus Großer Feldberg 3000 m
+  und die Ortsstelle aus P4.3; Vorher/Nachher-Bilder an den Nutzer. Bildrate im Wald und im Ort
+  messen (`perf.mjs`), Nutzer prüft Laptop und iPad.
 
 ### Phase 5 – Ferne, Himmel, See
 
@@ -621,7 +755,7 @@ P3.7 läuft vor P3.6, weil es die Instanzliste liefert; P3.6, P3.7 und P3.8 änd
 | P6.3 | 6B | Bewegungsunschärfe bei Tempo (nur Ultra, schwach) | offen |
 | P6.4 | 6B | Abschluss-Vergleich mit dem Referenzbild | offen |
 
-Phasen 4–6 werden wie Phase 3 vor dem Start detailliert.
+Phasen 5–6 werden wie Phase 3 vor dem Start detailliert.
 
 ---
 
