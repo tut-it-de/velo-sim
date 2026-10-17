@@ -105,7 +105,7 @@ export function GaragePage() {
           </div>
           <div className="row">
             <span className="muted small">{account.user ? `Konto: ${account.user.name} (Server)` : 'lokal – unter Profil mit einem Server verbinden'}</span>
-            <div className="wallet-chip wallet-big"><span className="coin" />{formatCoins(coins)} Watt-Taler</div>
+            <div className="wallet-chip wallet-big">{formatCoins(coins)} Watt-Taler</div>
           </div>
         </div>
 
