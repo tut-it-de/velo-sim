@@ -69,6 +69,28 @@ const UPDATE_DIFFUSE = /* glsl */ `
   // veloCut: road verges in a cutting (uv2.x from roadRibbon.ts) are rock as well
   float veloRock = max(smoothstep(0.3, 0.55, 1.0 - veloUp) * (1.0 - 0.7 * veloForest), veloCut);
   veloCol = mix(veloCol, vec3(0.47, 0.45, 0.42) * (0.85 + 0.3 * veloNoise(veloP * 0.05)), veloRock);
+  // meadow (green, open ground): lush and drier patches instead of one flat green, and close up a grain of
+  // blades and tufts, stretched in two directions so it does not tile or read as noise blobs
+  float veloMeadow = smoothstep(0.015, 0.07, veloCol.g - max(veloCol.r, veloCol.b)) * (1.0 - veloForest) * (1.0 - veloRock);
+  if (veloMeadow > 0.01) {
+    float veloPatch = veloNoise(veloP * 0.045) * 0.55 + veloNoise(veloP * 0.17 + 3.7) * 0.3 + veloNoise(veloP * 0.6 + 9.1) * 0.15;
+    vec3 veloLush = veloCol * vec3(0.86, 1.07, 0.9);
+    vec3 veloDry = veloCol * vec3(1.22, 1.1, 0.7);
+    veloCol = mix(veloCol, mix(veloLush, veloDry, smoothstep(0.42, 0.78, veloPatch)), veloMeadow * 0.75);
+#ifdef VELO_DETAIL
+    float veloGrain = (1.0 - smoothstep(18.0, 75.0, veloDist)) * veloMeadow;
+    if (veloGrain > 0.0) {
+      float veloB1 = veloNoise(veloP * vec2(11.0, 3.4));
+      float veloB2 = veloNoise(veloP * vec2(3.1, 12.0) + 5.3);
+      float veloB3 = veloNoise(veloP * 2.3 + 1.7);
+      float veloBlades = veloB1 * 0.38 + veloB2 * 0.38 + veloB3 * 0.24;
+      // dark gaps between the blades, a few sunlit tips
+      veloCol *= mix(1.0, 0.72 + 0.5 * veloBlades, veloGrain);
+      vec2 veloBn = vec2(veloNoise(veloP * vec2(11.0, 3.4) + 0.4) - veloB1, veloNoise(veloP * vec2(3.1, 12.0) + 5.7) - veloB2);
+      normalW = normalize(normalW + vec3(veloBn.x, 0.0, veloBn.y) * 1.6 * veloGrain);
+    }
+#endif
+  }
   // above the tree line: bare rock and scree, then snow on the gentler slopes
   float veloH = vPositionW.y + 140.0 * (veloNoise(veloP * 0.0035) - 0.5);
   float veloAlp = smoothstep(1850.0, 2150.0, veloH) * (1.0 - veloForest);
