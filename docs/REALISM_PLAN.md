@@ -958,7 +958,7 @@ Grundlagen aus dem Code:
 | P6.1 | 6A | Lycra: Falten, Struktur und Glanz (Stoff-Plugin) | fertig |
 | P6.2 | 6A | Fahrtwind-Unschärfe am Bildrand (nur Ultra) | fertig |
 | P6.3 | 6A | Ferner See ohne weißes Band | fertig |
-| P6.4 | 6B | Haut: weicher, warmer Schatten und Randlicht | offen |
+| P6.4 | 6B | Haut: weicher, warmer Schatten und Randlicht | fertig |
 | P6.5 | 6C | Abschluss: Vergleich Phase 0 → Phase 6, Bildrate | offen |
 
 **P6.1 Lycra: Falten, Struktur und Glanz**
@@ -976,7 +976,7 @@ Grundlagen aus dem Code:
     (mit `#ifdef UV1`, sonst 1.0).
   - `UPDATE_DIFFUSE`, nur Stoff (`vFabKind > 0.5`): Falten als gestreckte Rauschbänder
     `float f = noise(vec3(vFabP.x * 18.0, vFabP.y * 55.0, vFabP.z * 18.0));`
-    `diffuseColor *= 0.9 + 0.16 * f;` und feines Gewebe `diffuseColor *= 0.97 + 0.06 * noise(vFabP * 420.0);`
+    `diffuseColor *= 0.9 + 0.16 * f;` und feines Gewebe `diffuseColor *= 0.97 + 0.06 * noise(vFabP * 420.0);` (Orchestrator: auf 150 gesenkt, 420 flimmert in der Verfolgerkamera)
     (eigene kleine 3D-Value-Noise-Funktion in `CUSTOM_FRAGMENT_DEFINITIONS`).
   - `BEFORE_FOG`, nur Stoff: Stoffglanz (Sheen) am Rand
     `float rim = pow(1.0 - abs(dot(normalW, viewDirectionW)), 4.0);`

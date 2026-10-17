@@ -59,6 +59,9 @@ if (vFabKind > 0.5) {
   diffuseColor *= 0.9 + 0.16 * veloFold;
   // fine weave (about 7 mm cells: finer would shimmer, a pixel covers ~3 mm at the chase camera)
   diffuseColor *= 0.97 + 0.06 * veloFabNoise(vFabP * 150.0);
+} else {
+  // skin: slight colour unevenness, no folds or weave
+  diffuseColor *= 0.96 + 0.08 * veloFabNoise(vFabP * 60.0);
 }
 `,
       CUSTOM_FRAGMENT_BEFORE_FOG: /* glsl */ `
@@ -66,6 +69,13 @@ if (vFabKind > 0.5) {
   // sheen at grazing angles, so dark tights get a slight lycra gleam
   float veloRim = pow(1.0 - abs(dot(normalW, viewDirectionW)), 4.0);
   color.rgb += vec3(0.55, 0.58, 0.65) * veloRim * 0.18 * clamp(dot(diffuseBase, vec3(0.333)), 0.0, 1.0);
+} else {
+  // skin: light passes through, so the shaded side turns warm instead of grey
+  float veloLit = clamp(dot(diffuseBase, vec3(0.333)), 0.0, 1.0);
+  color.rgb += diffuseColor * vec3(0.16, 0.05, 0.03) * (1.0 - veloLit);
+  // warm rim light against the sun
+  float veloSkinRim = pow(1.0 - abs(dot(normalW, viewDirectionW)), 3.0);
+  color.rgb += vec3(1.0, 0.55, 0.4) * veloSkinRim * 0.08 * veloLit;
 }
 `,
     };
