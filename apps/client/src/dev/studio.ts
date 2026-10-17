@@ -1,7 +1,7 @@
 /**
  * Avatar studio (dev page, studio.html): renders the bike and rider from the side, front, top and
  * three-quarter view, or the dimensioned reference drawing they are built from (?mode=blueprint).
- * Query: mode=rider|bike|blueprint, style=aero|allround|climber|endurance, crank=<rad>, rim=<mm>,
+ * Query: vape=<s> (puff frozen at s seconds), mode=rider|bike|blueprint, style=aero|allround|climber|endurance, crank=<rad>, rim=<mm>,
  * view=<0…3> (one view only), zoom, ty (target height for zoomed views), tz (shift along the bike),
  * bike=<catalog id>, wheels=<catalog id>, kit=<jersey catalog id>, mirror=1 (views from the left).
  */
@@ -79,6 +79,7 @@ function studio3d(withRider: boolean): void {
   ground.receiveShadows = true;
   const rider = new RiderAvatar(scene, 'studio', look, withRider);
   rider.setCrankAngle(crank);
+  if (q.get('vape')) rider.freezeVape(Number(q.get('vape')));
   const sg = new ShadowGenerator(2048, sun);
   sg.useBlurExponentialShadowMap = true;
   sg.blurKernel = 16;

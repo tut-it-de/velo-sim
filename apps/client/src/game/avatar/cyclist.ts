@@ -57,6 +57,28 @@ function cumulative(pts: Vector3[]): number[] {
   return out;
 }
 
+/** Bones of the right arm, which can leave the bar (e.g. to reach a pocket). */
+interface Arm {
+  upper: TransformNode;
+  elbow: TransformNode;
+  fore: TransformNode;
+  shoulder: Vector3;
+  l1: number;
+  l2: number;
+  /** Rest pose: elbow, wrist, forearm rotation and the centre of the fist. */
+  restElbow: Vector3;
+  restWrist: Vector3;
+  restFore: Quaternion;
+  hand: Vector3;
+}
+
+/** Upper arm and forearm rotations sharing one hinge axis at the elbow (x = u1 × u2). */
+function armFrames(S: Vector3, E: Vector3, W: Vector3): [Quaternion, Quaternion] {
+  const u1 = E.subtract(S);
+  const u2 = W.subtract(E);
+  return [basis(u1, u2), basis(u2, u1.negate())];
+}
+
 interface Leg {
   thigh: TransformNode;
   /** Helper bone at the knee, turned half-way between thigh and shin. */
@@ -75,6 +97,8 @@ export class Cyclist {
   readonly pose: RiderPose;
   private readonly legs: Leg[] = [];
   private legMesh!: Mesh;
+  private arm!: Arm;
+  private armMesh!: Mesh;
 
   constructor(
     scene: Scene,
@@ -93,6 +117,10 @@ export class Cyclist {
     const sock = hex('#f1f1f1');
     const shade = (c: Color3, k: number) => new Color3(c.r * k, c.g * k, c.b * k);
 
+    const smooth = (a: number, b: number, x: number) => {
+      const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+      return t * t * (3 - 2 * t);
+    };
     const body = new MeshKit();
     const shell = new MeshKit();
     // Kind for the fabric shader: 0 = skin, 1 = cloth (see fabricPlugin.ts).
@@ -174,6 +202,11 @@ export class Cyclist {
     shell.loft(lens, 0.003, lens.map((_, k) => 0.024 - Math.abs(k - 6) * 0.0012), (t) => (t < 0.06 || t > 0.94 ? strapCol : hex('#1d2f45')), { hint: Y, seg: 6 });
 
     // --- Arms ------------------------------------------------------------------------------------
+    // The right arm is its own skinned mesh (upper arm, elbow helper, forearm with the hand).
+    const armKit = new MeshKit();
+    armKit.kind = body.kind;
+    const armSkel = new Skeleton(`${name}-arm`, `${name}-arm`, scene);
+    new Bone(`${name}-arm-root`, armSkel, null, Matrix.Identity());
     for (const sx of [-1, 1]) {
       const m = (p: Vector3) => v(p.x * sx, p.y, p.z);
       const S = m(pose.shoulder);
@@ -182,6 +215,7 @@ export class Cyclist {
       if (design) body.texAt = sleeveUv(0.25, 0.03);
       body.ellipsoid(S.add(v(-0.004 * sx, 0.004, -0.004)), v(0.052, 0.05, 0.056), design ? white : accent, undefined, 12, 8);
       body.texAt = null;
+      const kit = sx > 0 ? armKit : body;
       // One skin from the shoulder over a rounded elbow to the wrist, so the joint has no seam.
       const pts: Vector3[] = [];
       const rw: number[] = [];
@@ -222,7 +256,31 @@ export class Cyclist {
       // sleeve print: u around the arm from its seam (mirrored on the left so lettering reads the same
       // way), s shoulder → cuff; u 0.25 / 0.75 (where the sleeve marks sit) face the elbow point and the crook
       const sleeveMap = (t: number, _a: number, arc: number): [number, number] | null => (t > hem ? null : sleeveUv(sx > 0 ? arc : 1 - arc, t / hem));
-      body.loft(
+      const hood = m(bike.hood);
+      if (sx > 0) {
+        const [qU, qF] = armFrames(S, E, W);
+        const nodes = ([['upper', qU, S], ['elbow', Quaternion.Slerp(qU, qF, 0.5), E], ['fore', qF, E]] as const).map(([part, q, pos]) => {
+          const n = new TransformNode(`${name}-arm-${part}`, scene);
+          n.parent = parent;
+          n.position.copyFrom(pos);
+          n.rotationQuaternion = q.clone();
+          new Bone(`${name}-arm-${part}`, armSkel, null, Matrix.Compose(Vector3.One(), q, pos)).linkTransformNode(n);
+          return n;
+        });
+        // weights across the plane bisecting the elbow, like the knee
+        const bis = u1.add(u2).normalize();
+        armKit.skin = (p) => {
+          const s = Vector3.Dot(p.subtract(E), bis);
+          if (s < -0.004) return [1, 2, smooth(-0.04, -0.004, s)];
+          return [2, 3, smooth(0.004, 0.04, s)];
+        };
+        this.arm = {
+          upper: nodes[0]!, elbow: nodes[1]!, fore: nodes[2]!, shoulder: S,
+          l1: Vector3.Distance(S, E), l2: Vector3.Distance(E, W),
+          restElbow: E, restWrist: W, restFore: qF, hand: Vector3.Lerp(W, hood, 0.55),
+        };
+      }
+      kit.loft(
         pts,
         rw,
         rd,
@@ -230,13 +288,19 @@ export class Cyclist {
         { seg: design ? 24 : 16, hint, shift: sh, step: 0.025, map: design ? sleeveMap : undefined },
       );
       // Hand wrapped around the hood.
-      const hood = m(bike.hood);
       const dir = hood.subtract(W).normalize();
-      body.ellipsoid(Vector3.Lerp(W, hood, 0.55).add(v(0.004 * sx, 0.004, 0)), v(0.03, 0.026, 0.052), glove, basis(dir, Y).multiply(Quaternion.RotationAxis(X, Math.PI / 2)), 10, 8);
-      body.ellipsoid(hood.add(v(-0.016 * sx, -0.012, 0.014)), v(0.012, 0.02, 0.012), glove, undefined, 8, 6);
+      kit.ellipsoid(Vector3.Lerp(W, hood, 0.55).add(v(0.004 * sx, 0.004, 0)), v(0.03, 0.026, 0.052), glove, basis(dir, Y).multiply(Quaternion.RotationAxis(X, Math.PI / 2)), 10, 8);
+      kit.ellipsoid(hood.add(v(-0.016 * sx, -0.012, 0.014)), v(0.012, 0.02, 0.012), glove, undefined, 8, 6);
     }
 
-    body.build(`${name}-body`, scene, design ? jerseyMaterial(scene, design) : mats.cloth, parent);
+    const bodyMat = design ? jerseyMaterial(scene, design) : mats.cloth;
+    body.build(`${name}-body`, scene, bodyMat, parent);
+    const armMesh = (this.armMesh = armKit.build(`${name}-arm`, scene, bodyMat, parent));
+    armMesh.skeleton = armSkel;
+    armMesh.numBoneInfluencers = 2;
+    const sh = this.arm.shoulder;
+    armMesh.setBoundingInfo(new BoundingInfo(sh.subtract(v(0.7, 0.7, 0.7)), sh.add(v(0.7, 0.7, 0.7))));
+    armMesh.onDisposeObservable.addOnce(() => armSkel.dispose());
     shell.build(`${name}-helmet`, scene, mats.gloss, parent);
 
     // --- Legs: one skinned mesh, bones at pelvis, hips, knees and ankles -----------------------
@@ -249,10 +313,6 @@ export class Cyclist {
     legs.kind = (c) => (sameHue(c, skin) ? 0 : 1);
     const skeleton = new Skeleton(`${name}-legs`, `${name}-legs`, scene);
     new Bone(`${name}-pelvis`, skeleton, null, Matrix.Identity());
-    const smooth = (a: number, b: number, x: number) => {
-      const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-      return t * t * (3 - 2 * t);
-    };
     const L1 = BODY.thigh;
     const L2 = BODY.shin;
     for (const sx of [1, -1]) {
@@ -385,8 +445,37 @@ export class Cyclist {
     }
   }
 
+  /**
+   * Moves the right hand: the wrist goes to `wrist` (or back to the bar for null), the elbow bends
+   * towards `bend`. Returns the centre of the fist.
+   */
+  setRightHand(wrist: Vector3 | null, bend = v(0.6, -0.5, -0.5)): Vector3 {
+    const a = this.arm;
+    const target = wrist ?? a.restWrist;
+    const E = wrist ? solveJoint(a.shoulder, target, a.l1, a.l2, bend) : a.restElbow;
+    const W = wrist ? E.add(target.subtract(E).normalize().scale(a.l2)) : a.restWrist;
+    const [qU, qF] = armFrames(a.shoulder, E, W);
+    a.upper.rotationQuaternion!.copyFrom(qU);
+    a.elbow.position.copyFrom(E);
+    Quaternion.SlerpToRef(qU, qF, 0.5, a.elbow.rotationQuaternion!);
+    a.fore.position.copyFrom(E);
+    a.fore.rotationQuaternion!.copyFrom(qF);
+    // fist: rest offset from the elbow, turned with the forearm
+    const turn = qF.multiply(Quaternion.Inverse(a.restFore));
+    return E.add(a.hand.subtract(a.restElbow).applyRotationQuaternion(turn));
+  }
+
+  get restWrist(): Vector3 {
+    return this.arm.restWrist;
+  }
+
+  /** Forearm rotation relative to its rest pose (to hold things in the hand). */
+  get rightForearmTurn(): Quaternion {
+    return this.arm.fore.rotationQuaternion!.multiply(Quaternion.Inverse(this.arm.restFore));
+  }
+
   get meshes(): Mesh[] {
-    return [this.legMesh];
+    return [this.legMesh, this.armMesh];
   }
 
   get bikePoints(): BikePoints {

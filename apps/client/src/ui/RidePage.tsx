@@ -408,6 +408,8 @@ function RideView({
         const next = CAMERA_MODES[(idx + 1) % CAMERA_MODES.length]!.id;
         world.setCameraMode(next);
         setCamera(next);
+      } else if (e.key === 'v' || e.key === 'V') {
+        world.vape();
       } else if (e.key === 'p' || e.key === 'P') {
         const st = session.snapshot.get().state;
         if (st === 'riding') session.pause();

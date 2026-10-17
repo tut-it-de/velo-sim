@@ -188,6 +188,11 @@ export class GameWorld {
     this.frameProvider = provider;
   }
 
+  /** Own rider takes a puff from the vape. */
+  vape(): void {
+    this.rider.vape();
+  }
+
   setCameraMode(mode: CameraMode): void {
     this.cameraMode = mode;
     this.camPos = undefined; // snap instead of flying across the map

@@ -1,6 +1,7 @@
 import { Color3, Mesh, MeshBuilder, StandardMaterial, TransformNode, type Scene } from '@babylonjs/core';
 import { BikeModel, type BikeLook } from './avatar/bike';
 import { Cyclist, footPitch, type CyclistLook } from './avatar/cyclist';
+import { VapeAction } from './avatar/vape';
 
 export interface RiderLook extends BikeLook, CyclistLook {}
 
@@ -16,11 +17,12 @@ export class RiderAvatar {
   readonly cyclist: Cyclist | null;
   private crankAngle = Math.random() * Math.PI * 2;
   private wheelAngle = 0;
+  private vapeAction: VapeAction | null = null;
 
   constructor(
     scene: Scene,
     name: string,
-    look: RiderLook,
+    private readonly look: RiderLook,
     withRider = true,
   ) {
     this.root = new TransformNode(name, scene);
@@ -50,6 +52,19 @@ export class RiderAvatar {
     this.updatePose();
   }
 
+  /** Takes the vape out of the back pocket for a puff (built on first use). */
+  vape(): void {
+    if (!this.cyclist) return;
+    this.vapeAction ??= new VapeAction(this.root.getScene(), this.root.name, this.cyclist, this.root, this.look.jerseyAccent ?? this.look.jersey);
+    this.vapeAction.start();
+  }
+
+  /** Holds the puff at `t` seconds (previews). */
+  freezeVape(t: number): void {
+    this.vape();
+    this.vapeAction?.freeze(t);
+  }
+
   private updatePose(): void {
     const a = this.crankAngle;
     const tilt = this.bike.points.footTilt;
@@ -63,6 +78,7 @@ export class RiderAvatar {
     this.wheelAngle = (this.wheelAngle + (speedMps / this.bike.points.spec.wheelRadius) * dt) % (Math.PI * 2);
     for (const w of this.bike.wheels) w.rotation.x = this.wheelAngle;
     this.updatePose();
+    this.vapeAction?.update(dt);
   }
 
   /** Fixed crank angle (0 = right crank up), e.g. for previews. */
@@ -83,6 +99,7 @@ export class RiderAvatar {
 
   /** Materials are shared between avatars; only the blob's own material goes with the rider. */
   dispose(): void {
+    this.vapeAction?.dispose();
     this.blob.material?.dispose();
     this.root.dispose(false, false);
   }
