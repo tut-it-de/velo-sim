@@ -316,6 +316,7 @@ export function diamondFrame(k: FrameKit): void {
   parts.box(fd.add(v(0.034, -0.012, 0.03)), v(0.02, 0.032, 0.07), carbon, Quaternion.RotationAxis(X, -0.25));
   parts.box(fd.add(v(0.018, 0.01, 0.006)), v(0.028, 0.03, 0.026), carbon);
   drivetrain(k, () => []);
+  if (spec.layout === 'trike') trikeAxle(k);
 
   // Bottles and cages on the down and seat tube.
   const dtDir = dtTop.subtract(dtBot).normalize();
@@ -330,6 +331,80 @@ export function diamondFrame(k: FrameKit): void {
   bottle(lerp(stBot, seatTop, 0.17), P.seatUp, stFwd.scale(0.018 * dk * fat + 0.041));
   void frame;
   void metal;
+}
+
+/**
+ * Trike rear end: the dropouts become a bracket around the live axle; axle housings run out to
+ * bearing carriers just inside the two rear wheels, braced back to the chainstays.
+ */
+function trikeAxle(k: FrameKit): void {
+  const { P, spec, paint, metal } = k;
+  const { base } = scheme(k);
+  const col = base(P.rearAxle.z, true);
+  const half = (spec.rearTrack ?? 0.74) / 2;
+  const ra = P.rearAxle;
+  for (const sx of [-1, 1]) {
+    const inner = ra.add(v(0.085 * sx, 0, 0));
+    const outer = ra.add(v((half - 0.06) * sx, 0, 0));
+    paint.loft([inner, outer], 0.019, 0.019, col, { seg: 14, hint: Y });
+    paint.disc(outer.add(v(0.008 * sx, 0, 0)), X, 0.028, 0.02, col, 18);
+    metal.disc(outer.add(v(0.02 * sx, 0, 0)), X, 0.017, 0.008, darkAlloy, 16);
+    paint.box(ra.add(v(0.072 * sx, 0, 0)), v(0.03, 0.05, 0.06), col);
+    // brace from the housing forwards to the chainstay
+    const cs = lerp(P.bb, P.rearAxle, 0.62).add(v(0.05 * sx, 0, 0));
+    paint.loft([lerp(inner, outer, 0.55).add(v(0, 0.012, 0.01)), cs], 0.008, 0.008, col, { seg: 10 });
+  }
+}
+
+/**
+ * Geared unicycle: a crown just above the tyre, two legs down to the hub bearings, a seat post up
+ * to a long padded saddle with a front handle, and a T-bar reaching forward to the grips.
+ */
+export function unicycleFrame(k: FrameKit): void {
+  const { P, spec, paint, parts, metal, frame, accent } = k;
+  const { tube } = scheme(k);
+  const ax = P.rearAxle;
+  const crown = P.seatCluster;
+  const label = k.label;
+  // crown: a flat bridge over the tyre with a short post socket on top
+  paint.loft([crown.add(v(-0.07, -0.012, 0)), crown, crown.add(v(0.07, -0.012, 0))], [0.016, 0.022, 0.016], 0.032, frame, { hint: Z, seg: 14, profile: SQUIRCLE });
+  paint.loft([crown, crown.add(Y.scale(0.08))], 0.018, 0.018, frame, { seg: 14 });
+  paint.disc(crown.add(Y.scale(0.075)), Y, 0.021, 0.018, frame, 16);
+  // legs: straight, slightly fanned so the tyre clears, ending in bearing housings
+  for (const sx of [-1, 1]) {
+    const top = crown.add(v(0.062 * sx, -0.016, 0));
+    const bottom = ax.add(v(0.05 * sx, 0, 0));
+    const pts = [top, lerp(top, bottom, 0.5), bottom];
+    const map = label && print(k, 'fork', pts, 0.011, 0.02, SQUIRCLE, Z, [{ style: brandMark(label.brand), at: 0.45, cap: 0.75, len: 0.4 }]);
+    paint.loft(pts, [0.012, 0.011, 0.01], [0.022, 0.021, 0.019], tube(top, bottom), { hint: Z, seg: 12, profile: SQUIRCLE, map: map || undefined });
+    paint.disc(bottom, X, 0.026, 0.02, frame, 18);
+    metal.disc(bottom.add(v(0.011 * sx, 0, 0)), X, 0.012, 0.004, darkAlloy, 12);
+  }
+  // seat post and clamp
+  const clamp = P.saddleTop.subtract(Y.scale(0.06));
+  parts.loft([crown.add(Y.scale(0.05)), clamp], 0.0127, 0.0127, carbon, { seg: 12 });
+  parts.box(clamp.add(Y.scale(0.012)), v(0.04, 0.02, 0.06), darkAlloy);
+  // saddle: long, flat and padded, raised at the back, with a handle bumper at the front
+  const sy = P.saddleTop.y - 0.02;
+  const sz = P.saddleTop.z;
+  const line = smooth([v(0, sy + 0.025, sz - 0.14), v(0, sy + 0.004, sz - 0.09), v(0, sy, sz), v(0, sy + 0.002, sz + 0.08), v(0, sy + 0.012, sz + 0.13)], 4);
+  const sw = (z: number) => {
+    const t = (z - (sz - 0.14)) / 0.27;
+    return t < 0.2 ? 0.055 + t * 0.12 : t < 0.5 ? 0.079 - (t - 0.2) * 0.06 : Math.max(0.03, 0.061 - (t - 0.5) * 0.12);
+  };
+  parts.loft(line, line.map((q) => sw(q.z)), 0.026, (t, a) => (Math.sin(a) > 0.3 && t > 0.15 && t < 0.85 ? hex('#26282c') : t > 0.9 ? accent : carbon), { hint: Y, seg: 18, profile: (a) => [Math.cos(a), Math.sin(a) > 0 ? Math.sin(a) * 0.8 : Math.sin(a) * 0.6] });
+  parts.ellipsoid(v(0, sy - 0.002, sz + 0.14), v(0.034, 0.03, 0.028), accent);
+  // T-bar: a stem from under the saddle nose forward and slightly up, cross bar with grips
+  const c = P.barClamp;
+  const stemPts = smooth([v(0, sy - 0.03, sz + 0.06), v(0, sy - 0.02, sz + 0.16), c.subtract(v(0, 0.005, 0.02))], 4);
+  const stemMap = label && print(k, 'top', stemPts, 0.013, 0.016, SQUIRCLE, Y, [{ style: modelMark(label.model), at: 0.55, cap: 0.6, len: 0.6 }]);
+  paint.loft(stemPts, 0.013, 0.016, frame, { hint: Y, seg: 12, profile: SQUIRCLE, map: stemMap || undefined });
+  const bw = spec.barWidth / 2;
+  parts.loft([c.add(v(-bw, 0, 0)), c, c.add(v(bw, 0, 0))], 0.0115, 0.0115, carbon, { seg: 12, hint: Y });
+  for (const sx of [-1, 1]) {
+    const g = P.hood;
+    parts.loft([v(g.x * sx - 0.055 * sx, g.y - 0.01, g.z), v(g.x * sx + 0.04 * sx, g.y - 0.01, g.z)], 0.016, 0.016, (t) => (t < 0.05 || t > 0.95 ? darkAlloy : rubber), { seg: 12 });
+  }
 }
 
 /** Road saddle on its rails at the saddle top. */

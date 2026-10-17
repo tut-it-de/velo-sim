@@ -6,7 +6,7 @@ import { Vector3 } from '@babylonjs/core';
  * The frame numbers are those of a real size-56 road frame; the 3D model and the reference drawing
  * are both built from these points.
  */
-export type FrameStyle = 'aero' | 'allround' | 'climber' | 'endurance' | 'recumbent';
+export type FrameStyle = 'aero' | 'allround' | 'climber' | 'endurance' | 'recumbent' | 'trike' | 'unicycle';
 
 export interface FrameSpec {
   stack: number;
@@ -37,8 +37,13 @@ export interface FrameSpec {
   tubeDepth: number;
   /** Seat stays meet the seat tube this far below the top-tube junction. */
   stayDrop: number;
-  /** `diamond`: road frame; `recumbent`: high racer, rider lying in a seat shell, cranks on a boom ahead. */
-  layout: 'diamond' | 'recumbent';
+  /**
+   * `diamond`: road frame; `recumbent`: high racer, rider lying in a seat shell, cranks on a boom ahead;
+   * `trike`: road front end, two rear wheels on a driven axle; `unicycle`: one big wheel, cranks on its hub.
+   */
+  layout: 'diamond' | 'recumbent' | 'trike' | 'unicycle';
+  /** Trike only: distance between the rear wheels' centre planes. */
+  rearTrack?: number;
 }
 
 export const BASE_SPEC: FrameSpec = {
@@ -89,6 +94,35 @@ const RECUMBENT_SPEC: FrameSpec = {
   barWidth: 0.5,
 };
 
+/**
+ * Racing tricycle: a road frame whose stays end at a bracket around a live rear axle; the two rear
+ * wheels sit 0.74 m apart, the chain drives a cassette on the axle between the stays.
+ */
+const TRIKE_SPEC: FrameSpec = { ...BASE_SPEC, layout: 'trike', chainstay: 0.43, tubeDepth: 1.1, rearTrack: 0.74 };
+
+/**
+ * Geared 36" unicycle: the cranks turn the wheel through a 1.5:1 hub gear. The crown sits just above
+ * the tyre, the saddle straight above the axle (`seatAngle` 90), a T-bar reaches forward from the
+ * saddle so the rider can lean onto it like onto the hoods. `stack` is the crown above the axle,
+ * `reach` the T-bar ahead of the saddle and `barWidth` its grip width.
+ */
+const UNICYCLE_SPEC: FrameSpec = {
+  ...BASE_SPEC,
+  layout: 'unicycle',
+  wheelRadius: 0.46,
+  tyreWidth: 0.055,
+  crank: 0.137,
+  seatAngle: 90,
+  headAngle: 90,
+  saddleHeight: 0.725,
+  stack: 0.495,
+  reach: 0.34,
+  barWidth: 0.3,
+  barDrop: 0,
+  tubeDepth: 1,
+  stayDrop: 0,
+};
+
 /** Shape of the frame that changes its geometry: how far the top tube slopes towards the seat. */
 export interface FrameShape {
   slope?: number;
@@ -106,11 +140,15 @@ export function frameSpec(style: FrameStyle = 'allround', shape: FrameShape = {}
         return { ...BASE_SPEC, stack: 0.595, reach: 0.38, headAngle: 72.5, headTube: 0.175, chainstay: 0.418, bbDrop: 0.075, tubeDepth: 1.1, spacers: 0.03, stemAngle: -6, tyreWidth: 0.032, wheelRadius: 0.343 };
       case 'recumbent':
         return RECUMBENT_SPEC;
+      case 'trike':
+        return TRIKE_SPEC;
+      case 'unicycle':
+        return UNICYCLE_SPEC;
       default:
         return BASE_SPEC;
     }
   })();
-  if (base.layout === 'recumbent') return base;
+  if (base.layout === 'recumbent' || base.layout === 'unicycle') return base;
   // a sloping top tube meets a shorter seat tube; stays follow the brand's style
   const seatTube = shape.slope === undefined ? base.seatTube : 0.535 - shape.slope;
   const stayDrop = shape.stays === 'high' ? 0.035 : shape.stays === 'dropped' ? Math.max(base.stayDrop, 0.11) : shape.stays === 'wave' ? 0.08 : base.stayDrop;
@@ -146,6 +184,7 @@ const rad = (d: number) => (d * Math.PI) / 180;
 
 export function bikePoints(spec: FrameSpec): BikePoints {
   if (spec.layout === 'recumbent') return recumbentPoints(spec);
+  if (spec.layout === 'unicycle') return unicyclePoints(spec);
   const r = spec.wheelRadius;
   const ha = rad(spec.headAngle);
   const sa = rad(spec.seatAngle);
@@ -232,6 +271,37 @@ function recumbentPoints(spec: FrameSpec): BikePoints {
     wheelbase,
     footTilt: -1.2,
     seatBackTop: saddleTop.add(seatUp.scale(spec.seatTube)),
+  };
+}
+
+/**
+ * Unicycle key points: both axles are the one hub (also the bottom bracket), `seatCluster` the crown
+ * above the tyre, `saddleTop` straight above the hub, `barClamp` the T-bar's cross piece ahead of the
+ * saddle and `hood` its right grip. The steering points collapse onto the crown.
+ */
+function unicyclePoints(spec: FrameSpec): BikePoints {
+  const r = spec.wheelRadius;
+  const axle = new Vector3(0, r, 0);
+  const up = new Vector3(0, 1, 0);
+  const crown = axle.add(new Vector3(0, spec.stack, 0));
+  const saddleTop = axle.add(new Vector3(0, spec.saddleHeight, 0));
+  const barClamp = saddleTop.add(new Vector3(0, 0.03, spec.reach));
+  return {
+    spec,
+    rearAxle: axle.clone(),
+    frontAxle: axle.clone(),
+    bb: axle.clone(),
+    headTop: crown.clone(),
+    headBottom: crown.clone(),
+    steerUp: up.clone(),
+    seatUp: up.clone(),
+    steererTop: crown.clone(),
+    seatCluster: crown,
+    saddleTop,
+    barClamp,
+    hood: barClamp.add(new Vector3(spec.barWidth / 2, 0.01, 0)),
+    wheelbase: 0,
+    footTilt: 0,
   };
 }
 

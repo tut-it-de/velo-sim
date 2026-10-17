@@ -6,7 +6,7 @@
 
 export type ItemType = 'bike' | 'wheels' | 'jersey';
 export type Tier = 'start' | 'entry' | 'mid' | 'top';
-export type BikeCategory = 'aero' | 'allround' | 'climber' | 'endurance' | 'recumbent';
+export type BikeCategory = 'aero' | 'allround' | 'climber' | 'endurance' | 'recumbent' | 'trike' | 'unicycle';
 export type JerseyCut = 'club' | 'retro' | 'standard' | 'racefit' | 'skinsuit';
 
 interface BaseItem {
@@ -129,7 +129,7 @@ export interface JerseyItem extends BaseItem {
 export type EquipmentItem = BikeItem | WheelsItem | JerseyItem;
 
 export const TIER_LABEL: Record<Tier, string> = { start: 'Start', entry: 'Einsteiger', mid: 'Mittelklasse', top: 'Oberklasse' };
-export const CATEGORY_LABEL: Record<BikeCategory, string> = { aero: 'Aero', allround: 'Allround', climber: 'Kletterrad', endurance: 'Endurance', recumbent: 'Liegerad' };
+export const CATEGORY_LABEL: Record<BikeCategory, string> = { aero: 'Aero', allround: 'Allround', climber: 'Kletterrad', endurance: 'Endurance', recumbent: 'Liegerad', trike: 'Dreirad', unicycle: 'Einrad' };
 export const CUT_LABEL: Record<JerseyCut, string> = {
   club: 'Club-Fit (locker)',
   retro: 'Retro-Wolltrikot',
@@ -193,6 +193,12 @@ export const BIKES: BikeItem[] = [
     B({ tubes: 'round', slope: 0.05 }), 'SuperSix EVO'),
   bike('bike-treck-emondo', 'Treck', 'Emondo SL6', 'mid', 'climber', -0.001, 6.3, 28_000, '#8b0000', '#000000',
     B({ tubes: 'round', stays: 'high', slope: 0.03, seatpost: 'mast' }), 'Trek Émonda'),
+  // Dreirad: Rennrad-Front, zwei Hinterräder auf angetriebener Achse; etwas schwerer, das dritte Rad bremst kaum
+  bike('bike-trivelo-sprint', 'Trivelo', 'Sprint Tri', 'mid', 'trike', 0.004, 9.4, 24_000, '#0e4d45', '#f2c230',
+    B({ tubes: 'round', stays: 'high', slope: 0.03 }), 'Rennsport-Dreiräder (Higgins, Ken Rogers)'),
+  // Einrad: 36" mit 1,5:1-Getriebenabe und T-Lenker – im Spiel so schnell wie ein Mittelklasse-Rennrad
+  bike('bike-nimbo-orakel', 'Nimbo', 'Orakel 36 Geared', 'mid', 'unicycle', 0.006, 7.6, 22_000, '#c8102e', '#f4f4f4',
+    B({ tubes: 'round', stays: 'high' }), 'Nimbus Oracle 36" mit Schlumpf-Nabe'),
   // Einsteiger
   bike('bike-kanyon-endurio', 'Kanyon', 'Endurio AL 6', 'entry', 'endurance', 0.009, 7.9, 6_000, '#556b2f', '#f0e68c', ALU({ slope: 0.06 }), 'Canyon Endurace AL'),
   bike('bike-spezion-allora', 'Spezion', 'Allora Sport', 'entry', 'allround', 0.01, 8.0, 5_000, '#c41e3a', '#ffffff', ALU({ slope: 0.04, paint: 'split' }), 'Specialized Allez'),

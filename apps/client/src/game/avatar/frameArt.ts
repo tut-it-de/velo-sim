@@ -92,6 +92,10 @@ export function brandMark(brand: string): MarkStyle {
       return { text: 'GIGANT', family: 'Archivo Black', weight: 400, stretch: 1.1, spacing: 0.04 };
     case 'Cannonvale':
       return { text: 'Cannonvale', family: 'Montserrat', weight: 800, italic: true, spacing: -0.02 };
+    case 'Trivelo':
+      return { text: 'TRIVELO', family: 'Archivo Black', weight: 400, spacing: 0.08, bar: 0.18 };
+    case 'Nimbo':
+      return { text: 'nimbo', family: 'Audiowide', weight: 400, spacing: 0.04 };
     case 'M6':
       return { text: 'M6', family: 'Audiowide', weight: 400, bar: 1.2 };
     default:

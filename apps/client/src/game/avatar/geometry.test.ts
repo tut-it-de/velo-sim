@@ -61,6 +61,27 @@ describe('bike geometry', () => {
     expect(Vector3.Distance(pose.elbow, pose.wrist)).toBeCloseTo(BODY.forearm, 4);
   });
 
+  it.each(['trike', 'unicycle'] as FrameStyle[])('%s: the knee stays bent, the legs reach the pedals, arms reach the grips', (style) => {
+    const p = bikePoints(frameSpec(style));
+    const pose = riderPose(p);
+    let longest = 0;
+    for (let a = 0; a < Math.PI * 2; a += 0.05) {
+      const phi = footPitch(a);
+      const spindle = new Vector3(pose.hip.x, p.bb.y + Math.cos(a) * p.spec.crank, p.bb.z + Math.sin(a) * p.spec.crank);
+      const ankle = spindle.add(new Vector3(0, Math.sin(phi) * BODY.ankleBack + Math.cos(phi) * BODY.ankleUp, -Math.cos(phi) * BODY.ankleBack + Math.sin(phi) * BODY.ankleUp));
+      longest = Math.max(longest, Vector3.Distance(pose.hip, ankle));
+    }
+    const l1 = BODY.thigh;
+    const l2 = BODY.shin;
+    const flexion = 180 - (Math.acos((l1 * l1 + l2 * l2 - longest * longest) / (2 * l1 * l2)) * 180) / Math.PI;
+    expect(flexion).toBeGreaterThan(18);
+    expect(flexion).toBeLessThan(40);
+    expect(Vector3.Distance(pose.shoulder, pose.elbow)).toBeCloseTo(BODY.upperArm, 4);
+    expect(Vector3.Distance(pose.elbow, pose.wrist)).toBeCloseTo(BODY.forearm, 4);
+    // the saddle sits above the wheel(s)
+    expect(p.saddleTop.y).toBeGreaterThan(p.rearAxle.y + p.spec.wheelRadius);
+  });
+
   it('endurance frames sit the rider more upright than aero frames', () => {
     const aero = riderPose(bikePoints(frameSpec('aero')));
     const endurance = riderPose(bikePoints(frameSpec('endurance')));

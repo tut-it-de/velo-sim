@@ -1,7 +1,7 @@
 import { Mesh, TransformNode, Vector3, type Scene } from '@babylonjs/core';
 import type { FrameBuild } from '@velo/equipment';
 import { bikePoints, frameSpec, type BikePoints, type FrameStyle } from './geometry';
-import { RING_X, SPROCKETS, SPROCKET_X, defaultBuild, diamondFrame, pitchRadius, recumbentFrame, type FrameKit } from './frames';
+import { RING_X, SPROCKETS, SPROCKET_X, defaultBuild, diamondFrame, pitchRadius, recumbentFrame, unicycleFrame, type FrameKit } from './frames';
 import { MeshKit, SQUIRCLE, basis, hex } from './meshKit';
 import { avatarMaterials, frameMaterial } from './materials';
 import { buildRim } from './rimMesh';
@@ -56,6 +56,7 @@ export class BikeModel {
     const build = look.build ?? defaultBuild(look.frameStyle);
     const kit: FrameKit = { P, spec, build, paint, parts, metal, frame, accent, label: look.label, decals: [] };
     if (spec.layout === 'recumbent') recumbentFrame(kit);
+    else if (spec.layout === 'unicycle') unicycleFrame(kit);
     else diamondFrame(kit);
     // alloy frames are satin, carbon ones lacquered
     const finish = build.material === 'alu' ? 'satin' : 'gloss';
@@ -70,6 +71,9 @@ export class BikeModel {
     this.crank.position.copyFrom(P.bb);
     const ck = new MeshKit();
     const o = Vector3.Zero();
+    // a unicycle's cranks go straight into the hub gear: no chainrings
+    const uni = spec.layout === 'unicycle';
+    if (!uni) {
     ck.lathe(o.add(v(RING_X, 0, 0)), X, [[ringR - 0.026, -0.002], [ringR + 0.003, -0.002], [ringR + 0.003, 0.002], [ringR - 0.026, 0.002], [ringR - 0.026, -0.002]], hex('#2b2d31'), 32, 52);
     const smallR = pitchRadius(36);
     ck.lathe(o.add(v(RING_X - 0.0075, 0, 0)), X, [[smallR - 0.012, -0.002], [smallR + 0.003, -0.002], [smallR + 0.003, 0.002], [smallR - 0.012, 0.002], [smallR - 0.012, -0.002]], hex('#3a3c41'), 32, 36);
@@ -78,10 +82,11 @@ export class BikeModel {
       const dir = v(0, Math.cos(a), Math.sin(a));
       ck.loft([v(0.05, 0, 0).add(dir.scale(0.012)), v(RING_X + 0.001, 0, 0).add(dir.scale(ringR - 0.022))], 0.004, 0.009, carbon, { hint: X, seg: 6 });
     }
-    ck.disc(o, X, 0.012, 0.138, darkAlloy, 12);
+    }
+    ck.disc(o, X, 0.012, uni ? 0.15 : 0.138, darkAlloy, 12);
     for (const sx of [-1, 1]) {
       const end = v(0.07 * sx, spec.crank * sx, 0);
-      ck.loft([v(0.06 * sx, 0, 0), v(0.064 * sx, 0.06 * sx, 0), end], [0.009, 0.0085, 0.008], [0.021, 0.017, 0.013], carbon, { hint: Z, seg: 10, profile: SQUIRCLE });
+      ck.loft([v(0.06 * sx, 0, 0), v(0.064 * sx, Math.min(0.06, spec.crank * 0.4) * sx, 0), end], [0.009, 0.0085, 0.008], [0.021, 0.017, 0.013], carbon, { hint: Z, seg: 10, profile: SQUIRCLE });
       ck.disc(end, X, 0.012, 0.016, carbon, 12);
     }
     ck.build(`${name}-crankset`, scene, mats.satin, this.crank);
@@ -103,10 +108,26 @@ export class BikeModel {
     const rimCol = hex(look.rim ?? '#1d1f22');
     const hubCol = look.wheel ? hex(look.wheel.hub) : carbon;
     const spokeCol = hex(look.wheel?.spoke ?? '#151515');
-    for (const front of [false, true]) {
+    // Wheel set: front and rear; a trike's rear axle carries cassette and rotor between two rear
+    // wheels; a unicycle has one big wheel with a gear hub.
+    type WheelSpec = { at: Vector3; front: boolean; hubOnly?: boolean; cassette: boolean; rotor: boolean };
+    const wheelSet: WheelSpec[] =
+      spec.layout === 'unicycle'
+        ? [{ at: P.rearAxle, front: true, cassette: false, rotor: false }]
+        : spec.layout === 'trike'
+          ? [
+              { at: P.rearAxle, front: false, hubOnly: true, cassette: true, rotor: true },
+              ...[-1, 1].map((sx) => ({ at: P.rearAxle.add(v((sx * (spec.rearTrack ?? 0.74)) / 2, 0, 0)), front: true, cassette: false, rotor: false })),
+              { at: P.frontAxle, front: true, cassette: false, rotor: true },
+            ]
+          : [
+              { at: P.rearAxle, front: false, cassette: true, rotor: true },
+              { at: P.frontAxle, front: true, cassette: false, rotor: true },
+            ];
+    for (const { at, front, hubOnly, cassette, rotor } of wheelSet) {
       const node = new TransformNode(`${name}-wheel`, scene);
       node.parent = this.root;
-      node.position.copyFrom(front ? P.frontAxle : P.rearAxle);
+      node.position.copyFrom(at);
       const wk = new MeshKit();
       const mk = new MeshKit();
       const R = spec.wheelRadius;
@@ -116,6 +137,10 @@ export class BikeModel {
         const a = (k / 18) * Math.PI * 2;
         tyre.push([R - tw + Math.cos(a) * tw, Math.sin(a) * tw * 0.98]);
       }
+      if (hubOnly) {
+        // live axle: shaft between the two rear wheels
+        mk.loft([v(-(spec.rearTrack ?? 0.74) / 2, 0, 0), v((spec.rearTrack ?? 0.74) / 2, 0, 0)], 0.009, 0.009, darkAlloy, { seg: 10 });
+      } else {
       wk.lathe(o, X, tyre, (t) => (Math.abs(t - 0.5) > 0.4 ? hex('#1f1f1f') : hex('#2a2a2b')), 48);
       const bead = R - spec.tyreWidth + 0.003;
       const inner = bead - depth;
@@ -126,37 +151,42 @@ export class BikeModel {
       ];
       if (look.wheel) buildRim(scene, `${name}-rim`, node, look.wheel, bead, depth);
       else wk.lathe(o, X, rim, rimCol, 48);
-      // Hub shell, flanges, end caps.
-      const half = front ? 0.05 : 0.071;
-      const flL = -0.034;
-      const flR = front ? 0.034 : 0.021;
-      wk.lathe(o, X, [[0.006, -half], [0.011, -half], [0.011, flL - 0.004], [0.024, flL - 0.002], [0.024, flL + 0.002], [0.012, flL + 0.004], [0.012, flR - 0.004], [0.024, flR - 0.002], [0.024, flR + 0.002], [0.011, flR + 0.004], [0.011, half], [0.006, half]], hubCol, 16);
-      // Spokes: radial front, two-cross rear; bladed.
-      const count = 24;
+      // Hub shell, flanges, end caps; the unicycle's gear hub is a fat drum.
+      const half = uni ? 0.04 : front ? 0.05 : 0.071;
+      const flL = uni ? -0.033 : -0.034;
+      const flR = uni ? 0.033 : front ? 0.034 : 0.021;
+      const shell = uni ? 0.036 : 0.011;
+      wk.lathe(o, X, [[0.006, -half], [shell, -half], [shell, flL - 0.004], [0.024 + (uni ? 0.024 : 0), flL - 0.002], [0.024 + (uni ? 0.024 : 0), flL + 0.002], [shell + 0.001, flL + 0.004], [shell + 0.001, flR - 0.004], [0.024 + (uni ? 0.024 : 0), flR - 0.002], [0.024 + (uni ? 0.024 : 0), flR + 0.002], [shell, flR + 0.004], [shell, half], [0.006, half]], hubCol, 20);
+      // Spokes: radial front, two-cross rear (and on the unicycle, 36 of them); bladed.
+      const count = uni ? 36 : 24;
+      const hubR = uni ? 0.045 : 0.022;
       for (let k = 0; k < count; k++) {
         const left = k % 2 === 0;
         const a = (k / count) * Math.PI * 2;
-        const ar = front ? a : a + (Math.floor(k / 2) % 2 === 0 ? 0.42 : -0.42);
+        const ar = front && !uni ? a : a + (Math.floor(k / 2) % 2 === 0 ? 0.42 : -0.42) * (uni ? 0.6 : 1);
         const fx = left ? flL : flR;
-        const h = v(fx, Math.sin(a) * 0.022, Math.cos(a) * 0.022);
+        const h = v(fx, Math.sin(a) * hubR, Math.cos(a) * hubR);
         const rr = v(left ? -0.003 : 0.003, Math.sin(ar) * (inner + 0.002), Math.cos(ar) * (inner + 0.002));
         wk.loft([h, rr], 0.0022, 0.0009, spokeCol, { seg: 4, capStart: false, capEnd: false, step: 1 });
       }
+      }
       // Rotor on the left.
+      if (rotor) {
       const rotorR = front ? 0.08 : 0.07;
       mk.lathe(v(-0.054, 0, 0), X, [[rotorR - 0.016, -0.0009], [rotorR, -0.0009], [rotorR, 0.0009], [rotorR - 0.016, 0.0009], [rotorR - 0.016, -0.0009]], (_, a) => (Math.floor((a / (Math.PI * 2)) * 36) % 2 ? alloy : hex('#c3c7cc')), 36);
       for (let k = 0; k < 6; k++) {
         const a = (k / 6) * Math.PI * 2;
         wk.loft([v(-0.054, Math.sin(a) * 0.018, Math.cos(a) * 0.018), v(-0.054, Math.sin(a + 0.3) * (rotorR - 0.014), Math.cos(a + 0.3) * (rotorR - 0.014))], 0.002, 0.005, carbon, { hint: X, seg: 4 });
       }
-      if (!front) {
+      }
+      if (cassette) {
         SPROCKETS.forEach((teeth, i) => {
           const r = pitchRadius(teeth);
           mk.lathe(v(SPROCKET_X(i), 0, 0), X, [[0.017, -0.0009], [r + 0.002, -0.0009], [r + 0.002, 0.0009], [0.017, 0.0009]], i % 3 === 0 ? alloy : hex('#8d9197'), 24, teeth);
         });
       }
-      wk.build(`${name}-wheel-mesh`, scene, mats.satin, node);
-      mk.build(`${name}-wheel-metal`, scene, mats.metal, node);
+      if (!wk.empty) wk.build(`${name}-wheel-mesh`, scene, mats.satin, node);
+      if (!mk.empty) mk.build(`${name}-wheel-metal`, scene, mats.metal, node);
       this.wheels.push(node);
     }
   }

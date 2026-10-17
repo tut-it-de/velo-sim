@@ -29,7 +29,9 @@ export class RiderAvatar {
 
     const shadow = MeshBuilder.CreateDisc('shadow', { radius: 0.6, tessellation: 24 }, scene);
     shadow.rotation.x = Math.PI / 2;
-    shadow.scaling.set(0.5, 1.2, 1);
+    // stretched under the wheels: wide under a trike, round under a unicycle
+    const layout = this.bike.points.spec.layout;
+    shadow.scaling.set(layout === 'trike' ? 1 : 0.5, layout === 'unicycle' ? 0.6 : 1.2, 1);
     shadow.position.y = 0.03;
     const sm = new StandardMaterial(`${name}-shadow`, scene);
     sm.diffuseColor = Color3.Black();

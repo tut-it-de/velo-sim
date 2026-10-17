@@ -40,7 +40,9 @@ describe('catalogue', () => {
     expect(aeroStars(fastest)).toBe(5);
     expect(aeroStars(basis)).toBe(1);
     expect(weightStars(lightest)).toBe(5);
-    expect(weightStars(basis)).toBe(1);
+    // a racing trike carries a third wheel and an axle
+    expect(weightStars(BIKES.find((b) => b.id === 'bike-trivelo-sprint')!)).toBe(1);
+    expect(weightStars(basis)).toBeLessThanOrEqual(2);
     expect(weightStars(JERSEYS[0]!)).toBeUndefined();
     for (const i of CATALOG) {
       expect(aeroStars(i)).toBeGreaterThanOrEqual(1);
