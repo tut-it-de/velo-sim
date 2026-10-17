@@ -93,6 +93,8 @@ export interface WorldData {
   /** Single trees (x, z pairs). */
   trees: Float32Array;
   roads: SideRoad[];
+  /** Surface car parks (outlines, x, z pairs, counter-clockwise seen from above). */
+  parking: Float32Array[];
   landmarks: Landmark[];
   look: WorldLook;
 }
@@ -120,6 +122,8 @@ interface WorldJson {
   buildings: number[][];
   trees: number[];
   roads: number[][];
+  /** Car parks (tools/geo/add_parking.py); missing in older worlds. */
+  parking?: number[][];
   /** Missing in worlds generated before landmarks existed. */
   landmarks?: Landmark[];
   /** Missing in the first world (Lake Como), which is Mediterranean. */
@@ -183,6 +187,7 @@ async function load(id: string): Promise<WorldData> {
     buildings: json.buildings.map((b) => ({ height: b[0]! / 10, kind: b[1] as BuildingKind, ring: decodeRing(b, 2) })),
     trees: Float32Array.from(json.trees, (v) => v / 10),
     roads: json.roads.map((r) => ({ width: r[0]! / 10, track: r[1] === 1, pts: decodeRing(r, 2) })),
+    parking: (json.parking ?? []).map((r) => decodeRing(r, 0)),
     landmarks: json.landmarks ?? [],
     look: { flora: json.look?.flora ?? 'mediterranean', architecture: json.look?.architecture ?? 'italian' },
   };

@@ -153,7 +153,7 @@ export async function buildRoadsideFlora(
         const o = o0 + rng() * (o1 - o0);
         const x = track.xs[i]! + fx * along + sg * lx * o;
         const z = track.zs[i]! + fz * along + sg * lz * o;
-        if (field.isWater(x, z) || buildings.find(x, z, 0.8) >= 0) continue;
+        if (field.isWater(x, z) || buildings.blocked(x, z, 0.8)) continue;
         const y = corridor.surface(x, z);
         const forest = field.classAt(x, z) === LAND_CLASS.forest;
         const cell = cellOf(forest);

@@ -314,7 +314,7 @@ export async function buildVegetation(
         height = fit;
       }
     }
-    if (field.isWater(x, z) || buildings.find(x, z, 1.2) >= 0) return;
+    if (field.isWater(x, z) || buildings.blocked(x, z, 1.2)) return;
     const y = (d < 48 ? corridor.surface(x, z) : field.dem(x, z)) - 0.3;
     if (y < wl + 0.2) return;
     const yaw = rng() * Math.PI;

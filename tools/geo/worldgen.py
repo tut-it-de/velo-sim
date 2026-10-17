@@ -19,7 +19,7 @@ builder (road graph → closed list of graph nodes) and a segment builder, then 
 
 Writes
   packages/routes/src/data/<ts_name>.ts          lap polyline (local metres) + segments
-  apps/client/public/worlds/<id>/world.json      buildings, trees, side roads, lake, places, look
+  apps/client/public/worlds/<id>/world.json      buildings, trees, side roads, car parks, lake, places, look
   apps/client/public/worlds/<id>/terrain.bin     height + land-class rasters (3 levels of detail)
 
 Downloads are cached in tools/geo/.cache/<id>/ (Overture extracts) and tools/geo/.cache/dem/
@@ -734,6 +734,8 @@ def build(cfg: Config, make_lap: Callable, make_segments: Callable[[Context], li
     water_level = cfg.water_level if lake_local is not None else math.floor(float(horizon.height.min())) - 50.0
     landmarks = build_landmarks(overture('base', 'infrastructure', cfg.fetch_near, 'infrastructure', tags=True), nb) if cfg.landmarks else []
     write_world(near, far, horizon, buildings, tree_xy, roads, places, rings, water_level, landmarks)
+    import add_parking  # surface car parks from OpenStreetMap (Overpass), patched into world.json
+    add_parking.patch(C.id)
 
 
 def place_points(land) -> list[dict]:

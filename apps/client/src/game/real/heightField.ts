@@ -79,23 +79,24 @@ export class HeightField {
 }
 
 /** Spatial hash over building footprints for point-in-building tests. */
-export class BuildingIndex {
+/** Spatial index over closed outlines (x, z pairs) for point-in-outline queries. */
+export class RingIndex {
   private readonly cell = 48;
   private readonly cells = new Map<number, number[]>();
   readonly bbox: Float32Array;
 
-  constructor(readonly buildings: Building[]) {
-    this.bbox = new Float32Array(buildings.length * 4);
-    buildings.forEach((b, k) => {
+  constructor(readonly rings: Float32Array[]) {
+    this.bbox = new Float32Array(rings.length * 4);
+    rings.forEach((ring, k) => {
       let x0 = Infinity;
       let z0 = Infinity;
       let x1 = -Infinity;
       let z1 = -Infinity;
-      for (let i = 0; i < b.ring.length; i += 2) {
-        x0 = Math.min(x0, b.ring[i]!);
-        x1 = Math.max(x1, b.ring[i]!);
-        z0 = Math.min(z0, b.ring[i + 1]!);
-        z1 = Math.max(z1, b.ring[i + 1]!);
+      for (let i = 0; i < ring.length; i += 2) {
+        x0 = Math.min(x0, ring[i]!);
+        x1 = Math.max(x1, ring[i]!);
+        z0 = Math.min(z0, ring[i + 1]!);
+        z1 = Math.max(z1, ring[i + 1]!);
       }
       this.bbox.set([x0, z0, x1, z1], k * 4);
       for (let cx = Math.floor(x0 / this.cell); cx <= Math.floor(x1 / this.cell); cx++) {
@@ -109,16 +110,37 @@ export class BuildingIndex {
     });
   }
 
-  /** Index of the building containing (x, z), or -1. `pad` grows every footprint's bounding box test. */
+  /** Index of the outline containing (x, z), or -1. `pad` grows every outline's bounding box test. */
   find(x: number, z: number, pad = 0): number {
     const list = this.cells.get(cellKey(Math.floor(x / this.cell), Math.floor(z / this.cell)));
     if (!list) return -1;
     for (const k of list) {
       const b = this.bbox;
       if (x < b[k * 4]! - pad || x > b[k * 4 + 2]! + pad || z < b[k * 4 + 1]! - pad || z > b[k * 4 + 3]! + pad) continue;
-      if (pad > 0 || pointInRing(this.buildings[k]!.ring, x, z)) return k;
+      if (pad > 0 || pointInRing(this.rings[k]!, x, z)) return k;
     }
     return -1;
+  }
+}
+
+/**
+ * Building footprints (for walls, villages and keeping props off the houses) plus the car parks,
+ * which only keep trees, grass and props off the asphalt (`blocked`).
+ */
+export class BuildingIndex extends RingIndex {
+  private readonly parking: RingIndex;
+
+  constructor(
+    readonly buildings: Building[],
+    parking: Float32Array[] = [],
+  ) {
+    super(buildings.map((b) => b.ring));
+    this.parking = new RingIndex(parking);
+  }
+
+  /** A house (bounding box grown by `pad`) or a car park covers (x, z). */
+  blocked(x: number, z: number, pad = 0): boolean {
+    return this.find(x, z, pad) >= 0 || this.parking.find(x, z) >= 0;
   }
 }
 

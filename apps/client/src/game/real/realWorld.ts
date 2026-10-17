@@ -24,6 +24,7 @@ import type { QualityProfile } from './quality';
 import { buildRouteRibbon } from './roadRibbon';
 import { buildRoadsideFlora, type RoadsideFlora } from './roadsideFlora';
 import { buildRoadsideProps } from './roadsideProps';
+import { buildParking } from './parking';
 import { buildSideRoads } from './sideRoads';
 import { SkyDome } from './sky';
 import { RealTerrain } from './terrain';
@@ -94,7 +95,7 @@ export class RealWorld {
     await step('Straßenverlauf wird analysiert …');
     fitGroundModel(data, track);
     const field = new HeightField(data);
-    const buildingIndex = new BuildingIndex(data.buildings);
+    const buildingIndex = new BuildingIndex(data.buildings, data.parking);
     const corridor = new RouteCorridor(track, field, buildingIndex);
 
     const fog = Color3.FromHexString(SKY.fog);
@@ -130,6 +131,7 @@ export class RealWorld {
 
     await step('Dorfstraßen und Feldwege …');
     buildSideRoads(scene, data, corridor, quality);
+    buildParking(scene, data, corridor, quality);
 
     await step('Gras und Blumen am Straßenrand …');
     const flora = quality.level === 'niedrig' ? null : await buildRoadsideFlora(scene, corridor, buildingIndex, quality);

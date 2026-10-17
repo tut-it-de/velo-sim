@@ -158,7 +158,7 @@ export async function buildRoadsideProps(
       const o = corridor.hw[side]![r]! + SHOULDER + POST_OFFSET;
       const x = track.xs[i]! + sg * rx * o;
       const z = track.zs[i]! + sg * rz * o;
-      if (field.isWater(x, z) || buildings.find(x, z, 0.8) >= 0) continue;
+      if (field.isWater(x, z) || buildings.blocked(x, z, 0.8)) continue;
       const y = corridor.surface(x, z);
       // same heading convention as the street lamps in roadRibbon.ts: local x runs across the road
       const yaw = side === 1 ? h + Math.PI : h;
@@ -296,7 +296,7 @@ async function buildFlowerBoxes(scene: Scene, corridor: RouteCorridor, buildings
       const o = corridor.hw[side]![r]! + SHOULDER + PARAPET_W / 2;
       const x = track.xs[i]! + sg * rx * o;
       const z = track.zs[i]! + sg * rz * o;
-      if (buildings.find(x, z, 0.8) >= 0) continue;
+      if (buildings.blocked(x, z, 0.8)) continue;
       // the parapet top is PARAPET_H above the road; the box sits on it, the flowers on the box
       const top = track.ys[i]! + PARAPET_H + BOX_SIZE[1];
       pushInstance(boxes, x, top - BOX_SIZE[1] / 2, z, h);
@@ -381,7 +381,7 @@ function buildOleanders(scene: Scene, corridor: RouteCorridor, buildings: Buildi
       const o = corridor.hw[side]![r]! + SHOULDER + WALL_THICK + OLEANDER_OFFSET;
       const x = track.xs[i]! + sg * rx * o;
       const z = track.zs[i]! + sg * rz * o;
-      if (buildings.find(x, z, 1.5) >= 0) continue;
+      if (buildings.blocked(x, z, 1.5)) continue;
       const y = track.ys[i]! + corridor.wallH[side]![r]!;
       const variant = Math.floor(rng() * OLEANDER_SEEDS.length);
       const key = `${variant}:${Math.floor(x / TREE_CHUNK)},${Math.floor(z / TREE_CHUNK)}`;
