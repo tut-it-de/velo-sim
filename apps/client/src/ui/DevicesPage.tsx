@@ -4,7 +4,7 @@ import { platform } from '../devices/platform';
 import { logStore, logText } from '../state/log';
 import { settingsStore, updateSettings } from '../state/settings';
 import { useStore } from '../state/store';
-import { StatusDot, Tile, fmt } from './components';
+import { StatusDot, Tile, Toggle, fmt } from './components';
 
 const SLOT_INFO: Record<DeviceSlot, { title: string; hint: string }> = {
   trainer: { title: 'Smart-Trainer', hint: 'KICKR Core oder jeder FTMS-Trainer' },
@@ -21,14 +21,17 @@ export function DevicesPage() {
   return (
     <div className="page">
       <div className="page-inner">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <h1>Geräte</h1>
+        <div className="page-head">
+          <div>
+            <div className="eyebrow">Trainer & Sensoren</div>
+            <h1>Geräte</h1>
+          </div>
           <span className="muted small">Plattform: {platform.label}</span>
         </div>
 
         {platform.bluetoothHint && !settings.useSimulator && <div className="notice">{platform.bluetoothHint}</div>}
 
-        <div className="card row" style={{ justifyContent: 'space-between' }}>
+        <div className="card row" style={{ justifyContent: 'space-between', flexWrap: 'nowrap', gap: 24 }}>
           <div>
             <strong>Simulator statt Bluetooth</strong>
             <div className="muted small">
@@ -37,15 +40,12 @@ export function DevicesPage() {
               <kbd>→</kbd> (Kadenz), <kbd>Leertaste</kbd> (Pause). Mit dem Simulator gibt es später keine Taler.
             </div>
           </div>
-          <label className="row">
-            <input
-              type="checkbox"
-              checked={settings.useSimulator}
-              onChange={(e) => updateSettings({ useSimulator: e.target.checked })}
-              disabled={Object.values(slots).some((s) => s.state !== 'disconnected')}
-            />
-            aktiv
-          </label>
+          <Toggle
+            checked={settings.useSimulator}
+            onChange={(v) => updateSettings({ useSimulator: v })}
+            disabled={Object.values(slots).some((s) => s.state !== 'disconnected')}
+            label={settings.useSimulator ? 'aktiv' : 'aus'}
+          />
         </div>
 
         <div className="grid cols-3">

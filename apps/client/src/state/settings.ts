@@ -21,6 +21,8 @@ export interface Settings {
   rideOnline: boolean;
   /** Graphics profile for the real-world routes. */
   graphicsQuality: GraphicsQuality;
+  /** Admin tools in the ride (teleport along the route). Rides with a teleport earn nothing. */
+  adminMode: boolean;
 }
 
 const KEY = 'velo.settings.v1';
@@ -37,6 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
   serverUrl: '',
   rideOnline: true,
   graphicsQuality: 'auto',
+  adminMode: false,
 };
 
 export const settingsStore = new Store<Settings>(loadJson(KEY, DEFAULT_SETTINGS));

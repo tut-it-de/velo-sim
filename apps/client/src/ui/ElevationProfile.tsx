@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, type MouseEvent } from 'react';
 import type { Track } from '@velo/routes';
 
 const W = 1000;
@@ -11,10 +11,13 @@ interface Props {
   showSegments?: boolean;
   /** Other riders' lap positions (pacers, later multiplayer). */
   markers?: Array<{ id: string; positionM: number; color: string }>;
+  /** Makes the profile clickable: called with the lap distance under the pointer. */
+  onPick?: (distanceM: number) => void;
 }
 
 /** Elevation profile of a full lap as SVG, with segment bands and rider markers. */
-export function ElevationProfile({ track, positionM, height = 90, showSegments = true, markers = [] }: Props) {
+export function ElevationProfile({ track, positionM, height = 90, showSegments = true, markers = [], onPick }: Props) {
+  const [hover, setHover] = useState<number | null>(null);
   const { path, area, minE, range } = useMemo(() => {
     const pts = track.profile(300);
     const minE = Math.min(...pts.map((p) => p[1]));
@@ -29,9 +32,21 @@ export function ElevationProfile({ track, positionM, height = 90, showSegments =
   const x = (d: number) => (d / track.length) * W;
   const yAt = (d: number) => height - 6 - ((track.sample(d).y - minE) / range) * (height - 14);
   const gradId = `elev-${track.id}`;
+  const pickAt = (e: MouseEvent<SVGSVGElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return Math.min(track.length - 1, Math.max(0, ((e.clientX - r.left) / r.width) * track.length));
+  };
+  const hs = hover !== null ? track.sample(hover) : null;
 
-  return (
-    <svg viewBox={`0 0 ${W} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height, display: 'block' }}>
+  const svg = (
+    <svg
+      viewBox={`0 0 ${W} ${height}`}
+      preserveAspectRatio="none"
+      style={{ width: '100%', height, display: 'block', cursor: onPick ? 'crosshair' : undefined }}
+      onMouseMove={onPick ? (e) => setHover(pickAt(e)) : undefined}
+      onMouseLeave={onPick ? () => setHover(null) : undefined}
+      onClick={onPick ? (e) => onPick(pickAt(e)) : undefined}
+    >
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#ff7a1a" stopOpacity="0.55" />
@@ -61,6 +76,25 @@ export function ElevationProfile({ track, positionM, height = 90, showSegments =
           <circle cx={x(positionM)} cy={yAt(positionM)} r={6} fill="#ffffff" stroke="#ff7a1a" strokeWidth={3} vectorEffect="non-scaling-stroke" />
         </>
       )}
+      {hover !== null && (
+        <>
+          <line x1={x(hover)} x2={x(hover)} y1={0} y2={height} stroke="#58a6ff" strokeWidth={1.5} strokeDasharray="4 3" vectorEffect="non-scaling-stroke" />
+          <circle cx={x(hover)} cy={yAt(hover)} r={5} fill="#58a6ff" stroke="#fff" strokeWidth={2} vectorEffect="non-scaling-stroke" />
+        </>
+      )}
     </svg>
+  );
+  if (!onPick) return svg;
+  return (
+    <div className="profile-pick">
+      {svg}
+      {hs && hover !== null && (
+        <div className="profile-pick-tip" style={{ left: `${(hover / track.length) * 100}%` }}>
+          <strong>{(hover / 1000).toFixed(2)} km</strong>
+          <span>{Math.round(hs.y)} m</span>
+          <span>{hs.gradePercent.toFixed(1)} %</span>
+        </div>
+      )}
+    </div>
   );
 }

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { accountStore, fetchOnline, isLoggedIn, refreshAccount, serverBase } from '../net/api';
 import { MultiplayerClient } from '../net/multiplayer';
 import { maybeAutoUpload } from '../net/strava';
-import { ROUTES, getTrack } from '@velo/routes';
+import { ROUTES, getTrack, type RouteStyle, type Track } from '@velo/routes';
+import { estimateTime, setupFor } from '@velo/equipment';
 import { workoutStats, type Workout } from '@velo/workouts';
 import { deviceManager } from '../devices/deviceManager';
 import { keepAwake } from '../devices/files';
@@ -18,7 +19,7 @@ import { ElevationProfile } from './ElevationProfile';
 import { Hud } from './Hud';
 import { RideSummary } from './RideSummary';
 import { WorkoutSelect } from './WorkoutSelect';
-import { formatDuration } from './components';
+import { Toggle, formatDuration } from './components';
 
 type Phase =
   | { kind: 'select' }
@@ -62,12 +63,86 @@ export function RidePage() {
   );
 }
 
+const STYLE_LABEL: Record<RouteStyle, string> = { coast: 'Küste', hills: 'Hügel', alpine: 'Alpin', lake: 'See' };
+const STYLE_HUE: Record<RouteStyle, string> = { coast: '#22b8cf', hills: '#51cf66', alpine: '#b197fc', lake: '#4dabf7' };
+type RouteFilter = 'all' | 'real' | 'flat' | 'climb';
+const FILTERS: Array<{ id: RouteFilter; label: string }> = [
+  { id: 'all', label: 'Alle' },
+  { id: 'real', label: 'Echte Straßen' },
+  { id: 'flat', label: 'Flach & wellig' },
+  { id: 'climb', label: 'Berge' },
+];
+
+/** 1–5 from climbing per kilometre and the steepest ramp. */
+function difficulty(t: Track): number {
+  const perKm = t.elevationGain / (t.length / 1000);
+  const score = perKm / 10 + Math.max(0, t.maxGrade - 6) / 4;
+  return Math.min(5, Math.max(1, Math.round(score)));
+}
+
+function DifficultyPips({ value }: { value: number }) {
+  return (
+    <span className="pips" title={`Schwierigkeit ${value} von 5`} aria-label={`Schwierigkeit ${value} von 5`}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <span key={i} className={i <= value ? 'on' : ''} />
+      ))}
+    </span>
+  );
+}
+
+/** The lap seen from above, as a line drawing (route cards and hero). */
+function RouteShape({ track, size = 120, stroke = 3 }: { track: Track; size?: number; stroke?: number }) {
+  const d = useMemo(() => {
+    const { minX, maxX, minZ, maxZ } = track.bounds;
+    const pad = stroke * 2;
+    const k = (size - 2 * pad) / Math.max(1, maxX - minX, maxZ - minZ);
+    const ox = (size - (maxX - minX) * k) / 2;
+    const oy = (size - (maxZ - minZ) * k) / 2;
+    const every = Math.max(1, Math.floor(track.count / 300));
+    let p = '';
+    for (let i = 0; i <= track.count; i += every) {
+      const j = i % track.count;
+      p += `${p ? 'L' : 'M'}${(ox + (track.xs[j]! - minX) * k).toFixed(1)},${(size - oy - (track.zs[j]! - minZ) * k).toFixed(1)}`;
+    }
+    return `${p}Z`;
+  }, [track, size, stroke]);
+  const start = useMemo(() => {
+    const { minX, maxX, minZ, maxZ } = track.bounds;
+    const pad = stroke * 2;
+    const k = (size - 2 * pad) / Math.max(1, maxX - minX, maxZ - minZ);
+    const ox = (size - (maxX - minX) * k) / 2;
+    const oy = (size - (maxZ - minZ) * k) / 2;
+    return [ox + (track.xs[0]! - minX) * k, size - oy - (track.zs[0]! - minZ) * k] as const;
+  }, [track, size, stroke]);
+  return (
+    <svg className="route-shape" viewBox={`0 0 ${size} ${size}`} aria-hidden>
+      <path d={d} className="route-shape-glow" strokeWidth={stroke * 3} />
+      <path d={d} className="route-shape-line" strokeWidth={stroke} />
+      <circle cx={start[0]} cy={start[1]} r={stroke * 1.6} className="route-shape-start" />
+    </svg>
+  );
+}
+
+function StatTile({ label, value, unit }: { label: string; value: string; unit?: string }) {
+  return (
+    <div className="stat">
+      <span className="stat-label">{label}</span>
+      <span className="stat-value">
+        {value}
+        {unit && <small>{unit}</small>}
+      </span>
+    </div>
+  );
+}
+
 function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean, workout?: Workout) => void }) {
   const slots = useStore(deviceManager.slots);
   const settings = useStore(settingsStore);
+  const garage = useStore(garageStore);
   const [routeId, setRouteId] = useState(ROUTES[0]!.id);
   const [bots, setBots] = useState(true);
   const [mode, setMode] = useState<'free' | 'workout'>('free');
+  const [filter, setFilter] = useState<RouteFilter>('all');
   const [workout, setWorkout] = useState<Workout | undefined>();
   const [online, setOnline] = useState<Record<string, number> | null>(null);
   const hasServer = !!settings.serverUrl.trim();
@@ -85,6 +160,19 @@ function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean, wo
   }, [hasServer, settings.serverUrl]);
   const trainerReady = slots.trainer.state === 'connected';
 
+  const power = Math.round(settings.ftp * 0.75);
+  const routes = useMemo(() => {
+    const setup = setupFor(settings, garage.loadout);
+    return ROUTES.map((r) => {
+      const t = getTrack(r.id);
+      return { r, t, diff: difficulty(t), timeS: estimateTime(t, setup, power) };
+    });
+  }, [settings, garage.loadout, power]);
+  const shown = routes.filter(({ r, diff }) =>
+    filter === 'all' ? true : filter === 'real' ? !!r.world : filter === 'flat' ? diff <= 2 : diff >= 3,
+  );
+  const sel = routes.find((x) => x.r.id === routeId) ?? routes[0]!;
+
   const useSimulator = async () => {
     updateSettings({ useSimulator: true });
     await deviceManager.connect('trainer');
@@ -94,8 +182,11 @@ function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean, wo
   return (
     <div className="page">
       <div className="page-inner">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <h1>Fahren</h1>
+        <header className="page-head">
+          <div>
+            <div className="eyebrow">Fahren</div>
+            <h1>Wähle deine Strecke</h1>
+          </div>
           <div className="segmented">
             <button className={mode === 'free' ? 'active' : ''} onClick={() => setMode('free')}>
               Freie Fahrt
@@ -104,70 +195,136 @@ function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean, wo
               Workout
             </button>
           </div>
-        </div>
+        </header>
+
         {!trainerReady && (
-          <div className="notice row" style={{ justifyContent: 'space-between' }}>
-            <span>Kein Trainer verbunden. Verbinde deinen KICKR unter „Geräte“ – oder teste mit dem Simulator.</span>
-            {!settings.useSimulator || slots.trainer.state === 'disconnected' ? (
-              <button onClick={useSimulator}>Simulator starten</button>
-            ) : null}
+          <div className="callout">
+            <span className="callout-icon">⚡</span>
+            <span className="callout-text">
+              <strong>Kein Trainer verbunden.</strong> Verbinde deinen KICKR unter „Geräte“ – oder teste mit dem Simulator.
+            </span>
+            {!settings.useSimulator || slots.trainer.state === 'disconnected' ? <button onClick={useSimulator}>Simulator starten</button> : null}
           </div>
         )}
+
         {mode === 'workout' && <WorkoutSelect selectedId={workout?.id} onSelect={setWorkout} />}
-        {mode === 'workout' && <h2 style={{ margin: '4px 0 -6px' }}>Strecke für das Workout</h2>}
-        <div className="grid cols-3">
-          {ROUTES.map((r) => {
-            const t = getTrack(r.id);
+
+        <section className="route-hero" style={{ ['--hue' as string]: STYLE_HUE[sel.r.style] }}>
+          <div className="route-hero-main">
+            <div className="badges">
+              {sel.r.region && <span className="badge-pill">{sel.r.region}</span>}
+              <span className="badge-pill hue">{STYLE_LABEL[sel.r.style]}</span>
+              {sel.r.world && <span className="badge-pill real">Echte Straßen</span>}
+              {online && <span className="badge-pill live">● {online[sel.r.id] ?? 0} online</span>}
+            </div>
+            <h2 className="route-hero-title">{sel.r.name}</h2>
+            <p className="route-hero-desc">{sel.r.description}</p>
+            <div className="stat-row">
+              <StatTile label="Distanz" value={(sel.t.length / 1000).toFixed(1)} unit="km" />
+              <StatTile label="Höhenmeter" value={String(Math.round(sel.t.elevationGain))} unit="hm" />
+              <StatTile label="Max. Steigung" value={sel.t.maxGrade.toFixed(0)} unit="%" />
+              <StatTile label="Segmente" value={String(sel.t.segments.length)} />
+              <StatTile label={`Zeit bei ${power} W`} value={formatDuration(sel.timeS)} />
+            </div>
+          </div>
+          <div className="route-hero-shape">
+            <RouteShape track={sel.t} size={220} stroke={3} />
+            <div className="route-hero-diff">
+              <span className="eyebrow">Schwierigkeit</span>
+              <DifficultyPips value={sel.diff} />
+            </div>
+          </div>
+          <div className="route-hero-profile">
+            <ElevationProfile track={sel.t} height={88} />
+            <div className="legend">
+              <span className="lg climb">Anstieg</span>
+              <span className="lg sprint">Sprint</span>
+              <span className="lg descent">Abfahrt</span>
+            </div>
+          </div>
+        </section>
+
+        <div className="section-head">
+          <h2>{mode === 'workout' ? 'Strecke für das Workout' : 'Alle Strecken'}</h2>
+          <div className="chips">
+            {FILTERS.map((f) => (
+              <button key={f.id} className={filter === f.id ? 'chip active' : 'chip'} onClick={() => setFilter(f.id)}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="route-grid">
+          {shown.map(({ r, t, diff, timeS }) => {
             const selected = r.id === routeId;
             return (
               <button
                 key={r.id}
                 className={`route-card ${selected ? 'selected' : ''}`}
+                style={{ ['--hue' as string]: STYLE_HUE[r.style] }}
                 onClick={() => setRouteId(r.id)}
                 aria-pressed={selected}
               >
-                <div className="route-title">{r.name}</div>
-                <div className="route-stats">
-                  <span>{(t.length / 1000).toFixed(1)} km</span>
-                  <span>{Math.round(t.elevationGain)} hm</span>
-                  <span>max. {t.maxGrade.toFixed(0)} %</span>
-                  {online && <span className="online-count">🌐 {online[r.id] ?? 0} online</span>}
+                <div className="route-card-top">
+                  <div className="route-card-titles">
+                    <span className="route-card-region">{r.region ?? STYLE_LABEL[r.style]}</span>
+                    <span className="route-title">{r.name}</span>
+                  </div>
+                  <RouteShape track={t} size={64} stroke={2} />
                 </div>
-                <ElevationProfile track={t} height={70} />
-                <div className="muted small" style={{ marginTop: 8, textAlign: 'left' }}>
-                  {r.description}
+                <div className="route-card-stats">
+                  <span>
+                    <strong>{(t.length / 1000).toFixed(1)}</strong> km
+                  </span>
+                  <span>
+                    <strong>{Math.round(t.elevationGain)}</strong> hm
+                  </span>
+                  <span>
+                    <strong>{t.maxGrade.toFixed(0)}</strong> %
+                  </span>
+                </div>
+                <ElevationProfile track={t} height={46} showSegments={false} />
+                <div className="route-card-foot">
+                  <DifficultyPips value={diff} />
+                  <span className="route-card-time">≈ {formatDuration(timeS)}</span>
+                  {r.world && <span className="badge-pill real small">Echt</span>}
+                  {online && <span className="online-count">● {online[r.id] ?? 0}</span>}
                 </div>
               </button>
             );
           })}
         </div>
-        <div className="card row" style={{ justifyContent: 'space-between' }}>
-          <div className="row" style={{ gap: 18 }}>
-            <label className="row">
-              <input type="checkbox" checked={bots} onChange={(e) => setBots(e.target.checked)} />
-              Pacer-Bots (2,0 / 2,8 / 3,5 W/kg)
-            </label>
-            {hasServer && (
-              <label className="row" title={online ? '' : 'Server nicht erreichbar'}>
-                <input type="checkbox" checked={settings.rideOnline} onChange={(e) => updateSettings({ rideOnline: e.target.checked })} />
-                Online mit anderen fahren {online ? '' : '(Server nicht erreichbar)'}
-              </label>
-            )}
-          </div>
-          <div className="row">
+
+        <div className="start-bar">
+          <div className="start-bar-route">
+            <span className="eyebrow">{mode === 'workout' ? 'Workout' : 'Freie Fahrt'}</span>
+            <strong>{sel.r.name}</strong>
             <span className="muted small">
               {mode === 'workout' && workout
                 ? `${workout.name} · ${formatDuration(workoutStats(workout).durationS)} · FTP ${settings.ftp} W`
                 : `Trainer-Schwierigkeit ${Math.round(settings.trainerDifficulty * 100)} %`}
             </span>
-            <button
-              className="primary"
-              disabled={mode === 'workout' && !workout}
-              onClick={() => onStart(routeId, bots, mode === 'workout' ? workout : undefined)}
-            >
-              {mode === 'workout' ? (workout ? 'Workout starten' : 'Workout wählen') : 'Los geht’s'}
-            </button>
           </div>
+          <div className="start-bar-options">
+            <Toggle checked={bots} onChange={setBots} label="Pacer-Bots" hint="2,0 · 2,8 · 3,5 W/kg" />
+            {hasServer && (
+              <Toggle
+                checked={settings.rideOnline}
+                onChange={(v) => updateSettings({ rideOnline: v })}
+                label="Online fahren"
+                hint={online ? 'mit anderen auf der Strecke' : 'Server nicht erreichbar'}
+              />
+            )}
+          </div>
+          <button
+            className="primary cta"
+            disabled={mode === 'workout' && !workout}
+            onClick={() => onStart(routeId, bots, mode === 'workout' ? workout : undefined)}
+          >
+            {mode === 'workout' ? (workout ? 'Workout starten' : 'Workout wählen') : 'Los geht’s'}
+            <span aria-hidden>→</span>
+          </button>
         </div>
       </div>
     </div>

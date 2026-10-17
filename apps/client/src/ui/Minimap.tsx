@@ -1,9 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState, type MouseEvent } from 'react';
 import type { Track } from '@velo/routes';
 import type { MinimapData } from '../game/real/realWorld';
 
-const W = 240;
-const H = 190;
 const PAD = 12;
 const MAX_LABELS = 5;
 
@@ -17,7 +15,42 @@ interface Dot {
  * North-up map of the lap: the lake (for real-world routes), the route, a few villages along it and
  * every rider as a dot. The static layer is built once per track; only the dots move.
  */
-export function Minimap({ track, map, positionM, others }: { track: Track; map: MinimapData | null; positionM: number; others: Dot[] }) {
+/** Lap distance of the route point nearest to (x, z) in world metres. */
+export function nearestDistance(track: Track, x: number, z: number): number {
+  let best = Infinity;
+  let bi = 0;
+  for (let i = 0; i < track.count; i++) {
+    const d = (track.xs[i]! - x) ** 2 + (track.zs[i]! - z) ** 2;
+    if (d < best) {
+      best = d;
+      bi = i;
+    }
+  }
+  return (bi / track.count) * track.length;
+}
+
+export function Minimap({
+  track,
+  map,
+  positionM,
+  others,
+  width: W = 240,
+  height: H = 190,
+  onPick,
+  pickLabel,
+}: {
+  track: Track;
+  map: MinimapData | null;
+  positionM: number;
+  others: Dot[];
+  width?: number;
+  height?: number;
+  /** Makes the map clickable: called with the lap distance of the route point nearest to the click. */
+  onPick?: (distanceM: number) => void;
+  /** Text next to the hover marker (pick mode). */
+  pickLabel?: (distanceM: number) => string;
+}) {
+  const [hover, setHover] = useState<number | null>(null);
   const view = useMemo(() => {
     const { minX, maxX, minZ, maxZ } = track.bounds;
     // fit the lap into the box, keeping the aspect ratio
@@ -53,18 +86,21 @@ export function Minimap({ track, map, positionM, others }: { track: Track; map: 
         if (x < PAD || x > W - PAD || y < PAD || y > H - PAD) continue;
         if (labels.some((l) => Math.abs(l.x - x) < 70 && Math.abs(l.y - y) < 16)) continue;
         labels.push({ name: p.name, x, y });
-        if (labels.length >= MAX_LABELS) break;
+        if (labels.length >= (W > 400 ? MAX_LABELS * 2 : MAX_LABELS)) break;
       }
     }
     return {
       px,
       py,
+      // back from SVG units to world metres, for picking
+      wx: (x: number) => cx + (x - W / 2) / scale,
+      wz: (y: number) => cz - (y - H / 2) / scale,
       lake: map?.lake.map((ring) => path(ring, true)) ?? [],
       route: path(route, false),
       labels,
       start: [px(track.xs[0]!), py(track.zs[0]!)] as const,
     };
-  }, [track, map]);
+  }, [track, map, W, H]);
 
   const at = (d: number) => {
     const s = track.sample(d);
@@ -72,9 +108,32 @@ export function Minimap({ track, map, positionM, others }: { track: Track; map: 
   };
   const [mx, my, heading] = at(positionM);
 
+  const pickAt = (e: MouseEvent<SVGSVGElement>): number | null => {
+    const ctm = e.currentTarget.getScreenCTM();
+    if (!ctm) return null;
+    const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+    return nearestDistance(track, view.wx(pt.x), view.wz(pt.y));
+  };
+  const hoverAt = hover !== null ? at(hover) : null;
+
   return (
-    <div className="hud-panel hud-minimap">
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Karte">
+    <div className={`hud-panel hud-minimap ${onPick ? 'pickable' : ''}`}>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        width="100%"
+        role="img"
+        aria-label="Karte"
+        onMouseMove={onPick ? (e) => setHover(pickAt(e)) : undefined}
+        onMouseLeave={onPick ? () => setHover(null) : undefined}
+        onClick={
+          onPick
+            ? (e) => {
+                const d = pickAt(e);
+                if (d !== null) onPick(d);
+              }
+            : undefined
+        }
+      >
         {view.lake.map((d, i) => (
           <path key={i} d={d} className="mm-lake" />
         ))}
@@ -97,6 +156,17 @@ export function Minimap({ track, map, positionM, others }: { track: Track; map: 
         <g transform={`translate(${mx.toFixed(1)},${my.toFixed(1)}) rotate(${((heading * 180) / Math.PI).toFixed(1)})`}>
           <path d="M0,-7 L5,5 L0,2.4 L-5,5 Z" className="mm-me" />
         </g>
+        {hoverAt && hover !== null && (
+          <g className="mm-pick">
+            <circle cx={hoverAt[0]} cy={hoverAt[1]} r={7} />
+            <circle cx={hoverAt[0]} cy={hoverAt[1]} r={2.5} className="mm-pick-core" />
+            {pickLabel && (
+              <text x={hoverAt[0] + (hoverAt[0] > W - 120 ? -12 : 12)} y={hoverAt[1] - 10} textAnchor={hoverAt[0] > W - 120 ? 'end' : 'start'}>
+                {pickLabel(hover)}
+              </text>
+            )}
+          </g>
+        )}
         <g transform={`translate(${W - 16},18)`} className="mm-north">
           <circle r={11} />
           <path d="M0,-9 L3.5,-1.5 L0,-3.2 L-3.5,-1.5 Z" />

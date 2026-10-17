@@ -98,11 +98,14 @@ export function GaragePage() {
   return (
     <div className="page">
       <div className="page-inner">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <h1>Garage</h1>
+        <div className="page-head">
+          <div>
+            <div className="eyebrow">Ausrüstung</div>
+            <h1>Garage</h1>
+          </div>
           <div className="row">
             <span className="muted small">{account.user ? `Konto: ${account.user.name} (Server)` : 'lokal – unter Profil mit einem Server verbinden'}</span>
-            <div className="wallet">🪙 {formatCoins(coins)} Watt-Taler</div>
+            <div className="wallet-chip wallet-big"><span className="coin" />{formatCoins(coins)} Watt-Taler</div>
           </div>
         </div>
 
@@ -121,12 +124,12 @@ export function GaragePage() {
           </div>
           <div className="garage-times">
             {lapTimes.map((t) => (
-              <div key={t.id}>
-                <div className="muted small">{t.name}</div>
-                <div className="summary-value">{formatDuration(t.s)}</div>
+              <div key={t.id} className="stat">
+                <span className="stat-label">{t.name}</span>
+                <span className="stat-value">{formatDuration(t.s)}</span>
               </div>
             ))}
-            <div className="muted small" style={{ alignSelf: 'end' }}>
+            <div className="muted small garage-times-note">
               geschätzte Rundenzeit bei {power} W (75 % FTP)
             </div>
           </div>

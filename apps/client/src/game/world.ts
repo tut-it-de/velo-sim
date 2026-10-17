@@ -235,6 +235,8 @@ export class GameWorld {
     this.scene.render();
   }
 
+  private camDistance = 0;
+
   private updateCamera(dt: number, me: RiderFrame): void {
     const t = this.track;
     const p = t.positionAt(me.distanceM, me.lateralM);
@@ -286,7 +288,10 @@ export class GameWorld {
     const anchor = new Vector3(p.x, p.y, p.z);
     const relPos = pos.subtract(anchor);
     const relLook = look.subtract(anchor);
-    if (!this.camPos || !this.camLook) {
+    // a jump along the route (admin teleport) snaps the camera instead of swinging it round
+    const jumped = Math.abs(me.distanceM - this.camDistance) > 50;
+    this.camDistance = me.distanceM;
+    if (!this.camPos || !this.camLook || jumped) {
       this.camPos = relPos;
       this.camLook = relLook;
     } else {

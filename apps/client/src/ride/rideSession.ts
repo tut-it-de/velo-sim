@@ -61,6 +61,8 @@ export interface RideSnapshot {
   /** Watt-Taler earned so far (0 with the simulator). */
   coins: number;
   coinsDisabled: boolean;
+  /** The rider was moved with the admin teleport: no Taler, no best times. */
+  teleported: boolean;
 }
 
 export interface SegmentOutcome {
@@ -161,7 +163,8 @@ export class RideSession {
   /** Actual power per recorded second against workout time, for the chart overlay. */
   readonly workoutTrace: Array<[number, number]> = [];
   readonly player?: WorkoutPlayer;
-  private readonly segmentTracker: SegmentTracker;
+  private segmentTracker: SegmentTracker;
+  private teleported = false;
   readonly segmentResults: SegmentOutcome[] = [];
   private lastResult?: SegmentOutcome;
   private workoutKj = 0;
@@ -221,6 +224,39 @@ export class RideSession {
     return this.setup;
   }
 
+  /** Simulator rides and teleported rides earn no Taler and set no best times. */
+  private get noCredit(): boolean {
+    return this.settings.useSimulator || this.teleported;
+  }
+
+  /** Teleport is not offered online: the server books from the riders' positions. */
+  get canTeleport(): boolean {
+    return !this.net;
+  }
+
+  /**
+   * Admin teleport: puts the rider at `lapDistanceM` of the current lap (bots move along by the same
+   * distance). Running segments are dropped, the ride counts as simulated from here on.
+   */
+  teleport(lapDistanceM: number): void {
+    if (!this.canTeleport || this.runState === 'finished') return;
+    const lapBase = Math.floor(this.state.distanceM / this.track.length) * this.track.length;
+    const target = lapBase + Math.min(Math.max(0, lapDistanceM), this.track.length - 1);
+    const delta = target - this.state.distanceM;
+    this.teleported = true;
+    this.state = { ...this.state, distanceM: target };
+    this.renderDistance = target;
+    for (const b of this.bots) {
+      b.state = { ...b.state, distanceM: Math.max(0, b.state.distanceM + delta) };
+      b.renderDistance = b.state.distanceM;
+    }
+    this.lastElevation = this.track.sample(target).y;
+    this.segmentTracker = new SegmentTracker(this.track.segments, this.track.length, target, this.movingMs / 1000);
+    this.lastTrainerGrade = undefined;
+    const m = deviceManager.metrics.get();
+    this.snapshot.set(this.buildSnapshot(m.stale ? 0 : m.power, m.power3s, m.cadence, m.heartRate, m.stale));
+  }
+
   start(): void {
     this.lastTick = performance.now();
     this.timer = setInterval(() => this.tick(), TICK_MS);
@@ -251,7 +287,7 @@ export class RideSession {
       samples: this.recorder.samples,
       segments: [...this.segmentResults],
       earnings: this.earningLines(),
-      simulated: this.settings.useSimulator,
+      simulated: this.noCredit,
       lapsCompleted: this.lapTimes.length,
       workout: p && {
         id: p.workout.id,
@@ -355,7 +391,7 @@ export class RideSession {
 
   /** Itemised Watt-Taler for this ride; nothing in the simulator. */
   earningLines(): EarningLine[] {
-    if (this.settings.useSimulator) return [];
+    if (this.noCredit) return [];
     return rideEarnings({
       kilojoules: this.powerSum / 1000,
       workoutKilojoules: this.workoutKj,
@@ -367,7 +403,7 @@ export class RideSession {
   }
 
   private addOutcome(segment: SegmentOutcome['segment'], timeS: number): void {
-    const res = submitResult(this.routeId, segment.id, timeS, this.settings.useSimulator);
+    const res = submitResult(this.routeId, segment.id, timeS, this.noCredit);
     const outcome: SegmentOutcome = { segment, timeS, previousBestS: res.previous?.timeS, isPb: res.isPb, saved: res.saved, at: Date.now() };
     this.segmentResults.push(outcome);
     this.lastResult = outcome;
@@ -483,7 +519,8 @@ export class RideSession {
         : [],
       lastResult: this.lastResult,
       coins: total(this.earningLines()),
-      coinsDisabled: this.settings.useSimulator,
+      coinsDisabled: this.noCredit,
+      teleported: this.teleported,
     };
   }
 

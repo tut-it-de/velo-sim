@@ -25,20 +25,26 @@ export function ActivitiesPage() {
   return (
     <div className="page">
       <div className="page-inner">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <h1>Aktivitäten</h1>
-          {activities.length > 0 && (
-            <span className="muted small">
-              {activities.length} Fahrten · {totals.km.toFixed(0)} km · {formatDuration(totals.s)} · {fmt(totals.tss)} TSS
-            </span>
-          )}
+        <div className="page-head">
+          <div>
+            <div className="eyebrow">Dein Logbuch</div>
+            <h1>Aktivitäten</h1>
+          </div>
         </div>
+        {activities.length > 0 && (
+          <div className="stat-row stat-row-4">
+            <div className="stat"><span className="stat-label">Fahrten</span><span className="stat-value">{activities.length}</span></div>
+            <div className="stat"><span className="stat-label">Distanz</span><span className="stat-value">{totals.km.toFixed(0)}<small>km</small></span></div>
+            <div className="stat"><span className="stat-label">Zeit</span><span className="stat-value">{formatDuration(totals.s)}</span></div>
+            <div className="stat"><span className="stat-label">Belastung</span><span className="stat-value">{fmt(totals.tss)}<small>TSS</small></span></div>
+          </div>
+        )}
         <div className="card">
           <h2>Persönliche Bestzeiten</h2>
-          <div className="grid cols-3">
+          <div className="pb-grid">
             {ROUTES.map((r) => (
-              <div key={r.id}>
-                <strong>{r.name}</strong>
+              <div key={r.id} className="pb-card">
+                <div className="pb-card-title">{r.name}</div>
                 <table className="segments-table">
                   <tbody>
                     {[{ id: 'lap', name: 'Runde' }, ...r.segments].map((seg) => {
@@ -46,8 +52,8 @@ export function ActivitiesPage() {
                       return (
                         <tr key={seg.id}>
                           <td>{seg.name}</td>
-                          <td>{pb ? formatDuration(pb.timeS) : '–'}</td>
-                          <td className="muted small">{pb ? new Date(pb.date).toLocaleDateString('de-DE') : ''}</td>
+                          <td className="pb-time">{pb ? formatDuration(pb.timeS) : '–'}</td>
+                          <td className="pb-date">{pb ? new Date(pb.date).toLocaleDateString('de-DE') : ''}</td>
                         </tr>
                       );
                     })}
@@ -63,15 +69,19 @@ export function ActivitiesPage() {
         {activities.length === 0 && <div className="card muted">Noch keine Fahrten. Unter „Fahren“ geht’s los.</div>}
         {activities.map((a) => (
           <div key={a.id} className="card activity-row">
-            <div style={{ flex: 1, minWidth: 220 }}>
+            <div className="activity-title">
               <strong>{a.title}</strong>
               {a.simulated && <span className="badge">Simulator</span>}
-              <div className="muted small">
-                {(a.summary.distanceM / 1000).toFixed(1)} km · {formatDuration(a.summary.durationS)} · Ø {fmt(a.summary.avgPower)} W · NP{' '}
-                {fmt(a.summary.normalizedPower)} W · {fmt(a.summary.tss)} TSS · {Math.round(a.summary.ascentM)} hm
-              </div>
             </div>
-            <div className="row">
+            <div className="activity-stats">
+              <span><strong>{(a.summary.distanceM / 1000).toFixed(1)}</strong>km</span>
+              <span><strong>{formatDuration(a.summary.durationS)}</strong>Zeit</span>
+              <span><strong>{fmt(a.summary.avgPower)}</strong>Ø W</span>
+              <span><strong>{fmt(a.summary.normalizedPower)}</strong>NP W</span>
+              <span><strong>{fmt(a.summary.tss)}</strong>TSS</span>
+              <span><strong>{Math.round(a.summary.ascentM)}</strong>hm</span>
+            </div>
+            <div className="row activity-actions">
               {a.strava && a.strava.status !== 'error' ? (
                 <StravaStatusLine activity={a} compact />
               ) : (

@@ -15,6 +15,7 @@ import { Flag } from './Flag';
 import { Minimap } from './Minimap';
 import { WorkoutHud } from './WorkoutHud';
 import { ActiveSegments, SegmentToast } from './SegmentHud';
+import { TeleportPanel } from './TeleportPanel';
 
 function Metric({ label, value, unit, sub, accent }: { label: string; value: ReactNode; unit?: string; sub?: ReactNode; accent?: string }) {
   return (
@@ -24,7 +25,7 @@ function Metric({ label, value, unit, sub, accent }: { label: string; value: Rea
         {value}
         {unit && <span className="hud-unit">{unit}</span>}
       </div>
-      {sub && <div className="hud-sub">{sub}</div>}
+      <div className="hud-sub">{sub ?? '\u00a0'}</div>
     </div>
   );
 }
@@ -51,6 +52,18 @@ export function Hud({
   const paused = s.state === 'paused';
   const lapFraction = s.lapDistanceM / track.length;
   const avgKmh = s.movingS > 0 ? (s.distanceM / s.movingS) * 3.6 : 0;
+  const [teleportOpen, setTeleportOpen] = useState(false);
+  const admin = settings.adminMode;
+  useEffect(() => {
+    if (!admin) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 't' || e.key === 'T') setTeleportOpen((o) => !o);
+      else if (e.key === 'Escape') setTeleportOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [admin]);
   const markers = s.others.map((b) => ({
     id: b.id,
     positionM: track.wrap(s.lapDistanceM + b.gapM),
@@ -87,6 +100,11 @@ export function Hud({
               </option>
             ))}
           </select>
+          {admin && (
+            <button className={`admin-button ${teleportOpen ? 'active' : ''}`} onClick={() => setTeleportOpen((o) => !o)} title="Teleport (T)">
+              ⌖ Teleport
+            </button>
+          )}
           <button onClick={() => (paused ? session.resume() : session.pause())}>{paused ? '▶ Weiter' : '⏸ Pause'}</button>
           <button className="danger" onClick={onFinish}>
             ■ Beenden
@@ -100,7 +118,7 @@ export function Hud({
           <div className="hud-chip">Ø {Math.round(s.avgPower)} W · NP {Math.round(s.normalizedPower)} W</div>
           <div className="hud-chip">{Math.round(s.kilojoules)} kJ</div>
           <div className={`hud-chip coins ${s.coinsDisabled ? 'disabled' : ''}`} title={s.coinsDisabled ? 'Mit dem Simulator gibt es keine Watt-Taler' : 'Watt-Taler dieser Fahrt'}>
-            🪙 {s.coinsDisabled ? 'Simulator – keine Taler' : formatCoins(s.coins)}
+            🪙 {s.teleported ? 'Teleport – keine Taler' : s.coinsDisabled ? 'Simulator – keine Taler' : formatCoins(s.coins)}
           </div>
         </div>
         <ActiveSegments snapshot={s} skipClimbs />
@@ -118,6 +136,8 @@ export function Hud({
         {(s.others.length > 0 || session.net) && <NearbyRiders session={session} snapshot={s} country={settings.country} name={settings.riderName} weightKg={settings.weightKg} />}
         <Minimap track={track} map={map} positionM={s.lapDistanceM} others={markers} />
       </div>
+
+      {admin && teleportOpen && <TeleportPanel session={session} map={map} positionM={s.lapDistanceM} onClose={() => setTeleportOpen(false)} />}
 
       {session.net && <ChatBox session={session} />}
       {session.net && <RideOnToast session={session} />}

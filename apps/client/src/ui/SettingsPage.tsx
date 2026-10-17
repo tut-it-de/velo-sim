@@ -5,6 +5,7 @@ import { GRAPHICS_QUALITY_OPTIONS } from '../game/real/quality';
 import { settingsStore, updateSettings, type Settings } from '../state/settings';
 import { useStore } from '../state/store';
 import { COUNTRIES, Flag } from './Flag';
+import { Toggle } from './components';
 
 function NumberField({ k, min, max, step = 1 }: { k: keyof Settings; min: number; max: number; step?: number }) {
   const settings = useStore(settingsStore);
@@ -29,7 +30,12 @@ export function SettingsPage() {
   return (
     <div className="page">
       <div className="page-inner">
-        <h1>Profil & Einstellungen</h1>
+        <div className="page-head">
+          <div>
+            <div className="eyebrow">Fahrer & App</div>
+            <h1>Profil & Einstellungen</h1>
+          </div>
+        </div>
         <div className="card">
           <h2>Fahrer</h2>
           <div className="form">
@@ -102,6 +108,20 @@ export function SettingsPage() {
               </div>
             </div>
           </div>
+        </div>
+        <div className="card admin-card">
+          <h2>Admin</h2>
+          <Toggle
+            checked={s.adminMode}
+            onChange={(v) => updateSettings({ adminMode: v })}
+            label="Admin-Modus"
+            hint={
+              <>
+                In der Fahrt erscheint „Teleport“ (Taste <kbd>T</kbd>): Punkt auf Karte oder Höhenprofil anklicken und dorthin springen.
+                Fahrten mit Teleport zählen nicht für Taler und Bestzeiten.
+              </>
+            }
+          />
         </div>
       </div>
     </div>

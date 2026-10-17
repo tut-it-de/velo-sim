@@ -14,6 +14,34 @@ export function Tile({ label, value, unit, sub }: { label: string; value: ReactN
   );
 }
 
+/** On/off switch with a label and an optional hint underneath. */
+export function Toggle({
+  checked,
+  onChange,
+  label,
+  hint,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: ReactNode;
+  hint?: ReactNode;
+  disabled?: boolean;
+}) {
+  return (
+    <label className={`toggle ${disabled ? 'disabled' : ''}`}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      <span className="toggle-track" aria-hidden>
+        <span className="toggle-thumb" />
+      </span>
+      <span className="toggle-text">
+        <span>{label}</span>
+        {hint && <span className="toggle-hint">{hint}</span>}
+      </span>
+    </label>
+  );
+}
+
 const STATE_LABEL: Record<ConnectionState, string> = {
   connecting: 'verbinde …',
   connected: 'verbunden',
@@ -23,9 +51,9 @@ const STATE_LABEL: Record<ConnectionState, string> = {
 
 export function StatusDot({ state, label }: { state: ConnectionState; label?: string }) {
   return (
-    <span className="row" style={{ gap: 6 }}>
+    <span className={`status-pill ${state}`} title={STATE_LABEL[state]}>
       <span className={`dot ${state}`} />
-      <span className="small">{label ?? STATE_LABEL[state]}</span>
+      <span>{label ?? STATE_LABEL[state]}</span>
     </span>
   );
 }
