@@ -18,6 +18,7 @@ import { TerrainModel, buildTerrainMesh } from './terrain';
 import { DynamicResolution, resolveQuality, type GraphicsQuality, type QualityProfile } from './real/quality';
 import { setupAmbientOcclusion, setupImagePipeline } from './real/grading';
 import { REAL_CAMERA_MAX_Z, RealWorld, type MinimapData } from './real/realWorld';
+import { SpeedBlur } from './real/speedBlur';
 
 export type CameraMode = 'chase' | 'side' | 'top' | 'pov';
 
@@ -65,6 +66,8 @@ export class GameWorld {
   private disposed = false;
   private real: RealWorld | null = null;
   private dynamicResolution: DynamicResolution | null = null;
+  /** Edge blur at speed, only on 'ultra'. */
+  private speedBlur: SpeedBlur | null = null;
   /** Graphics profile in use (real-world routes only). */
   quality: QualityProfile | null = null;
 
@@ -114,6 +117,7 @@ export class GameWorld {
     this.camera.maxZ = REAL_CAMERA_MAX_Z;
     setupAmbientOcclusion(this.scene, this.camera, quality);
     setupImagePipeline(this.scene, this.camera, quality);
+    if (quality.level === 'ultra') this.speedBlur = new SpeedBlur(this.camera);
     this.real = await RealWorld.build(this.scene, this.track, quality, onProgress);
     this.real.addRider(this.rider);
     onProgress?.('Shader werden kompiliert …');
@@ -224,6 +228,7 @@ export class GameWorld {
         avatar.animate(dt, o.cadence, o.speedMps);
       }
       this.updateCamera(dt, me);
+      this.speedBlur?.setSpeed(me.speedMps);
     }
     this.dynamicResolution?.update(dt);
     this.real?.update(dt, this.camera.position, this.rider.root.position);
@@ -300,6 +305,8 @@ export class GameWorld {
     this.disposed = true;
     window.removeEventListener('resize', this.onResize);
     this.engine.stopRenderLoop();
+    this.speedBlur?.dispose();
+    this.speedBlur = null;
     this.real?.dispose();
     this.scene.dispose();
     this.engine.dispose();

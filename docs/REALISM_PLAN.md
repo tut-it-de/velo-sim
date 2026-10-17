@@ -955,9 +955,9 @@ Grundlagen aus dem Code:
 
 | ID | Gruppe | Aufgabe | Status |
 |---|---|---|---|
-| P6.1 | 6A | Lycra: Falten, Struktur und Glanz (Stoff-Plugin) | offen |
-| P6.2 | 6A | Fahrtwind-Unschärfe am Bildrand (nur Ultra) | offen |
-| P6.3 | 6A | Ferner See ohne weißes Band | offen |
+| P6.1 | 6A | Lycra: Falten, Struktur und Glanz (Stoff-Plugin) | fertig |
+| P6.2 | 6A | Fahrtwind-Unschärfe am Bildrand (nur Ultra) | fertig |
+| P6.3 | 6A | Ferner See ohne weißes Band | fertig |
 | P6.4 | 6B | Haut: weicher, warmer Schatten und Randlicht | offen |
 | P6.5 | 6C | Abschluss: Vergleich Phase 0 → Phase 6, Bildrate | offen |
 
@@ -1028,6 +1028,13 @@ Grundlagen aus dem Code:
 - Abnahme: `view.mjs`-Bilder Richtung 1 und 2 vorher/nachher plus `descent` und Lago 22300 m
   (`ultra`, `mittel`): ferner See bläulich-grau und etwas dunkler als der Dunst, Bergfüße gehen ohne harte
   Kante ins Wasser über; der nahe See (Spiegelung, Glitzern) unverändert.
+- Ergebnis (Orchestrator): Die Messung zeigte eine andere Ursache, und der Agent hat wie vorgesehen
+  angehalten. Das Band hat die Hintergrundfarbe (`clearColor`). Mit einfarbigem Rot (Nahgelände) und Blau
+  (Ferngelände) bleibt es unverändert, und das Nahgelände dort ist nicht unter den aktiven Meshes. Grund:
+  `view.mjs` versetzt die Kamera erst in `onBeforeCameraRenderObservable`, das Frustum-Culling läuft aber noch
+  mit der Fahrerkamera. Ufer und Bergfüße außerhalb der Fahrersicht fallen weg. Mit
+  `scene.setTransformMatrix(view, projection)` im selben Beobachter ist das Ufer geschlossen. **Das Spiel hat
+  den Fehler nicht, kein Code geändert.** Das Werkzeug (Scratchpad) ist korrigiert.
 
 **P6.4 Haut: weicher, warmer Schatten und Randlicht**
 - Datei: `apps/client/src/game/avatar/fabricPlugin.ts` (nur die Haut-Zweige, `vFabKind < 0.5`)

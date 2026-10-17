@@ -36,6 +36,17 @@ function bend(a: Vector3, b: Vector3, c: Vector3, w: number[], d: number[], add:
   }
 }
 
+/** Same hue as `ref`: the RGB shares, normalised to sum 1, agree within 0.02 (shaded skin counts as skin). */
+function sameHue(c: Color3, ref: Color3): boolean {
+  const share = (x: Color3) => {
+    const s = x.r + x.g + x.b || 1;
+    return [x.r / s, x.g / s, x.b / s];
+  };
+  const a = share(c);
+  const b = share(ref);
+  return Math.abs(a[0]! - b[0]!) <= 0.02 && Math.abs(a[1]! - b[1]!) <= 0.02 && Math.abs(a[2]! - b[2]!) <= 0.02;
+}
+
 function cumulative(pts: Vector3[]): number[] {
   const out = [0];
   for (let k = 1; k < pts.length; k++) out.push(out[k - 1]! + Vector3.Distance(pts[k]!, pts[k - 1]!));
@@ -80,6 +91,8 @@ export class Cyclist {
 
     const body = new MeshKit();
     const shell = new MeshKit();
+    // Kind for the fabric shader: 0 = skin, 1 = cloth (see fabricPlugin.ts).
+    body.kind = (c) => (sameHue(c, skin) ? 0 : 1);
 
     // --- Torso along the back line, pelvis to neck -----------------------------------------------
     const pelvis = v(0, pose.hip.y + 0.005, pose.hip.z - 0.035);
@@ -208,6 +221,7 @@ export class Cyclist {
     // over the kneecap and the back closes into a crease where hamstrings meet the calf, instead of
     // the thigh thinning out the way plain two-bone blending does.
     const legs = new MeshKit();
+    legs.kind = (c) => (sameHue(c, skin) ? 0 : 1);
     const skeleton = new Skeleton(`${name}-legs`, `${name}-legs`, scene);
     new Bone(`${name}-pelvis`, skeleton, null, Matrix.Identity());
     const smooth = (a: number, b: number, x: number) => {

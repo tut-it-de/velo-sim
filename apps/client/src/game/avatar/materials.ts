@@ -1,4 +1,5 @@
 import { Color3, StandardMaterial, type Scene } from '@babylonjs/core';
+import { FabricPlugin } from './fabricPlugin';
 
 export interface AvatarMaterials {
   /** Lacquered paint, helmet shell, lenses. */
@@ -29,8 +30,9 @@ export function avatarMaterials(scene: Scene): AvatarMaterials {
       gloss: make(scene, 'gloss', 0.7, 96),
       satin: make(scene, 'satin', 0.22, 28),
       metal: make(scene, 'metal', 0.85, 48),
-      cloth: make(scene, 'cloth', 0.07, 12),
+      cloth: make(scene, 'cloth', 0.12, 20),
     };
+    new FabricPlugin(m.cloth);
     cache.set(scene, m);
   }
   return m;

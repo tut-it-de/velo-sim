@@ -57,11 +57,17 @@ export class MeshKit {
   private readonly i: number[] = [];
   private readonly mi: number[] = [];
   private readonly mw: number[] = [];
+  private readonly uv: number[] = [];
   /**
    * Skinning: when set, every new vertex is bound to two bones by its position, as
    * [bone A, bone B, weight of B]. Leave unset for rigid meshes.
    */
   skin: ((p: Vector3) => [number, number, number]) | null = null;
+  /**
+   * Material kind per vertex, written to the uv channel as [kind, 0] (e.g. 0 = skin, 1 = fabric). Leave unset
+   * for meshes that need no kind; the uv then stays 1.
+   */
+  kind: ((col: Color3) => number) | null = null;
 
   get empty(): boolean {
     return this.i.length === 0;
@@ -70,6 +76,7 @@ export class MeshKit {
   private vertex(v: Vector3, col: Color3): number {
     this.p.push(v.x, v.y, v.z);
     this.c.push(col.r, col.g, col.b, 1);
+    this.uv.push(this.kind ? this.kind(col) : 1, 0);
     if (this.skin) {
       const [a, b, w] = this.skin(v);
       this.mi.push(a, b, 0, 0);
@@ -244,6 +251,7 @@ export class MeshKit {
     vd.positions = this.p;
     vd.indices = this.i;
     vd.colors = this.c;
+    vd.uvs = this.uv;
     const normals: number[] = [];
     VertexData.ComputeNormals(this.p, this.i, normals);
     vd.normals = normals;
