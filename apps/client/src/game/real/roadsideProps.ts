@@ -29,10 +29,6 @@ const POST_SPACING_BEND = 25;
 const BEND_RADIUS = 150;
 /** Foot of a guide post, measured from the shoulder edge. */
 const POST_OFFSET = 0.6;
-/** Curb stones on the outside of bends tighter than STONE_RADIUS, one per row (4 m). */
-const STONE_RADIUS = 70;
-const STONE_OFFSET = 0.35;
-const STONE_SEED = 4242;
 /** Curvature over ±12 m of track, as in corridor.ts. */
 const CURVE_HALF = 6;
 const CURVE_ARC = 24;
@@ -68,7 +64,6 @@ const POST_WHITE: Rgb = [0.92, 0.92, 0.9];
 const BAND_BLACK: Rgb = [0.05, 0.05, 0.05];
 const REFLECTOR_WHITE: Rgb = [0.95, 0.95, 0.9];
 const REFLECTOR_RED: Rgb = [0.8, 0.08, 0.05];
-const STONE_COLOR: Rgb = [0.84, 0.82, 0.78];
 
 const tmpQ = new Quaternion();
 const tmpP = new Vector3();
@@ -112,8 +107,8 @@ function thinBox(scene: Scene, name: string, size: Rgb, matrices: number[], mat:
 }
 
 /**
- * Guide posts (Leitpfosten) on the verges outside towns and curb stones (Begrenzungssteine) on the outside
- * of tight bends. Placed once at load time along the corridor, as thin instances; nothing is done per frame.
+ * Guide posts (Leitpfosten) on the verges outside towns (the loose curb stones on the outside of bends read
+ * as rocks in the grass and were removed). Placed once at load time along the corridor, as thin instances; nothing is done per frame.
  */
 export async function buildRoadsideProps(
   scene: Scene,
@@ -128,15 +123,11 @@ export async function buildRoadsideProps(
   const rowLength = ROW_STRIDE * track.step;
   // Red reflectors on the right side only in Italy (the German and alpine posts are white on both sides).
   const redRight = architecture === 'italian';
-  const withStones = architecture !== 'german';
-  const stoneRng = createRng(STONE_SEED);
 
   const bodies: number[] = [];
   const bands: number[] = [];
   const whiteReflectors: number[] = [];
   const redReflectors: number[] = [];
-  const stones: number[] = [];
-  const stoneTints: number[] = [];
   // Distance driven since the last post, per side; starts at the spacing so the first verge row gets a post.
   const since: number[] = [POST_SPACING, POST_SPACING];
 
@@ -167,23 +158,6 @@ export async function buildRoadsideProps(
       pushInstance(redRight && side === 1 ? redReflectors : whiteReflectors, x, y + 0.86, z, yaw);
     }
 
-    // curb stones: outside of the bend (right turn = left side), only where the verge itself is a grassy cut
-    if (withStones && eligible && radius < STONE_RADIUS) {
-      const outer = dh > 0 ? 0 : 1;
-      if (corridor.edge[outer]![r] === EDGE.verge) {
-        const sg = outer === 0 ? -1 : 1;
-        const o = corridor.hw[outer]![r]! + SHOULDER + STONE_OFFSET;
-        const x = track.xs[i]! + sg * rx * o;
-        const z = track.zs[i]! + sg * rz * o;
-        if (!field.isWater(x, z) && buildings.find(x, z, 0.8) < 0) {
-          const y = corridor.surface(x, z);
-          const yaw = h + (stoneRng() * 2 - 1) * 0.08;
-          const tint = 1 + (stoneRng() * 2 - 1) * 0.06;
-          pushInstance(stones, x, y + 0.2, z, yaw);
-          stoneTints.push(tint, tint, tint, 1);
-        }
-      }
-    }
   }
 
   const meshes: Mesh[] = [];
@@ -198,11 +172,6 @@ export async function buildRoadsideProps(
   }
   if (redReflectors.length > 0) {
     meshes.push(thinBox(scene, 'guide-reflector-red', [0.07, 0.15, 0.13], redReflectors, paint(scene, 'guide-reflector-red-mat', REFLECTOR_RED, 0.05, 0.3)));
-  }
-  if (stones.length > 0) {
-    const stone = thinBox(scene, 'curb-stone', [0.25, 0.45, 0.2], stones, paint(scene, 'curb-stone-mat', STONE_COLOR, 0.05));
-    stone.thinInstanceSetBuffer('color', new Float32Array(stoneTints), 4, true);
-    meshes.push(stone);
   }
   // P4.3: flower boxes on parapets (all levels but niedrig), oleander on wall tops (Italian towns, ultra and hoch)
   if (quality.level !== 'niedrig') meshes.push(...(await buildFlowerBoxes(scene, corridor, buildings)));
