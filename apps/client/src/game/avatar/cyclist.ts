@@ -342,7 +342,7 @@ export class Cyclist {
     legMesh.numBoneInfluencers = 2;
     // The skin moves away from its rest pose: give culling a box around the whole pedal stroke.
     const hy = pose.hip.y;
-    legMesh.setBoundingInfo(new BoundingInfo(v(-0.3, bike.bb.y - 0.3, bike.bb.z - 0.35), v(0.3, hy + 0.15, bike.bb.z + 0.45)));
+    legMesh.setBoundingInfo(new BoundingInfo(v(-0.3, Math.min(bike.bb.y, hy) - 0.3, Math.min(bike.bb.z, pose.hip.z) - 0.35), v(0.3, Math.max(hy, bike.bb.y) + 0.3, bike.bb.z + 0.45)));
     legMesh.onDisposeObservable.addOnce(() => skeleton.dispose());
     this.legMesh = legMesh;
   }
@@ -350,19 +350,21 @@ export class Cyclist {
   /** Hip, knee, ankle and segment orientations of leg i (0 right, 1 left) for a crank angle. */
   private legPose(i: number, angle: number, pedal: (i: number, a: number) => Vector3) {
     const side = i === 0 ? 1 : -1;
-    const phi = footPitch(angle + i * Math.PI);
+    const phi = footPitch(angle + i * Math.PI) + this.bike.footTilt;
+    // lying back, the legs reach forwards: knees bow upwards and the kneecaps face the sky
+    const lying = this.bike.spec.layout === 'recumbent';
     const fwd = v(0, -Math.sin(phi), Math.cos(phi));
     const up = v(0, Math.cos(phi), Math.sin(phi));
     const spindle = pedal(i, angle);
     const ankle = spindle.subtract(fwd.scale(BODY.ankleBack)).add(up.scale(BODY.ankleUp));
     const hip = v(this.pose.hip.x * side, this.pose.hip.y, this.pose.hip.z);
-    const knee = solveJoint(hip, ankle, BODY.thigh, BODY.shin, v(0.08 * side, 0.35, 1));
+    const knee = solveJoint(hip, ankle, BODY.thigh, BODY.shin, lying ? v(0.08 * side, 1, 0.2) : v(0.08 * side, 0.35, 1));
     return {
       hip,
       knee,
       ankle,
-      qThigh: basis(knee.subtract(hip), Z.add(Y.scale(0.3))),
-      qShin: basis(ankle.subtract(knee), Z),
+      qThigh: basis(knee.subtract(hip), lying ? Y.subtract(Z.scale(0.3)) : Z.add(Y.scale(0.3))),
+      qShin: basis(ankle.subtract(knee), lying ? Y : Z),
       qFoot: basis(up, fwd),
     };
   }

@@ -50,7 +50,8 @@ export class RiderAvatar {
 
   private updatePose(): void {
     const a = this.crankAngle;
-    this.bike.setCrank(a, footPitch(a), footPitch(a + Math.PI));
+    const tilt = this.bike.points.footTilt;
+    this.bike.setCrank(a, footPitch(a) + tilt, footPitch(a + Math.PI) + tilt);
     this.cyclist?.setCrank(a, (i, ang) => this.bike.pedal(i, ang));
   }
 

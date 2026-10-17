@@ -6,7 +6,7 @@
 
 export type ItemType = 'bike' | 'wheels' | 'jersey';
 export type Tier = 'start' | 'entry' | 'mid' | 'top';
-export type BikeCategory = 'aero' | 'allround' | 'climber' | 'endurance';
+export type BikeCategory = 'aero' | 'allround' | 'climber' | 'endurance' | 'recumbent';
 export type JerseyCut = 'club' | 'retro' | 'standard' | 'racefit' | 'skinsuit';
 
 interface BaseItem {
@@ -22,12 +22,37 @@ interface BaseItem {
   inspiredBy?: string;
 }
 
+/**
+ * How a frame is built, so each brand looks like itself (see apps/client/src/game/avatar/bike.ts):
+ * - `material`: `carbon` (lacquered, smooth junctions) or `alu` (round tubes, weld beads, satin paint)
+ * - `tubes`: cross-section of the main tubes: `round`, `squircle` (rounded square) or `aero` (deep truncated foil)
+ * - `slope`: how far the top tube drops towards the seat (m); the seat post shows more of itself
+ * - `stays`: seat stays meeting the seat tube `high`, `dropped` well below the top tube, or `wave` (curved)
+ * - `fork`: `straight` blades or `wave` (curved, like Pinarello's Onda)
+ * - `cockpit`: `classic` stem and round bar, `integrated` one-piece aero bar, `vstem` split stem
+ * - `seatpost`: `round`, `aero` or `mast` (integrated seat mast with a cap)
+ * - `window`: a rear extension of the top tube around an opening behind the seat tube
+ * - `paint`: `solid` frame colour with accent lettering, `fade` frame colour into the accent towards
+ *   the rear, `split` front triangle in the frame colour and rear triangle and fork in the accent
+ */
+export interface FrameBuild {
+  material: 'carbon' | 'alu';
+  tubes: 'round' | 'squircle' | 'aero';
+  slope: number;
+  stays: 'high' | 'dropped' | 'wave';
+  fork: 'straight' | 'wave';
+  cockpit: 'classic' | 'integrated' | 'vstem';
+  seatpost: 'round' | 'aero' | 'mast';
+  window?: boolean;
+  paint: 'solid' | 'fade' | 'split';
+}
+
 export interface BikeItem extends BaseItem {
   type: 'bike';
   category: BikeCategory;
   /** Frame + components without wheels. */
   weightKg: number;
-  look: { frame: string; accent: string };
+  look: { frame: string; accent: string; build: FrameBuild };
 }
 
 /** Rim surface: anodised alloy, matte unidirectional carbon or glossy carbon. */
@@ -104,7 +129,7 @@ export interface JerseyItem extends BaseItem {
 export type EquipmentItem = BikeItem | WheelsItem | JerseyItem;
 
 export const TIER_LABEL: Record<Tier, string> = { start: 'Start', entry: 'Einsteiger', mid: 'Mittelklasse', top: 'Oberklasse' };
-export const CATEGORY_LABEL: Record<BikeCategory, string> = { aero: 'Aero', allround: 'Allround', climber: 'Kletterrad', endurance: 'Endurance' };
+export const CATEGORY_LABEL: Record<BikeCategory, string> = { aero: 'Aero', allround: 'Allround', climber: 'Kletterrad', endurance: 'Endurance', recumbent: 'Liegerad' };
 export const CUT_LABEL: Record<JerseyCut, string> = {
   club: 'Club-Fit (locker)',
   retro: 'Retro-Wolltrikot',
@@ -124,28 +149,56 @@ const bike = (
   price: number,
   frame: string,
   accent: string,
+  build: FrameBuild,
   inspiredBy?: string,
-): BikeItem => ({ id, type: 'bike', brand, model, tier, category, cdaDelta, weightKg, price, look: { frame, accent }, inspiredBy });
+): BikeItem => ({ id, type: 'bike', brand, model, tier, category, cdaDelta, weightKg, price, look: { frame, accent, build }, inspiredBy });
+
+/** Frame builds; a brand's bikes share a family look. */
+const B = (b: Partial<FrameBuild>): FrameBuild => ({
+  material: 'carbon',
+  tubes: 'squircle',
+  slope: 0.03,
+  stays: 'dropped',
+  fork: 'straight',
+  cockpit: 'classic',
+  seatpost: 'round',
+  paint: 'solid',
+  ...b,
+});
+const ALU = (b: Partial<FrameBuild>) => B({ material: 'alu', tubes: 'round', stays: 'high', ...b });
 
 export const BIKES: BikeItem[] = [
   // Oberklasse
-  bike('bike-servelo-a5', 'Servelo', 'A5', 'top', 'aero', -0.015, 6.0, 125_000, '#111111', '#e10600', 'Cervélo S5'),
-  bike('bike-treck-madena', 'Treck', 'Madena SLR', 'top', 'aero', -0.014, 5.9, 120_000, '#2b1b4f', '#c0c0c0', 'Trek Madone'),
-  bike('bike-kanyon-aerodo', 'Kanyon', 'Aerodo CFR', 'top', 'aero', -0.013, 5.8, 105_000, '#1d2b3a', '#00b3ff', 'Canyon Aeroad'),
-  bike('bike-pinarolo-dogmo', 'Pinarolo', 'Dogmo X', 'top', 'allround', -0.011, 5.6, 130_000, '#0a0a0a', '#d4af37', 'Pinarello Dogma F'),
-  bike('bike-spezion-tarmo-sl8', 'Spezion', 'Z-Works Tarmo SL8', 'top', 'allround', -0.01, 5.4, 115_000, '#7a0019', '#f2f2f2', 'S-Works Tarmac'),
-  bike('bike-kanyon-ultimo', 'Kanyon', 'Ultimo CFR', 'top', 'climber', -0.004, 4.9, 100_000, '#f2f2f2', '#222222', 'Canyon Ultimate'),
+  bike('bike-servelo-a5', 'Servelo', 'A5', 'top', 'aero', -0.015, 6.0, 125_000, '#111111', '#e10600',
+    B({ tubes: 'aero', slope: 0.05, cockpit: 'vstem', seatpost: 'aero' }), 'Cervélo S5'),
+  bike('bike-treck-madena', 'Treck', 'Madena SLR', 'top', 'aero', -0.014, 5.9, 120_000, '#2b1b4f', '#c0c0c0',
+    B({ tubes: 'aero', slope: 0.04, cockpit: 'integrated', seatpost: 'aero', window: true, paint: 'fade' }), 'Trek Madone'),
+  bike('bike-kanyon-aerodo', 'Kanyon', 'Aerodo CFR', 'top', 'aero', -0.013, 5.8, 105_000, '#1d2b3a', '#00b3ff',
+    B({ tubes: 'aero', slope: 0.06, cockpit: 'integrated', seatpost: 'aero', paint: 'fade' }), 'Canyon Aeroad'),
+  bike('bike-pinarolo-dogmo', 'Pinarolo', 'Dogmo X', 'top', 'allround', -0.011, 5.6, 130_000, '#0a0a0a', '#d4af37',
+    B({ stays: 'wave', fork: 'wave', cockpit: 'integrated', seatpost: 'aero', slope: 0.05 }), 'Pinarello Dogma F'),
+  bike('bike-spezion-tarmo-sl8', 'Spezion', 'Z-Works Tarmo SL8', 'top', 'allround', -0.01, 5.4, 115_000, '#7a0019', '#f2f2f2',
+    B({ cockpit: 'integrated', slope: 0.07, paint: 'split' }), 'S-Works Tarmac'),
+  bike('bike-kanyon-ultimo', 'Kanyon', 'Ultimo CFR', 'top', 'climber', -0.004, 4.9, 100_000, '#f2f2f2', '#222222',
+    B({ tubes: 'round', stays: 'high', slope: 0.04, cockpit: 'integrated', paint: 'fade' }), 'Canyon Ultimate'),
+  // Liegerad: Hochlieger mit Untenlenker, liegend kaum Stirnfläche
+  bike('bike-m6-hochracer', 'M6', 'Carbon Hochracer', 'top', 'recumbent', -0.05, 8.4, 95_000, '#15171b', '#ff5a1f',
+    B({ tubes: 'round', stays: 'high', paint: 'solid' }), 'M5 Carbon High Racer'),
   // Mittelklasse
-  bike('bike-gigant-propulse', 'Gigant', 'Propulse Advanced', 'mid', 'aero', -0.008, 6.9, 26_000, '#0b3d91', '#ffffff', 'Giant Propel'),
-  bike('bike-spezion-tarmo-sl7', 'Spezion', 'Tarmo SL7 Comp', 'mid', 'allround', -0.006, 6.6, 32_000, '#2f4f4f', '#ff6a00', 'Tarmac Comp'),
-  bike('bike-cannonvale-supersechs', 'Cannonvale', 'SuperSechs Evo', 'mid', 'allround', -0.005, 6.5, 30_000, '#3a5f0b', '#ffffff', 'SuperSix EVO'),
-  bike('bike-treck-emondo', 'Treck', 'Emondo SL6', 'mid', 'climber', -0.001, 6.3, 28_000, '#8b0000', '#000000', 'Trek Émonda'),
+  bike('bike-gigant-propulse', 'Gigant', 'Propulse Advanced', 'mid', 'aero', -0.008, 6.9, 26_000, '#0b3d91', '#ffffff',
+    B({ tubes: 'aero', slope: 0.11, cockpit: 'integrated', seatpost: 'aero', paint: 'fade' }), 'Giant Propel'),
+  bike('bike-spezion-tarmo-sl7', 'Spezion', 'Tarmo SL7 Comp', 'mid', 'allround', -0.006, 6.6, 32_000, '#2f4f4f', '#ff6a00',
+    B({ slope: 0.07, paint: 'split' }), 'Tarmac Comp'),
+  bike('bike-cannonvale-supersechs', 'Cannonvale', 'SuperSechs Evo', 'mid', 'allround', -0.005, 6.5, 30_000, '#3a5f0b', '#ffffff',
+    B({ tubes: 'round', slope: 0.05 }), 'SuperSix EVO'),
+  bike('bike-treck-emondo', 'Treck', 'Emondo SL6', 'mid', 'climber', -0.001, 6.3, 28_000, '#8b0000', '#000000',
+    B({ tubes: 'round', stays: 'high', slope: 0.03, seatpost: 'mast' }), 'Trek Émonda'),
   // Einsteiger
-  bike('bike-kanyon-endurio', 'Kanyon', 'Endurio AL 6', 'entry', 'endurance', 0.009, 7.9, 6_000, '#556b2f', '#f0e68c', 'Canyon Endurace AL'),
-  bike('bike-spezion-allora', 'Spezion', 'Allora Sport', 'entry', 'allround', 0.01, 8.0, 5_000, '#c41e3a', '#ffffff', 'Specialized Allez'),
-  bike('bike-gigant-kontend', 'Gigant', 'Kontend AR', 'entry', 'endurance', 0.012, 8.2, 4_500, '#4682b4', '#ffffff', 'Giant Contend'),
-  bike('bike-treck-domano', 'Treck', 'Domano AL 2', 'entry', 'endurance', 0.012, 8.4, 4_000, '#708090', '#ffcc00', 'Trek Domane AL'),
-  bike('bike-basis', 'Velo', 'Basis', 'start', 'allround', 0.014, 8.6, 0, '#20232a', '#ff7a1a'),
+  bike('bike-kanyon-endurio', 'Kanyon', 'Endurio AL 6', 'entry', 'endurance', 0.009, 7.9, 6_000, '#556b2f', '#f0e68c', ALU({ slope: 0.06 }), 'Canyon Endurace AL'),
+  bike('bike-spezion-allora', 'Spezion', 'Allora Sport', 'entry', 'allround', 0.01, 8.0, 5_000, '#c41e3a', '#ffffff', ALU({ slope: 0.04, paint: 'split' }), 'Specialized Allez'),
+  bike('bike-gigant-kontend', 'Gigant', 'Kontend AR', 'entry', 'endurance', 0.012, 8.2, 4_500, '#4682b4', '#ffffff', ALU({ slope: 0.12 }), 'Giant Contend'),
+  bike('bike-treck-domano', 'Treck', 'Domano AL 2', 'entry', 'endurance', 0.012, 8.4, 4_000, '#708090', '#ffcc00', ALU({ slope: 0.05, stays: 'dropped' }), 'Trek Domane AL'),
+  bike('bike-basis', 'Velo', 'Basis', 'start', 'allround', 0.014, 8.6, 0, '#20232a', '#ff7a1a', ALU({ slope: 0.02 })),
 ];
 
 const decal = (text: string, sub: string, color: string, accent: string, style: RimDecal['style'], count = 2): RimDecal => ({ text, sub, color, accent, style, count });

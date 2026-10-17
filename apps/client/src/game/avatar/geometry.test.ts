@@ -38,6 +38,29 @@ describe('bike geometry', () => {
     expect(Vector3.Distance(pose.elbow, pose.wrist)).toBeCloseTo(BODY.forearm, 4);
   });
 
+  it('recumbent: legs reach the pedals with a bent knee, heels clear the front tyre, rider lies back', () => {
+    const p = bikePoints(frameSpec('recumbent'));
+    const pose = riderPose(p);
+    let longest = 0;
+    let shortest = Infinity;
+    for (let a = 0; a < Math.PI * 2; a += 0.05) {
+      const phi = footPitch(a) + p.footTilt;
+      const spindle = new Vector3(pose.hip.x, p.bb.y + Math.cos(a) * p.spec.crank, p.bb.z + Math.sin(a) * p.spec.crank);
+      const ankle = spindle.add(new Vector3(0, Math.sin(phi) * BODY.ankleBack + Math.cos(phi) * BODY.ankleUp, -Math.cos(phi) * BODY.ankleBack + Math.sin(phi) * BODY.ankleUp));
+      const d = Vector3.Distance(pose.hip, ankle);
+      longest = Math.max(longest, d);
+      shortest = Math.min(shortest, d);
+      // the lowest point of the pedal stays above the front tyre
+      if (Math.abs(spindle.z - p.frontAxle.z) < 0.15) expect(spindle.y - 0.05).toBeGreaterThan(p.frontAxle.y + p.spec.wheelRadius);
+    }
+    expect(longest).toBeLessThan(BODY.thigh + BODY.shin - 0.02);
+    expect(shortest).toBeGreaterThan(0.45);
+    expect(pose.torsoAngle).toBeLessThan(45);
+    expect(pose.shoulder.z).toBeLessThan(pose.hip.z - 0.3);
+    expect(Vector3.Distance(pose.shoulder, pose.elbow)).toBeCloseTo(BODY.upperArm, 4);
+    expect(Vector3.Distance(pose.elbow, pose.wrist)).toBeCloseTo(BODY.forearm, 4);
+  });
+
   it('endurance frames sit the rider more upright than aero frames', () => {
     const aero = riderPose(bikePoints(frameSpec('aero')));
     const endurance = riderPose(bikePoints(frameSpec('endurance')));

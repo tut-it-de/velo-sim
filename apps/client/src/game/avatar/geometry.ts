@@ -6,7 +6,7 @@ import { Vector3 } from '@babylonjs/core';
  * The frame numbers are those of a real size-56 road frame; the 3D model and the reference drawing
  * are both built from these points.
  */
-export type FrameStyle = 'aero' | 'allround' | 'climber' | 'endurance';
+export type FrameStyle = 'aero' | 'allround' | 'climber' | 'endurance' | 'recumbent';
 
 export interface FrameSpec {
   stack: number;
@@ -37,6 +37,8 @@ export interface FrameSpec {
   tubeDepth: number;
   /** Seat stays meet the seat tube this far below the top-tube junction. */
   stayDrop: number;
+  /** `diamond`: road frame; `recumbent`: high racer, rider lying in a seat shell, cranks on a boom ahead. */
+  layout: 'diamond' | 'recumbent';
 }
 
 export const BASE_SPEC: FrameSpec = {
@@ -61,19 +63,58 @@ export const BASE_SPEC: FrameSpec = {
   barDrop: 0.125,
   tubeDepth: 1.2,
   stayDrop: 0.035,
+  layout: 'diamond',
 };
 
-export function frameSpec(style: FrameStyle = 'allround'): FrameSpec {
-  switch (style) {
-    case 'aero':
-      return { ...BASE_SPEC, stack: 0.56, reach: 0.4, tubeDepth: 1.75, stayDrop: 0.13, stemAngle: -15, barWidth: 0.39 };
-    case 'climber':
-      return { ...BASE_SPEC, tubeDepth: 1.0, seatTube: 0.51 };
-    case 'endurance':
-      return { ...BASE_SPEC, stack: 0.595, reach: 0.38, headAngle: 72.5, headTube: 0.175, chainstay: 0.418, bbDrop: 0.075, tubeDepth: 1.1, spacers: 0.03, stemAngle: -6, tyreWidth: 0.032, wheelRadius: 0.343 };
-    default:
-      return BASE_SPEC;
-  }
+/**
+ * High racer: two 700c wheels, wheelbase 1.12 m, the seat shell above the rear wheel reclined to
+ * 32°, the bottom bracket on a boom ahead of the fork high enough for the heels to clear the front
+ * tyre, under-seat steering. `seatAngle` is the recline of the seat back above horizontal, `stack`
+ * and `reach` the bottom bracket relative to the seat (the hip's support point).
+ */
+const RECUMBENT_SPEC: FrameSpec = {
+  ...BASE_SPEC,
+  layout: 'recumbent',
+  stack: 0.3,
+  reach: 0.78,
+  headAngle: 72,
+  seatAngle: 32,
+  headTube: 0.13,
+  chainstay: 0.4,
+  forkOffset: 0.05,
+  seatTube: 0.62,
+  saddleHeight: 0.62,
+  tubeDepth: 1.1,
+  stayDrop: 0,
+  barWidth: 0.5,
+};
+
+/** Shape of the frame that changes its geometry: how far the top tube slopes towards the seat. */
+export interface FrameShape {
+  slope?: number;
+  stays?: 'high' | 'dropped' | 'wave';
+}
+
+export function frameSpec(style: FrameStyle = 'allround', shape: FrameShape = {}): FrameSpec {
+  const base = ((): FrameSpec => {
+    switch (style) {
+      case 'aero':
+        return { ...BASE_SPEC, stack: 0.56, reach: 0.4, tubeDepth: 1.75, stayDrop: 0.13, stemAngle: -15, barWidth: 0.39 };
+      case 'climber':
+        return { ...BASE_SPEC, tubeDepth: 1.0, seatTube: 0.51 };
+      case 'endurance':
+        return { ...BASE_SPEC, stack: 0.595, reach: 0.38, headAngle: 72.5, headTube: 0.175, chainstay: 0.418, bbDrop: 0.075, tubeDepth: 1.1, spacers: 0.03, stemAngle: -6, tyreWidth: 0.032, wheelRadius: 0.343 };
+      case 'recumbent':
+        return RECUMBENT_SPEC;
+      default:
+        return BASE_SPEC;
+    }
+  })();
+  if (base.layout === 'recumbent') return base;
+  // a sloping top tube meets a shorter seat tube; stays follow the brand's style
+  const seatTube = shape.slope === undefined ? base.seatTube : 0.535 - shape.slope;
+  const stayDrop = shape.stays === 'high' ? 0.035 : shape.stays === 'dropped' ? Math.max(base.stayDrop, 0.11) : shape.stays === 'wave' ? 0.08 : base.stayDrop;
+  return { ...base, seatTube, stayDrop };
 }
 
 /** Key points of the bike, all with x = 0 unless noted. */
@@ -95,11 +136,16 @@ export interface BikePoints {
   /** Right-hand hood, where the palm rests. */
   hood: Vector3;
   wheelbase: number;
+  /** Extra pitch of the feet and pedals (radians, toes down > 0): recumbent riders push forwards. */
+  footTilt: number;
+  /** Recumbent only: top of the seat back (headrest) and the under-seat bar's pivot. */
+  seatBackTop?: Vector3;
 }
 
 const rad = (d: number) => (d * Math.PI) / 180;
 
 export function bikePoints(spec: FrameSpec): BikePoints {
+  if (spec.layout === 'recumbent') return recumbentPoints(spec);
   const r = spec.wheelRadius;
   const ha = rad(spec.headAngle);
   const sa = rad(spec.seatAngle);
@@ -139,6 +185,53 @@ export function bikePoints(spec: FrameSpec): BikePoints {
     barClamp,
     hood: barClamp.add(new Vector3(spec.barWidth / 2, 0.028, spec.barReach + 0.012)),
     wheelbase,
+    footTilt: 0,
+  };
+}
+
+/**
+ * High racer key points. `saddleTop` is where the hips rest in the seat shell, `seatUp` runs up the
+ * seat back, `seatCluster` is the shell's lowest point, `barClamp` the under-seat bar's centre
+ * (below the seat) and `hood` the right grip beside the hip. Head tube and fork sit over the front
+ * axle as on a road bike; the bottom bracket is `reach` ahead of and `stack` above the hips.
+ */
+function recumbentPoints(spec: FrameSpec): BikePoints {
+  const r = spec.wheelRadius;
+  const wheelbase = 1.12;
+  const rearAxle = new Vector3(0, r, -wheelbase / 2);
+  const frontAxle = new Vector3(0, r, wheelbase / 2);
+  const seatRecline = rad(spec.seatAngle);
+  const seatUp = new Vector3(0, Math.sin(seatRecline), -Math.cos(seatRecline));
+  const saddleTop = new Vector3(0, 0.66, -0.17);
+  const bb = saddleTop.add(new Vector3(0, spec.stack, spec.reach));
+  const ha = rad(spec.headAngle);
+  const steerUp = new Vector3(0, Math.sin(ha), -Math.cos(ha));
+  const perp = new Vector3(0, Math.cos(ha), Math.sin(ha));
+  // steering axis through the fork crown, offset behind the axle like a road fork
+  const crownAt = frontAxle.subtract(perp.scale(spec.forkOffset));
+  const headBottom = crownAt.add(steerUp.scale((0.62 - crownAt.y) / steerUp.y));
+  const headTop = headBottom.add(steerUp.scale(spec.headTube));
+  const steererTop = headTop.add(steerUp.scale(0.012));
+  // under-seat steering: a cross bar below the seat front, grips beside the hips
+  const barClamp = saddleTop.add(new Vector3(0, -0.12, -0.05));
+  const hood = new Vector3(spec.barWidth / 2, saddleTop.y + 0.02, saddleTop.z - 0.06);
+  return {
+    spec,
+    rearAxle,
+    frontAxle,
+    bb,
+    headTop,
+    headBottom,
+    steerUp,
+    seatUp,
+    steererTop,
+    seatCluster: saddleTop.add(new Vector3(0, -0.05, 0.08)),
+    saddleTop,
+    barClamp,
+    hood,
+    wheelbase,
+    footTilt: -1.2,
+    seatBackTop: saddleTop.add(seatUp.scale(spec.seatTube)),
   };
 }
 
@@ -188,6 +281,7 @@ export function solveJoint(a: Vector3, c: Vector3, l1: number, l2: number, bend:
 
 /** Seated riding position on the hoods with slightly bent elbows; the torso angle follows the bike's reach. */
 export function riderPose(p: BikePoints): RiderPose {
+  if (p.spec.layout === 'recumbent') return recumbentPose(p);
   const hip = p.saddleTop.add(new Vector3(BODY.hipWidth / 2, 0.075, 0.045));
   const wrist = p.hood.add(new Vector3(0.005, 0.02, -0.05));
   const arm = BODY.upperArm + BODY.forearm;
@@ -212,5 +306,25 @@ export function riderPose(p: BikePoints): RiderPose {
   const neck = new Vector3(0, shoulder.y + 0.035, shoulder.z + 0.02).add(back.scale(0.03));
   // Head raised to look up the road: the neck tilts well above the back line.
   const head = neck.add(new Vector3(0, 0.08, 0.09));
+  return { hip, shoulder, elbow, wrist, neck, head, torsoAngle };
+}
+
+/**
+ * Lying in the seat shell: hips on the seat, the back along the reclined seat, head lifted to look
+ * ahead over the feet, hands on the under-seat grips beside the hips with the elbows bent back.
+ */
+function recumbentPose(p: BikePoints): RiderPose {
+  // the seat's normal: the hips and the back lie this far in front of the shell
+  const n = new Vector3(0, -p.seatUp.z, p.seatUp.y);
+  const hip = p.saddleTop.add(new Vector3(BODY.hipWidth / 2, 0, 0)).add(n.scale(0.09));
+  const torsoAngle = p.spec.seatAngle + 4;
+  const a = rad(torsoAngle);
+  const shoulder = new Vector3(BODY.shoulderWidth / 2, hip.y + Math.sin(a) * BODY.torso, hip.z - Math.cos(a) * BODY.torso);
+  const wrist = p.hood.add(new Vector3(0.01, 0.03, -0.03));
+  const elbow = solveJoint(shoulder, wrist, BODY.upperArm, BODY.forearm, new Vector3(0.7, -0.3, -0.6));
+  const back = new Vector3(0, Math.sin(a), -Math.cos(a));
+  const neck = new Vector3(0, shoulder.y + 0.04, shoulder.z + 0.03).add(back.scale(0.03));
+  // the head lifts off the headrest towards the road ahead
+  const head = neck.add(new Vector3(0, 0.1, 0.07));
   return { hip, shoulder, elbow, wrist, neck, head, torsoAngle };
 }

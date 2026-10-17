@@ -33,7 +33,8 @@ describe('catalogue', () => {
   });
 
   it('derives star ratings', () => {
-    const fastest = BIKES.find((b) => b.id === 'bike-servelo-a5')!;
+    // lying down beats any upright aero frame
+    const fastest = BIKES.find((b) => b.id === 'bike-m6-hochracer')!;
     const lightest = BIKES.find((b) => b.id === 'bike-kanyon-ultimo')!;
     const basis = BIKES.find((b) => b.id === 'bike-basis')!;
     expect(aeroStars(fastest)).toBe(5);

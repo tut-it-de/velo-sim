@@ -3,7 +3,7 @@
  * three-quarter view, or the dimensioned reference drawing they are built from (?mode=blueprint).
  * Query: mode=rider|bike|blueprint, style=aero|allround|climber|endurance, crank=<rad>, rim=<mm>,
  * view=<0…3> (one view only), zoom, ty (target height for zoomed views), tz (shift along the bike),
- * wheels=<catalog id>, kit=<jersey catalog id>, mirror=1 (views from the left).
+ * bike=<catalog id>, wheels=<catalog id>, kit=<jersey catalog id>, mirror=1 (views from the left).
  */
 import {
   Camera,
@@ -21,7 +21,7 @@ import {
   Vector3,
   Viewport,
 } from '@babylonjs/core';
-import { JERSEYS, WHEELS } from '@velo/equipment';
+import { BIKES, JERSEYS, WHEELS } from '@velo/equipment';
 import { RiderAvatar, type RiderLook } from '../game/rider';
 import { BODY, bikePoints, frameSpec, riderPose, solveJoint, type FrameStyle } from '../game/avatar/geometry';
 import { footPitch } from '../game/avatar/cyclist';
@@ -40,6 +40,8 @@ const look: RiderLook = {
   jerseyAccent: q.get('jerseyAccent') ?? '#f2c230',
   helmet: '#f4f4f4',
 };
+const bikeItem = BIKES.find((b) => b.id === q.get('bike'));
+if (bikeItem) Object.assign(look, { frame: bikeItem.look.frame, frameAccent: bikeItem.look.accent, frameStyle: bikeItem.category, build: bikeItem.look.build });
 const wheelsItem = WHEELS.find((w) => w.id === q.get('wheels'));
 if (wheelsItem) Object.assign(look, { rim: wheelsItem.look.rim, rimDepthMm: wheelsItem.rimDepthMm, wheel: wheelsItem.look });
 const kit = JERSEYS.find((j) => j.id === q.get('kit'));

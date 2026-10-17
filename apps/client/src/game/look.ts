@@ -8,6 +8,7 @@ export function lookFromLoadout(loadout: Loadout): RiderLook {
     frame: bike.look.frame,
     frameAccent: bike.look.accent,
     frameStyle: bike.category,
+    build: bike.look.build,
     rim: wheels.look.rim,
     rimDepthMm: wheels.rimDepthMm,
     wheel: wheels.look,
