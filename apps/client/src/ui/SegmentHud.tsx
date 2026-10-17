@@ -66,8 +66,8 @@ export function SegmentToast({ result }: { result?: SegmentOutcome }) {
       <div className="small">
         {result.isPb
           ? diff !== undefined
-            ? `🏆 Neue Bestzeit (${delta(diff)})`
-            : '🏆 Erste Zeit – deine neue Bestzeit'
+            ? `Neue Bestzeit (${delta(diff)})`
+            : 'Erste Zeit – deine neue Bestzeit'
           : `${delta(diff ?? 0)} zur Bestzeit`}
         {result.isPb && !result.saved && ' · Simulator: nicht gespeichert'}
       </div>

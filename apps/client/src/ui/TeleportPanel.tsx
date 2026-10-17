@@ -12,7 +12,6 @@ interface Jump {
   kind: 'start' | 'climb' | 'sprint' | 'segment' | 'place';
 }
 
-const KIND_ICON: Record<Jump['kind'], string> = { start: '🏁', climb: '⛰', sprint: '⚡', segment: '◆', place: '📍' };
 
 /**
  * Admin tool in the ride: pick a point on the map or the elevation profile (or one of the jump targets)
@@ -93,7 +92,6 @@ export function TeleportPanel({
               <div className="teleport-jump-list">
                 {jumps.map((j) => (
                   <button key={j.id} className={`jump jump-${j.kind}`} onClick={() => go(j.distanceM, j.label)}>
-                    <span className="jump-icon">{KIND_ICON[j.kind]}</span>
                     <span className="jump-text">
                       <span className="jump-label">{j.label}</span>
                       <span className="jump-sub">{j.sub}</span>

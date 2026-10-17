@@ -32,7 +32,6 @@ export function SettingsPage() {
       <div className="page-inner">
         <div className="page-head">
           <div>
-            <div className="eyebrow">Fahrer & App</div>
             <h1>Profil & Einstellungen</h1>
           </div>
         </div>

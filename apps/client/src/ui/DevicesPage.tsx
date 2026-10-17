@@ -23,7 +23,6 @@ export function DevicesPage() {
       <div className="page-inner">
         <div className="page-head">
           <div>
-            <div className="eyebrow">Trainer & Sensoren</div>
             <h1>Geräte</h1>
           </div>
           <span className="muted small">Plattform: {platform.label}</span>

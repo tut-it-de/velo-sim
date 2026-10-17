@@ -5,9 +5,9 @@
   --bg: #070a10;
   --bg-elev: #0f141d;
   --bg-elev-2: #182030;
-  --surface: rgba(20, 26, 38, 0.72);
-  --surface-2: rgba(30, 38, 54, 0.78);
-  --surface-hover: rgba(40, 50, 70, 0.8);
+  --surface: #10151e;
+  --surface-2: #171d29;
+  --surface-hover: #1f2635;
   --border: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.16);
   --text: #eef2f8;
@@ -28,10 +28,10 @@
   --z4: #eab308;
   --z5: #f97316;
   --z6: #ef4444;
-  --radius: 18px;
-  --radius-md: 14px;
-  --radius-sm: 10px;
-  --shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 12px 40px rgba(0, 0, 0, 0.35);
+  --radius: 8px;
+  --radius-md: 6px;
+  --radius-sm: 4px;
+  --shadow: none;
   --font: 'Barlow', system-ui, -apple-system, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
   --font-cond: 'Barlow Condensed', 'Barlow', system-ui, sans-serif;
   --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
@@ -69,7 +69,7 @@ button {
   color: inherit;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 9px 16px;
   cursor: pointer;
   touch-action: manipulation;
@@ -97,11 +97,10 @@ button:disabled {
   cursor: default;
 }
 button.primary {
-  background: var(--accent-grad);
+  background: var(--accent);
   border-color: transparent;
   color: #1c0b00;
   font-weight: 700;
-  box-shadow: var(--accent-glow);
 }
 button.primary:hover:not(:disabled) {
   background: var(--accent-grad);
@@ -129,7 +128,7 @@ select {
   color: inherit;
   background: rgba(0, 0, 0, 0.28);
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 9px 12px;
   transition: border-color 0.15s;
 }
@@ -354,17 +353,16 @@ input[type='checkbox'] {
   flex-wrap: wrap;
 }
 .eyebrow {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--accent);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-dim);
 }
 
 h1 {
-  font-size: 30px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  font-family: var(--font-cond);
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 1.05;
   margin: 0;
 }
 h2 {
@@ -382,8 +380,6 @@ h2 {
 
 .card {
   background: var(--surface);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 20px 22px;
@@ -418,7 +414,6 @@ h2 {
 }
 .dot.connected {
   background: var(--ok);
-  box-shadow: 0 0 8px var(--ok);
 }
 .dot.connecting,
 .dot.reconnecting {
@@ -447,10 +442,8 @@ h2 {
   box-shadow: var(--shadow);
 }
 .tile .label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-dim);
 }
 .tile .value {
@@ -477,7 +470,7 @@ h2 {
   font-size: 12px;
   background: rgba(0, 0, 0, 0.35);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 12px;
   height: 260px;
   overflow: auto;
@@ -498,7 +491,7 @@ pre.block {
   font-size: 12px;
   background: rgba(0, 0, 0, 0.35);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 12px;
   overflow: auto;
   margin: 0;
@@ -508,7 +501,7 @@ pre.block {
   border: 1px solid rgba(245, 184, 74, 0.3);
   background: rgba(245, 184, 74, 0.08);
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   font-size: 14px;
 }
 .notice.info {
@@ -522,12 +515,12 @@ pre.block {
   padding: 12px 14px 12px 12px;
   border-radius: var(--radius-md);
   border: 1px solid rgba(245, 184, 74, 0.28);
-  background: linear-gradient(90deg, rgba(245, 184, 74, 0.12), rgba(245, 184, 74, 0.03));
+  background: rgba(245, 184, 74, 0.06);
 }
 .callout-icon {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   display: grid;
   place-items: center;
   background: rgba(245, 184, 74, 0.18);
@@ -571,7 +564,7 @@ pre.block {
   animation: fade-in 0.2s ease-out;
 }
 .modal {
-  background: linear-gradient(180deg, rgba(28, 35, 50, 0.96), rgba(16, 21, 31, 0.96));
+  background: var(--bg-elev);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   padding: 22px;
@@ -613,9 +606,9 @@ kbd {
   font-size: 12px;
   font-weight: 600;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-strong);
-  background: rgba(255, 255, 255, 0.05);
+  background: none;
   color: var(--text-dim);
   white-space: nowrap;
 }
@@ -662,13 +655,9 @@ kbd {
     'profile profile';
   gap: 18px 24px;
   padding: 26px 28px 20px;
-  border-radius: 24px;
-  border: 1px solid var(--border-strong);
-  background:
-    radial-gradient(600px 300px at 85% 20%, color-mix(in srgb, var(--hue) 22%, transparent), transparent 70%),
-    radial-gradient(500px 260px at 0% 0%, rgba(255, 107, 26, 0.14), transparent 70%),
-    linear-gradient(180deg, rgba(26, 33, 48, 0.9), rgba(13, 18, 27, 0.92));
-  box-shadow: var(--shadow);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
   overflow: hidden;
 }
 .route-hero-main {
@@ -679,9 +668,10 @@ kbd {
   min-width: 0;
 }
 .route-hero-title {
-  font-size: 34px;
-  font-weight: 850;
-  letter-spacing: -0.025em;
+  font-family: var(--font-cond);
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: 0;
   line-height: 1.1;
   margin: 2px 0 0;
 }
@@ -715,10 +705,8 @@ kbd {
 }
 .route-hero-profile {
   grid-area: profile;
-  border-radius: 14px;
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid var(--border);
-  padding: 8px 10px 6px;
+  border-top: 1px solid var(--border);
+  padding: 10px 0 0;
 }
 .legend {
   display: flex;
@@ -760,18 +748,17 @@ kbd {
   align-items: center;
   justify-content: center;
   text-align: center;
-  gap: 4px;
-  padding: 12px 8px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid var(--border);
-  min-height: 78px;
+  gap: 6px;
+  padding: 6px 8px;
+  border-left: 1px solid var(--border);
+  min-height: 64px;
+}
+.stat:first-child {
+  border-left: none;
 }
 .stat-label {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-dim);
   white-space: nowrap;
   overflow: hidden;
@@ -797,6 +784,7 @@ kbd {
   overflow: visible;
 }
 .route-shape-glow {
+  display: none;
   fill: none;
   stroke: var(--hue, var(--accent));
   opacity: 0.18;
@@ -836,7 +824,7 @@ kbd {
 .route-card {
   --hue: var(--info);
   position: relative;
-  background: linear-gradient(180deg, rgba(26, 33, 48, 0.82), rgba(15, 20, 30, 0.86));
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px;
@@ -848,24 +836,12 @@ kbd {
   font-weight: 400;
   box-shadow: var(--shadow);
 }
-.route-card::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 3px;
-  background: var(--hue);
-  opacity: 0.7;
-}
 .route-card:hover:not(:disabled) {
-  transform: translateY(-2px);
   border-color: var(--border-strong);
-  background: linear-gradient(180deg, rgba(32, 40, 58, 0.9), rgba(17, 23, 34, 0.9));
+  background: var(--surface-2);
 }
 .route-card.selected {
-  border-color: rgba(255, 107, 26, 0.75);
-  box-shadow:
-    0 0 0 3px rgba(255, 107, 26, 0.18),
-    var(--shadow);
+  border-color: var(--accent);
 }
 .route-card-top {
   display: flex;
@@ -879,11 +855,9 @@ kbd {
   min-width: 0;
 }
 .route-card-region {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--hue);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-dim);
 }
 .route-title {
   font-size: 17px;
@@ -898,9 +872,7 @@ kbd {
 .route-card-stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border);
+  border-top: 1px solid var(--border);
 }
 .route-card-stats span {
   text-align: center;
@@ -949,10 +921,9 @@ kbd {
   align-items: center;
   gap: 24px;
   padding: 14px 14px 14px 22px;
-  border-radius: 20px;
+  border-radius: var(--radius);
   border: 1px solid var(--border-strong);
-  background: linear-gradient(180deg, #161d2b, #0d121b);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  background: var(--bg-elev);
 }
 .start-bar-route {
   display: flex;
@@ -973,7 +944,7 @@ kbd {
 button.cta {
   font-size: 16px;
   padding: 14px 26px;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -1051,7 +1022,7 @@ button.cta {
   backdrop-filter: blur(12px) saturate(1.3);
   -webkit-backdrop-filter: blur(12px) saturate(1.3);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
 }
@@ -1113,7 +1084,7 @@ button.cta {
   -webkit-backdrop-filter: blur(12px) saturate(1.3);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-bottom: 3px solid rgba(255, 255, 255, 0.12);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   padding: 8px 6px 7px;
   min-width: 0;
   text-align: center;
@@ -1404,7 +1375,7 @@ button.cta {
   color: #1d1300;
   font-weight: 700;
   padding: 10px 16px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
 }
 .hud-warning.paused {
   background: rgba(13, 17, 23, 0.85);
@@ -1497,7 +1468,7 @@ button.cta {
   font-size: 11px;
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--border);
   color: var(--text-dim);
@@ -1514,12 +1485,12 @@ button.cta {
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.04);
 }
 .segmented button {
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-dim);
   padding: 8px 18px;
@@ -1542,7 +1513,7 @@ button.cta {
 }
 .chip {
   padding: 6px 14px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-dim);
@@ -1757,7 +1728,7 @@ button.icon {
   transform: translateX(-50%);
   background: rgba(13, 17, 23, 0.88);
   border: 2px solid;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   padding: 10px 22px;
   text-align: center;
   animation: toast-in 0.35s ease-out;
@@ -1799,8 +1770,8 @@ button.icon {
 .avatar-preview {
   width: 300px;
   height: 200px;
-  border-radius: 10px;
-  background: radial-gradient(ellipse at 50% 80%, rgba(255, 255, 255, 0.1), transparent 70%);
+  border-radius: var(--radius-md);
+  background: none;
   touch-action: none;
 }
 .garage-loadout {
@@ -1835,7 +1806,7 @@ button.icon {
   gap: 12px;
 }
 .item-card {
-  background: linear-gradient(180deg, rgba(26, 33, 48, 0.82), rgba(15, 20, 30, 0.86));
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px;
@@ -1922,7 +1893,7 @@ button.icon {
   margin-top: 12px;
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
@@ -1975,7 +1946,7 @@ button.rideon {
   background: rgba(63, 185, 80, 0.92);
   color: #04210c;
   font-weight: 700;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 8px 14px;
   animation: fade-in 0.3s ease-out;
 }
@@ -1996,7 +1967,7 @@ button.rideon {
   gap: 10px;
   background: rgba(13, 17, 23, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 5px 12px;
 }
 .draft-label {
@@ -2015,7 +1986,7 @@ button.rideon {
 .draft-fill {
   height: 100%;
   border-radius: 6px;
-  background: linear-gradient(90deg, #1f6feb, #58a6ff 60%, #a5d6ff);
+  background: #58a6ff;
   transition: width 0.45s ease-out;
 }
 .draft-tick {
@@ -2082,9 +2053,7 @@ button.strava-link {
 }
 .admin-card {
   border-color: rgba(90, 169, 255, 0.28);
-  background:
-    radial-gradient(500px 200px at 100% 0%, rgba(90, 169, 255, 0.12), transparent 70%),
-    var(--surface);
+  background: var(--surface);
 }
 .teleport {
   position: absolute;
@@ -2099,7 +2068,7 @@ button.strava-link {
   flex-direction: column;
   gap: 14px;
   padding: 18px 20px;
-  border-radius: 22px;
+  border-radius: var(--radius);
   border: 1px solid rgba(90, 169, 255, 0.35);
   background: linear-gradient(180deg, rgba(20, 27, 40, 0.94), rgba(9, 12, 19, 0.95));
   backdrop-filter: blur(20px) saturate(1.3);
@@ -2127,7 +2096,7 @@ button.strava-link {
   flex-direction: column;
   align-items: center;
   padding: 6px 16px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border);
 }
@@ -2142,7 +2111,7 @@ button.strava-link {
 }
 .teleport-map {
   position: relative;
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid var(--border);
   padding: 8px;
@@ -2189,14 +2158,14 @@ button.strava-link {
   gap: 10px;
   text-align: left;
   padding: 8px 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   font-weight: 400;
   background: rgba(255, 255, 255, 0.04);
 }
 .jump-icon {
   width: 34px;
   height: 34px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   display: grid;
   place-items: center;
   font-size: 16px;
@@ -2232,7 +2201,7 @@ button.strava-link {
   font-variant-numeric: tabular-nums;
 }
 .teleport-profile {
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid var(--border);
   padding: 6px 8px;
@@ -2340,7 +2309,7 @@ button.strava-link {
   gap: 12px;
 }
 .pb-card {
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.035);
   padding: 12px 14px;
@@ -2389,7 +2358,7 @@ button.strava-link {
 .activity-stats {
   display: grid;
   grid-template-columns: repeat(6, 74px);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.035);
 }
@@ -2400,8 +2369,6 @@ button.strava-link {
   padding: 6px 4px;
   font-size: 10.5px;
   color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
 .activity-stats span + span {
   border-left: 1px solid var(--border);
@@ -2451,7 +2418,7 @@ button.strava-link {
 }
 .garage-loadout span {
   padding: 6px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border);
 }

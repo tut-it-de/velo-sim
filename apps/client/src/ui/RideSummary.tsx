@@ -118,7 +118,7 @@ export function RideSummary({ result, activity, onClose }: { result: RideResult;
                     <td>{r.segment.name}</td>
                     <td>{formatDuration(r.timeS)}</td>
                     <td className="muted">{r.previousBestS !== undefined ? `PB ${formatDuration(r.previousBestS)}` : ''}</td>
-                    <td>{r.isPb ? (r.saved ? '🏆 Bestzeit' : '🏆 (Simulator)') : ''}</td>
+                    <td>{r.isPb ? (r.saved ? 'Bestzeit' : 'Bestzeit (Simulator)') : ''}</td>
                   </tr>
                 ))}
               </tbody>

@@ -27,7 +27,6 @@ export function ActivitiesPage() {
       <div className="page-inner">
         <div className="page-head">
           <div>
-            <div className="eyebrow">Dein Logbuch</div>
             <h1>Aktivitäten</h1>
           </div>
         </div>

@@ -100,7 +100,6 @@ export function GaragePage() {
       <div className="page-inner">
         <div className="page-head">
           <div>
-            <div className="eyebrow">Ausrüstung</div>
             <h1>Garage</h1>
           </div>
           <div className="row">
@@ -114,9 +113,9 @@ export function GaragePage() {
           <div>
             <div className="muted small">Aktuelle Ausrüstung</div>
             <div className="garage-loadout">
-              <span>🚲 {itemName(current.bike)}</span>
-              <span>◎ {itemName(current.wheels)}</span>
-              <span>👕 {itemName(current.jersey)}</span>
+              <span>{itemName(current.bike)}</span>
+              <span>{itemName(current.wheels)}</span>
+              <span>{itemName(current.jersey)}</span>
             </div>
             <div className="muted small">
               CdA {setup.cda.toFixed(3)} m² · Rad + Laufräder {(setup.bikeMassKg + setup.wheelsMassKg).toFixed(1)} kg · Gesamt {totalMass(setup).toFixed(1)} kg
@@ -190,7 +189,7 @@ export function GaragePage() {
                 </div>
                 <div className="item-action" onClick={(e) => e.stopPropagation()}>
                   {equipped ? (
-                    <span className="equipped-label">✓ Ausgerüstet</span>
+                    <span className="equipped-label">Ausgerüstet</span>
                   ) : owned ? (
                     <button
                       onClick={async () => {

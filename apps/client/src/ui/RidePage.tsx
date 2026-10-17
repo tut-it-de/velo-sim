@@ -184,7 +184,6 @@ function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean, wo
       <div className="page-inner">
         <header className="page-head">
           <div>
-            <div className="eyebrow">Fahren</div>
             <h1>Wähle deine Strecke</h1>
           </div>
           <div className="segmented">
@@ -199,7 +198,6 @@ function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean, wo
 
         {!trainerReady && (
           <div className="callout">
-            <span className="callout-icon">⚡</span>
             <span className="callout-text">
               <strong>Kein Trainer verbunden.</strong> Verbinde deinen KICKR unter „Geräte“ – oder teste mit dem Simulator.
             </span>
