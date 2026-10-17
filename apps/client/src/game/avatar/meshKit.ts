@@ -35,6 +35,12 @@ export interface LoftOptions {
   shift?: number[];
   /** Longest distance between rings (default 1.5 cm). */
   step?: number;
+  /**
+   * Texture coordinate (second uv channel) per ring vertex from the loft position `t` (0…1), the
+   * section angle and `arc`, the angle as a share of the section's perimeter (0…1, by length).
+   * null leaves the vertex untextured. With a map, every ring gets a seam vertex so u can wrap.
+   */
+  map?: (t: number, ang: number, arc: number) => [number, number] | null;
 }
 
 const tmp = new Vector3();
@@ -58,6 +64,12 @@ export class MeshKit {
   private readonly mi: number[] = [];
   private readonly mw: number[] = [];
   private readonly uv: number[] = [];
+  private readonly uv2: number[] = [];
+  private textured = false;
+  /** Seam vertex pairs whose normals are averaged at build time (same position, different uv). */
+  private readonly welds: Array<[number, number]> = [];
+  /** Texture coordinate for vertices added without one (e.g. a whole ellipsoid in one colour of the texture). */
+  texAt: [number, number] | null = null;
   /**
    * Skinning: when set, every new vertex is bound to two bones by its position, as
    * [bone A, bone B, weight of B]. Leave unset for rigid meshes.
@@ -73,7 +85,10 @@ export class MeshKit {
     return this.i.length === 0;
   }
 
-  private vertex(v: Vector3, col: Color3): number {
+  private vertex(v: Vector3, col: Color3, tex?: [number, number] | null): number {
+    const t = tex ?? this.texAt;
+    if (t) this.textured = true;
+    this.uv2.push(t ? t[0] : -1, t ? t[1] : -1);
     this.p.push(v.x, v.y, v.z);
     this.c.push(col.r, col.g, col.b, 1);
     this.uv.push(this.kind ? this.kind(col) : 1, 0);
@@ -93,10 +108,10 @@ export class MeshKit {
     }
   }
 
-  private cap(ring: number, n: number, centre: Vector3, col: Color3, flip: boolean): void {
+  private cap(ring: number, n: number, centre: Vector3, col: Color3, flip: boolean, tex: [number, number] | null = null): void {
     const start = this.p.length / 3;
-    for (let k = 0; k < n; k++) this.vertex(new Vector3(this.p[(ring + k) * 3]!, this.p[(ring + k) * 3 + 1]!, this.p[(ring + k) * 3 + 2]!), col);
-    const ci = this.vertex(centre, col);
+    for (let k = 0; k < n; k++) this.vertex(new Vector3(this.p[(ring + k) * 3]!, this.p[(ring + k) * 3 + 1]!, this.p[(ring + k) * 3 + 2]!), col, tex);
+    const ci = this.vertex(centre, col, tex);
     for (let k = 0; k < n; k++) {
       const k1 = (k + 1) % n;
       if (flip) this.i.push(ci, start + k, start + k1);
@@ -138,6 +153,9 @@ export class MeshKit {
     const total = lens[count - 1]! || 1;
     let prevN: Vector3 | null = null;
     const rings: number[] = [];
+    const map = o.map;
+    const ringPts: Vector3[] = Array.from({ length: n }, () => new Vector3());
+    const arc: number[] = new Array(n + 1).fill(0);
     for (let j = 0; j < count; j++) {
       const a = points[Math.max(0, j - 1)]!;
       const b = points[Math.min(count - 1, j + 1)]!;
@@ -151,16 +169,30 @@ export class MeshKit {
       const tt = lens[j]! / total;
       rings.push(this.p.length / 3);
       for (let k = 0; k < n; k++) {
-        const ang = (k / n) * Math.PI * 2;
-        const [ps, pn] = profile(ang);
-        tmp.copyFrom(centre).addInPlace(side.scale(ps * ww)).addInPlace(nrm.scale(pn * dd));
-        this.vertex(tmp, typeof paint === 'function' ? paint(tt, ang) : paint);
+        const [ps, pn] = profile((k / n) * Math.PI * 2);
+        ringPts[k]!.copyFrom(centre).addInPlace(side.scale(ps * ww)).addInPlace(nrm.scale(pn * dd));
       }
+      if (map) {
+        for (let k = 1; k <= n; k++) arc[k] = arc[k - 1]! + Vector3.Distance(ringPts[k - 1]!, ringPts[k % n]!);
+        for (let k = 1; k <= n; k++) arc[k] = arc[k]! / (arc[n]! || 1);
+      }
+      for (let k = 0; k < (map ? n + 1 : n); k++) {
+        const ang = (k / n) * Math.PI * 2;
+        this.vertex(ringPts[k % n]!, typeof paint === 'function' ? paint(tt, ang) : paint, map ? map(tt, ang, arc[k]!) : null);
+      }
+      if (map) this.welds.push([rings[j]!, rings[j]! + n]);
     }
-    for (let j = 0; j + 1 < count; j++) this.bridge(rings[j]!, rings[j + 1]!, n);
+    if (map) {
+      for (let j = 0; j + 1 < count; j++) {
+        const ra = rings[j]!;
+        const rb = rings[j + 1]!;
+        for (let k = 0; k < n; k++) this.i.push(ra + k, rb + k, ra + k + 1, ra + k + 1, rb + k, rb + k + 1);
+      }
+    } else for (let j = 0; j + 1 < count; j++) this.bridge(rings[j]!, rings[j + 1]!, n);
     const capCol = (t: number) => (typeof paint === 'function' ? paint(t, 0) : paint);
-    if (o.capStart ?? true) this.cap(rings[0]!, n, points[0]!, capCol(0), true);
-    if (o.capEnd ?? true) this.cap(rings[count - 1]!, n, points[count - 1]!, capCol(1), false);
+    const capTex = (t: number) => (map ? map(t, 0, 0) : null);
+    if (o.capStart ?? true) this.cap(rings[0]!, n, points[0]!, capCol(0), true, capTex(0));
+    if (o.capEnd ?? true) this.cap(rings[count - 1]!, n, points[count - 1]!, capCol(1), false, capTex(1));
   }
 
   /** Straight tube from a to b. */
@@ -254,7 +286,14 @@ export class MeshKit {
     vd.uvs = this.uv;
     const normals: number[] = [];
     VertexData.ComputeNormals(this.p, this.i, normals);
+    // seam vertices share one normal so the uv seam does not show in the shading
+    for (const [a, b] of this.welds) {
+      const m = [0, 1, 2].map((c) => normals[a * 3 + c]! + normals[b * 3 + c]!);
+      const l = Math.hypot(m[0]!, m[1]!, m[2]!) || 1;
+      for (let c = 0; c < 3; c++) normals[a * 3 + c] = normals[b * 3 + c] = m[c]! / l;
+    }
     vd.normals = normals;
+    if (this.textured) vd.uvs2 = this.uv2;
     if (this.mi.length) {
       vd.matricesIndices = this.mi;
       vd.matricesWeights = this.mw;

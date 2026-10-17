@@ -1,4 +1,6 @@
-import { Color3, StandardMaterial, type Scene } from '@babylonjs/core';
+import { Color3, DynamicTexture, StandardMaterial, type Scene } from '@babylonjs/core';
+import type { JerseyDesign } from '@velo/equipment';
+import { JERSEY_TEX, paintJersey } from './jerseyArt';
 import { FabricPlugin } from './fabricPlugin';
 
 export interface AvatarMaterials {
@@ -34,6 +36,26 @@ export function avatarMaterials(scene: Scene): AvatarMaterials {
     };
     new FabricPlugin(m.cloth);
     cache.set(scene, m);
+  }
+  return m;
+}
+
+const jerseys = new WeakMap<Scene, Map<string, StandardMaterial>>();
+
+/** Cloth material with a printed jersey; one per design and scene, shared by every rider wearing it. */
+export function jerseyMaterial(scene: Scene, design: JerseyDesign): StandardMaterial {
+  let byKey = jerseys.get(scene);
+  if (!byKey) jerseys.set(scene, (byKey = new Map()));
+  const key = JSON.stringify(design);
+  let m = byKey.get(key);
+  if (!m) {
+    const tex = new DynamicTexture(`jersey-tex-${byKey.size}`, { width: JERSEY_TEX, height: JERSEY_TEX }, scene, true);
+    paintJersey(tex.getContext() as unknown as CanvasRenderingContext2D, design);
+    tex.update();
+    tex.anisotropicFilteringLevel = 8;
+    m = make(scene, `jersey-${byKey.size}`, 0.12, 20);
+    new FabricPlugin(m, tex);
+    byKey.set(key, m);
   }
   return m;
 }

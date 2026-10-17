@@ -30,18 +30,75 @@ export interface BikeItem extends BaseItem {
   look: { frame: string; accent: string };
 }
 
+/** Rim surface: anodised alloy, matte unidirectional carbon or glossy carbon. */
+export type RimFinish = 'alu' | 'carbon' | 'gloss';
+/**
+ * Rim decal, painted onto both sidewalls (see apps/client/src/game/avatar/wheelArt.ts):
+ * `block` heavy upright letters, `outline` open outlined letters, `italic` slanted letters with a
+ * speed stripe, `tonal` small, barely contrasting letters on matte carbon, `stripe` letters on a band.
+ */
+export interface RimDecal {
+  text: string;
+  /** Model line next to the wordmark (smaller). */
+  sub: string;
+  color: string;
+  accent: string;
+  style: 'block' | 'outline' | 'italic' | 'tonal' | 'stripe';
+  /** Wordmarks per side around the rim. */
+  count: number;
+}
+
 export interface WheelsItem extends BaseItem {
   type: 'wheels';
   rimDepthMm: number;
   /** Pair of wheels incl. tyres. */
   weightKg: number;
-  look: { rim: string };
+  look: { rim: string; finish: RimFinish; decal: RimDecal; hub: string; spoke: string };
+}
+
+/**
+ * Print of a jersey (see apps/client/src/game/avatar/jerseyArt.ts). `colors` are base, second and
+ * trim colour; what each one paints depends on the pattern:
+ * - `block`: base with darker side panels, collar and sleeve cuffs in the trim colour
+ * - `band`: base with a chest band in the second colour, pinstripes in trim
+ * - `retro`: wool look, two chest stripes and collar in the second colour, cuffs in trim
+ * - `halftone`: dots of the second colour, large at the hem, fading out towards the chest
+ * - `topo`: contour lines of an imaginary map in the second colour
+ * - `gradient`: base at the shoulders blending into the second colour at the hem
+ * - `polka`: dots of the second colour on the base (mountain jersey)
+ * - `fragment`: angular shards in the second and trim colour over the base
+ * - `rainbow`: five world-champion bands across the chest
+ * - `split`: diagonal split, upper part base, lower part second colour, trim line between
+ */
+export type JerseyPattern =
+  | 'block'
+  | 'band'
+  | 'retro'
+  | 'halftone'
+  | 'topo'
+  | 'gradient'
+  | 'polka'
+  | 'fragment'
+  | 'rainbow'
+  | 'split'
+  | 'athletic'
+  | 'tonal'
+  | 'stamps'
+  | 'base';
+
+export interface JerseyDesign {
+  pattern: JerseyPattern;
+  colors: [string, string, string];
+  /** Colour of the chest and back wordmark. */
+  logo: string;
+  /** Brand lettering on the jersey; VELO when absent. */
+  mark?: string;
 }
 
 export interface JerseyItem extends BaseItem {
   type: 'jersey';
   cut: JerseyCut;
-  look: { jersey: string; accent: string; helmet: string };
+  look: { jersey: string; accent: string; helmet: string; design: JerseyDesign };
 }
 
 export type EquipmentItem = BikeItem | WheelsItem | JerseyItem;
@@ -91,6 +148,8 @@ export const BIKES: BikeItem[] = [
   bike('bike-basis', 'Velo', 'Basis', 'start', 'allround', 0.014, 8.6, 0, '#20232a', '#ff7a1a'),
 ];
 
+const decal = (text: string, sub: string, color: string, accent: string, style: RimDecal['style'], count = 2): RimDecal => ({ text, sub, color, accent, style, count });
+
 const wheels = (
   id: string,
   brand: string,
@@ -100,18 +159,32 @@ const wheels = (
   cdaDelta: number,
   weightKg: number,
   price: number,
-  rim: string,
+  look: WheelsItem['look'],
   inspiredBy?: string,
-): WheelsItem => ({ id, type: 'wheels', brand, model, tier, rimDepthMm, cdaDelta, weightKg, price, look: { rim }, inspiredBy });
+): WheelsItem => ({ id, type: 'wheels', brand, model, tier, rimDepthMm, cdaDelta, weightKg, price, look, inspiredBy });
 
 export const WHEELS: WheelsItem[] = [
-  wheels('wheels-basis', 'Velo', 'Basis Alu', 'start', 22, 0.008, 2.0, 0, '#3a3d42'),
-  wheels('wheels-fulkrum-r5', 'Fulkrum', 'Racing 5', 'entry', 25, 0.005, 1.65, 3_000, '#202020', 'Fulcrum Racing'),
-  wheels('wheels-mavik-kosmik45', 'Mavik', 'Kosmik 45', 'mid', 45, -0.001, 1.5, 18_000, '#e8c400', 'Mavic Cosmic'),
-  wheels('wheels-dsswiss-ark35', 'DS Swiss', 'ARK Climb 35', 'top', 35, 0.002, 1.25, 30_000, '#d10000', 'DT Swiss'),
-  wheels('wheels-rojal-rapido50', 'Rojal', 'Rapido 50', 'top', 50, -0.003, 1.4, 45_000, '#d9d9d9', 'Roval Rapide'),
-  wheels('wheels-zapp-440', 'Zapp', '440', 'top', 58, -0.005, 1.55, 50_000, '#f5f5f5', 'Zipp 404'),
-  wheels('wheels-envi-65', 'Envi', '6.5', 'top', 65, -0.006, 1.6, 60_000, '#9aa0a6', 'ENVE SES'),
+  wheels('wheels-basis', 'Velo', 'Basis Alu', 'start', 22, 0.008, 2.0, 0, {
+    rim: '#2b2e33', finish: 'alu', hub: '#2b2e33', spoke: '#1a1a1a', decal: decal('VELO', 'BASIS', '#c9ccd1', '#ff7a1a', 'block', 2),
+  }),
+  wheels('wheels-fulkrum-r5', 'Fulkrum', 'Racing 5', 'entry', 25, 0.005, 1.65, 3_000, {
+    rim: '#1c1c1e', finish: 'alu', hub: '#1c1c1e', spoke: '#141414', decal: decal('FULKRUM', 'RACING 5', '#f2f2f2', '#d62828', 'italic', 2),
+  }, 'Fulcrum Racing'),
+  wheels('wheels-mavik-kosmik45', 'Mavik', 'Kosmik 45', 'mid', 45, -0.001, 1.5, 18_000, {
+    rim: '#151517', finish: 'carbon', hub: '#151517', spoke: '#111111', decal: decal('MAVIK', 'KOSMIK SLR 45', '#ffffff', '#ffd400', 'stripe', 2),
+  }, 'Mavic Cosmic'),
+  wheels('wheels-dsswiss-ark35', 'DS Swiss', 'ARK Climb 35', 'top', 35, 0.002, 1.25, 30_000, {
+    rim: '#141416', finish: 'carbon', hub: '#141416', spoke: '#101010', decal: decal('DS SWISS', 'ARK 1100 DICUT 35', '#ffffff', '#e30613', 'block', 2),
+  }, 'DT Swiss'),
+  wheels('wheels-rojal-rapido50', 'Rojal', 'Rapido 50', 'top', 50, -0.003, 1.4, 45_000, {
+    rim: '#101012', finish: 'gloss', hub: '#101012', spoke: '#0e0e0e', decal: decal('ROJAL', 'RAPIDO CLX', '#ffffff', '#9a9a9a', 'block', 2),
+  }, 'Roval Rapide'),
+  wheels('wheels-zapp-440', 'Zapp', '440', 'top', 58, -0.005, 1.55, 50_000, {
+    rim: '#121214', finish: 'carbon', hub: '#121214', spoke: '#0f0f0f', decal: decal('ZAPP', '440 FIRECREST', '#ffffff', '#c8c8c8', 'outline', 2),
+  }, 'Zipp 404'),
+  wheels('wheels-envi-65', 'Envi', '6.5', 'top', 65, -0.006, 1.6, 60_000, {
+    rim: '#18181a', finish: 'carbon', hub: '#18181a', spoke: '#121212', decal: decal('ENVI', 'SES 6.5', '#6f7378', '#9da2a8', 'tonal', 3),
+  }, 'ENVE SES'),
 ];
 
 const jersey = (
@@ -121,23 +194,53 @@ const jersey = (
   cdaDelta: number,
   price: number,
   tier: Tier,
-  jerseyColor: string,
-  accent: string,
+  pattern: JerseyPattern,
+  colors: [string, string, string],
+  logo: string,
   helmet: string,
-): JerseyItem => ({ id, type: 'jersey', brand: 'Velo', model, tier, cut, cdaDelta, price, look: { jersey: jerseyColor, accent, helmet } });
+  inspiredBy?: string,
+  brand = 'Velo',
+): JerseyItem => ({
+  id,
+  type: 'jersey',
+  brand,
+  model,
+  tier,
+  cut,
+  cdaDelta,
+  price,
+  // jersey/accent stay as the two main colours (swatches, bots, older clients)
+  look: { jersey: colors[0], accent: colors[1], helmet, design: brand === 'Velo' ? { pattern, colors, logo } : { pattern, colors, logo, mark: brand.toUpperCase() } },
+  inspiredBy,
+});
+
+/** NAAP: the house's take on MAAP's kits, from the Training basics to the Pro Air race jersey. */
+const naap = (...args: Parameters<typeof jersey>): JerseyItem => {
+  const [id, model, cut, cda, price, tier, pattern, colors, logo, helmet, inspiredBy] = args;
+  return jersey(id, model, cut, cda, price, tier, pattern, colors, logo, helmet, inspiredBy, 'NAAP');
+};
 
 export const JERSEYS: JerseyItem[] = [
-  jersey('jersey-club-orange', 'Club Orange', 'club', 0.003, 0, 'start', '#ff7a1a', '#20232a', '#ffffff'),
-  jersey('jersey-club-blau', 'Club Blau', 'club', 0.003, 600, 'entry', '#2e7dd7', '#ffffff', '#2e7dd7'),
-  jersey('jersey-retro-wolle', 'Retro Wolle', 'retro', 0.005, 1_500, 'entry', '#a4161a', '#f5f3f4', '#f5f3f4'),
-  jersey('jersey-retro-bianchi', 'Retro Himmelblau', 'retro', 0.005, 1_500, 'entry', '#7fd1c7', '#111111', '#111111'),
-  jersey('jersey-standard-schwarz', 'Standard Schwarz', 'standard', 0, 2_000, 'mid', '#1b1b1f', '#ff7a1a', '#1b1b1f'),
-  jersey('jersey-standard-gruen', 'Standard Waldgrün', 'standard', 0, 2_500, 'mid', '#2d6a4f', '#d8f3dc', '#ffffff'),
-  jersey('jersey-standard-gelb', 'Standard Leader', 'standard', 0, 4_000, 'mid', '#ffd60a', '#000000', '#ffd60a'),
-  jersey('jersey-racefit-weiss', 'Race-Fit Weiß', 'racefit', -0.002, 6_000, 'top', '#f8f9fa', '#e63946', '#f8f9fa'),
-  jersey('jersey-racefit-polka', 'Race-Fit Bergkönig', 'racefit', -0.002, 9_000, 'top', '#ffffff', '#d00000', '#d00000'),
-  jersey('jersey-skinsuit-carbon', 'Skinsuit Carbon', 'skinsuit', -0.004, 12_000, 'top', '#2b2d42', '#8d99ae', '#2b2d42'),
-  jersey('jersey-skinsuit-regenbogen', 'Skinsuit Regenbogen', 'skinsuit', -0.004, 15_000, 'top', '#f1f1f1', '#3a86ff', '#f1f1f1'),
+  jersey('jersey-club-orange', 'Club Orange', 'club', 0.003, 0, 'start', 'block', ['#ff6b1a', '#24262c', '#24262c'], '#ffffff', '#ffffff'),
+  jersey('jersey-club-blau', 'Club Blau', 'club', 0.003, 600, 'entry', 'band', ['#1f5fa8', '#f4f4f2', '#1f5fa8'], '#f4f4f2', '#1f5fa8'),
+  jersey('jersey-retro-wolle', 'Retro Wolle', 'retro', 0.005, 1_500, 'entry', 'retro', ['#9e1b22', '#efe7d6', '#1d1d1d'], '#efe7d6', '#efe7d6'),
+  jersey('jersey-retro-bianchi', 'Retro Himmelblau', 'retro', 0.005, 1_500, 'entry', 'retro', ['#7fd1c7', '#111111', '#111111'], '#111111', '#111111'),
+  naap('jersey-club-flieder', 'Training Flieder', 'club', 0.003, 1_800, 'entry', 'band', ['#b9a7d6', '#2c2a3a', '#efeaf6'], '#2c2a3a', '#efeaf6', 'MAAP Training'),
+  naap('jersey-naap-base', 'Pro Base Antarktis', 'club', 0.003, 2_200, 'entry', 'base', ['#ecebe6', '#1e2a44', '#d9d7d0'], '#1e2a44', '#ecebe6', 'MAAP Evade Pro Base'),
+  naap('jersey-standard-schwarz', 'Halftone Nacht', 'standard', 0, 2_000, 'mid', 'halftone', ['#17181c', '#ff6b1a', '#2a2c33'], '#ff6b1a', '#17181c', 'MAAP Halftone'),
+  naap('jersey-standard-gruen', 'Topo Salbei', 'standard', 0, 2_500, 'mid', 'topo', ['#7f8f74', '#c9d3bd', '#3e4a3a'], '#eef1ea', '#eef1ea', 'MAAP Adapt'),
+  naap('jersey-standard-sand', 'Alt-Road Sand', 'standard', 0, 3_000, 'mid', 'split', ['#d8c8a8', '#4f5a3c', '#1d1d1d'], '#1d1d1d', '#4f5a3c', 'MAAP Alt_Road'),
+  naap('jersey-naap-aeon-lavendel', 'Aeon Lavendelgrau', 'standard', 0, 3_500, 'mid', 'tonal', ['#a8a3b9', '#9893aa', '#8c87a0'], '#4a4560', '#a8a3b9', 'MAAP Apex Aeon'),
+  naap('jersey-naap-aeon-kobalt', 'Aeon Deep Cobalt', 'standard', 0, 3_500, 'mid', 'tonal', ['#4c4f98', '#43468a', '#3a3d7c'], '#eef0ff', '#4c4f98', 'MAAP Apex Aeon Thermal'),
+  jersey('jersey-standard-gelb', 'Standard Leader', 'standard', 0, 4_000, 'mid', 'block', ['#ffd60a', '#141414', '#141414'], '#141414', '#ffd60a'),
+  naap('jersey-racefit-weiss', 'Evolve Koralle', 'racefit', -0.002, 6_000, 'top', 'gradient', ['#f6f4f1', '#ff5a4e', '#2b2b2b'], '#2b2b2b', '#f6f4f1', 'MAAP Evolve'),
+  naap('jersey-racefit-dusk', 'Evolve Dämmerung', 'racefit', -0.002, 7_500, 'top', 'gradient', ['#c8b6e2', '#1d2a4d', '#f2efe9'], '#f2efe9', '#1d2a4d', 'MAAP Evolve'),
+  naap('jersey-naap-beta', 'Pro Aero Beta', 'racefit', -0.002, 8_000, 'top', 'stamps', ['#efeef1', '#5a3ea6', '#c9c6d0'], '#5a3ea6', '#efeef1', 'MAAP Pro Aero'),
+  jersey('jersey-racefit-polka', 'Race-Fit Bergkönig', 'racefit', -0.002, 9_000, 'top', 'polka', ['#ffffff', '#d00000', '#d00000'], '#d00000', '#d00000'),
+  naap('jersey-naap-athletic-acid', 'Pro Air Acid', 'racefit', -0.003, 10_500, 'top', 'athletic', ['#14171b', '#c8f46c', '#2d7f89'], '#c8f46c', '#14171b', 'MAAP Pro Air Mental Athletic'),
+  naap('jersey-naap-athletic-violett', 'Pro Air Violett', 'racefit', -0.003, 10_500, 'top', 'athletic', ['#17161c', '#d6b9ff', '#4a4f5c'], '#d6b9ff', '#17161c', 'MAAP Pro Air Mental Athletic'),
+  naap('jersey-skinsuit-carbon', 'Fragment Navy', 'skinsuit', -0.004, 12_000, 'top', 'fragment', ['#1b2233', '#3c4a66', '#8fa3c2'], '#e9edf3', '#1b2233', 'MAAP Fragment'),
+  jersey('jersey-skinsuit-regenbogen', 'Skinsuit Regenbogen', 'skinsuit', -0.004, 15_000, 'top', 'rainbow', ['#f7f7f7', '#1d1d1d', '#1d1d1d'], '#1d1d1d', '#f7f7f7'),
 ];
 
 export const CATALOG: EquipmentItem[] = [...BIKES, ...WHEELS, ...JERSEYS];
@@ -149,5 +252,5 @@ export function getItem(id: string): EquipmentItem | undefined {
 }
 
 export function itemName(item: EquipmentItem): string {
-  return item.type === 'jersey' ? item.model : `${item.brand} ${item.model}`;
+  return item.type === 'jersey' && item.brand === 'Velo' ? item.model : `${item.brand} ${item.model}`;
 }

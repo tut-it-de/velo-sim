@@ -39,7 +39,7 @@ export interface FrameSpec {
   stayDrop: number;
 }
 
-const BASE: FrameSpec = {
+export const BASE_SPEC: FrameSpec = {
   stack: 0.565,
   reach: 0.395,
   headAngle: 73.5,
@@ -66,13 +66,13 @@ const BASE: FrameSpec = {
 export function frameSpec(style: FrameStyle = 'allround'): FrameSpec {
   switch (style) {
     case 'aero':
-      return { ...BASE, stack: 0.56, reach: 0.4, tubeDepth: 1.75, stayDrop: 0.13, stemAngle: -15, barWidth: 0.39 };
+      return { ...BASE_SPEC, stack: 0.56, reach: 0.4, tubeDepth: 1.75, stayDrop: 0.13, stemAngle: -15, barWidth: 0.39 };
     case 'climber':
-      return { ...BASE, tubeDepth: 1.0, seatTube: 0.51 };
+      return { ...BASE_SPEC, tubeDepth: 1.0, seatTube: 0.51 };
     case 'endurance':
-      return { ...BASE, stack: 0.595, reach: 0.38, headAngle: 72.5, headTube: 0.175, chainstay: 0.418, bbDrop: 0.075, tubeDepth: 1.1, spacers: 0.03, stemAngle: -6, tyreWidth: 0.032, wheelRadius: 0.343 };
+      return { ...BASE_SPEC, stack: 0.595, reach: 0.38, headAngle: 72.5, headTube: 0.175, chainstay: 0.418, bbDrop: 0.075, tubeDepth: 1.1, spacers: 0.03, stemAngle: -6, tyreWidth: 0.032, wheelRadius: 0.343 };
     default:
-      return BASE;
+      return BASE_SPEC;
   }
 }
 

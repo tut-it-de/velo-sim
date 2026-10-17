@@ -2,6 +2,8 @@ import { Curve3, Mesh, Quaternion, TransformNode, Vector3, type Scene } from '@b
 import { bikePoints, frameSpec, type BikePoints, type FrameStyle } from './geometry';
 import { AERO, MeshKit, ROUND, SQUIRCLE, basis, hex, type Paint } from './meshKit';
 import { avatarMaterials } from './materials';
+import { buildRim } from './rimMesh';
+import type { WheelLook } from './wheelArt';
 
 export interface BikeLook {
   frame: string;
@@ -9,6 +11,8 @@ export interface BikeLook {
   frameStyle?: FrameStyle;
   rim?: string;
   rimDepthMm?: number;
+  /** Full wheel design (finish, decals, hub and spokes); without it the rim is plain `rim`. */
+  wheel?: WheelLook;
 }
 
 const X = new Vector3(1, 0, 0);
@@ -258,6 +262,8 @@ export class BikeModel {
     // --- Wheels ----------------------------------------------------------------------------------
     const depth = Math.min(0.085, Math.max(0.02, (look.rimDepthMm ?? 30) / 1000));
     const rimCol = hex(look.rim ?? '#1d1f22');
+    const hubCol = look.wheel ? hex(look.wheel.hub) : carbon;
+    const spokeCol = hex(look.wheel?.spoke ?? '#151515');
     for (const front of [false, true]) {
       const node = new TransformNode(`${name}-wheel`, scene);
       node.parent = this.root;
@@ -279,12 +285,13 @@ export class BikeModel {
         [bead, hwR], [bead - depth * 0.45, hwR * 1.12], [inner + 0.006, hwR * 0.7], [inner, 0],
         [inner + 0.006, -hwR * 0.7], [bead - depth * 0.45, -hwR * 1.12], [bead, -hwR], [bead, hwR],
       ];
-      wk.lathe(o, X, rim, rimCol, 48);
+      if (look.wheel) buildRim(scene, `${name}-rim`, node, look.wheel, bead, depth);
+      else wk.lathe(o, X, rim, rimCol, 48);
       // Hub shell, flanges, end caps.
       const half = front ? 0.05 : 0.071;
       const flL = -0.034;
       const flR = front ? 0.034 : 0.021;
-      wk.lathe(o, X, [[0.006, -half], [0.011, -half], [0.011, flL - 0.004], [0.024, flL - 0.002], [0.024, flL + 0.002], [0.012, flL + 0.004], [0.012, flR - 0.004], [0.024, flR - 0.002], [0.024, flR + 0.002], [0.011, flR + 0.004], [0.011, half], [0.006, half]], carbon, 16);
+      wk.lathe(o, X, [[0.006, -half], [0.011, -half], [0.011, flL - 0.004], [0.024, flL - 0.002], [0.024, flL + 0.002], [0.012, flL + 0.004], [0.012, flR - 0.004], [0.024, flR - 0.002], [0.024, flR + 0.002], [0.011, flR + 0.004], [0.011, half], [0.006, half]], hubCol, 16);
       // Spokes: radial front, two-cross rear; bladed.
       const count = 24;
       for (let k = 0; k < count; k++) {
@@ -294,7 +301,7 @@ export class BikeModel {
         const fx = left ? flL : flR;
         const h = v(fx, Math.sin(a) * 0.022, Math.cos(a) * 0.022);
         const rr = v(left ? -0.003 : 0.003, Math.sin(ar) * (inner + 0.002), Math.cos(ar) * (inner + 0.002));
-        wk.loft([h, rr], 0.0022, 0.0009, hex('#151515'), { seg: 4, capStart: false, capEnd: false, step: 1 });
+        wk.loft([h, rr], 0.0022, 0.0009, spokeCol, { seg: 4, capStart: false, capEnd: false, step: 1 });
       }
       // Rotor on the left.
       const rotorR = front ? 0.08 : 0.07;

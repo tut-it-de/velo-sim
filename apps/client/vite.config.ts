@@ -14,8 +14,9 @@ export default defineConfig({
     target: 'es2022',
     chunkSizeWarningLimit: 4000,
     rollupOptions: {
-      // studio.html: avatar preview and reference drawing; treestudio.html: tree generator preview (dev only).
-      input: { main: 'index.html', studio: 'studio.html', treestudio: 'treestudio.html' },
+      // studio.html: avatar preview and reference drawing; treestudio.html: tree generator preview;
+      // designsheet.html: jersey and wheel design references (all dev only)
+      input: { main: 'index.html', studio: 'studio.html', treestudio: 'treestudio.html', designsheet: 'designsheet.html' },
     },
   },
 });

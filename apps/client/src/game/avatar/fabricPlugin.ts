@@ -1,4 +1,4 @@
-import { MaterialPluginBase, type Material, type MaterialDefines } from '@babylonjs/core';
+import { MaterialPluginBase, type BaseTexture, type Material, type MaterialDefines, type UniformBuffer } from '@babylonjs/core';
 
 /**
  * Value noise in 3D for the fabric folds and weave (hash after Dave Hoskins, as in terrainMaterial.ts).
@@ -28,9 +28,36 @@ float veloFabNoise(vec3 p) {
  * Vertex positions are passed on as the noise space, so the folds move with the rider's limbs.
  */
 export class FabricPlugin extends MaterialPluginBase {
-  constructor(material: Material) {
-    super(material, 'VeloFabric', 200, {});
+  /**
+   * `jersey`: optional printed jersey (jerseyArt.ts), sampled through the second uv channel; vertices
+   * whose uv2 is negative keep their vertex colour.
+   */
+  constructor(
+    material: Material,
+    private readonly jersey: BaseTexture | null = null,
+  ) {
+    super(material, 'VeloFabric', 200, { VELO_JERSEY: false });
     this._enable(true);
+  }
+
+  override prepareDefines(defines: MaterialDefines): void {
+    (defines as unknown as Record<string, boolean>)['VELO_JERSEY'] = !!this.jersey;
+  }
+
+  override isReadyForSubMesh(): boolean {
+    return !this.jersey || this.jersey.isReady();
+  }
+
+  override getSamplers(samplers: string[]): void {
+    samplers.push('veloJerseyMap');
+  }
+
+  override bindForSubMesh(uniformBuffer: UniformBuffer): void {
+    if (this.jersey) uniformBuffer.setTexture('veloJerseyMap', this.jersey);
+  }
+
+  override getActiveTextures(active: BaseTexture[]): void {
+    if (this.jersey) active.push(this.jersey);
   }
 
   override getClassName(): string {
@@ -45,15 +72,20 @@ export class FabricPlugin extends MaterialPluginBase {
   override getCustomCode(shaderType: string): Record<string, string> | null {
     if (shaderType === 'vertex') {
       return {
-        CUSTOM_VERTEX_DEFINITIONS: 'varying vec3 vFabP;\nvarying float vFabKind;\n',
-        CUSTOM_VERTEX_MAIN_END: '#ifdef UV1\nvFabKind = uvUpdated.x;\n#else\nvFabKind = 1.0;\n#endif\nvFabP = positionUpdated;\n',
+        CUSTOM_VERTEX_DEFINITIONS: 'varying vec3 vFabP;\nvarying float vFabKind;\n#ifdef VELO_JERSEY\nvarying vec2 vJerUv;\n#endif\n',
+        CUSTOM_VERTEX_MAIN_END:
+          '#ifdef UV1\nvFabKind = uvUpdated.x;\n#else\nvFabKind = 1.0;\n#endif\nvFabP = positionUpdated;\n' +
+          '#ifdef VELO_JERSEY\n#ifdef UV2\nvJerUv = uv2Updated;\n#else\nvJerUv = vec2(-1.0);\n#endif\n#endif\n',
       };
     }
     if (shaderType !== 'fragment') return null;
     return {
-      CUSTOM_FRAGMENT_DEFINITIONS: `varying vec3 vFabP;\nvarying float vFabKind;\n${FABRIC_NOISE}`,
+      CUSTOM_FRAGMENT_DEFINITIONS: `varying vec3 vFabP;\nvarying float vFabKind;\n#ifdef VELO_JERSEY\nvarying vec2 vJerUv;\nuniform sampler2D veloJerseyMap;\n#endif\n${FABRIC_NOISE}`,
       CUSTOM_FRAGMENT_UPDATE_DIFFUSE: /* glsl */ `
 if (vFabKind > 0.5) {
+#ifdef VELO_JERSEY
+  if (vJerUv.x >= 0.0) diffuseColor *= texture2D(veloJerseyMap, vJerUv).rgb;
+#endif
   // soft folds, stretched across the body
   float veloFold = veloFabNoise(vec3(vFabP.x * 18.0, vFabP.y * 55.0, vFabP.z * 18.0));
   diffuseColor *= 0.9 + 0.16 * veloFold;

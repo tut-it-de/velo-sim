@@ -2,7 +2,8 @@
  * Avatar studio (dev page, studio.html): renders the bike and rider from the side, front, top and
  * three-quarter view, or the dimensioned reference drawing they are built from (?mode=blueprint).
  * Query: mode=rider|bike|blueprint, style=aero|allround|climber|endurance, crank=<rad>, rim=<mm>,
- * view=<0…3> (one view only), zoom, ty (target height for zoomed views), tz (shift along the bike).
+ * view=<0…3> (one view only), zoom, ty (target height for zoomed views), tz (shift along the bike),
+ * wheels=<catalog id>, kit=<jersey catalog id>, mirror=1 (views from the left).
  */
 import {
   Camera,
@@ -20,6 +21,7 @@ import {
   Vector3,
   Viewport,
 } from '@babylonjs/core';
+import { JERSEYS, WHEELS } from '@velo/equipment';
 import { RiderAvatar, type RiderLook } from '../game/rider';
 import { BODY, bikePoints, frameSpec, riderPose, solveJoint, type FrameStyle } from '../game/avatar/geometry';
 import { footPitch } from '../game/avatar/cyclist';
@@ -38,6 +40,10 @@ const look: RiderLook = {
   jerseyAccent: q.get('jerseyAccent') ?? '#f2c230',
   helmet: '#f4f4f4',
 };
+const wheelsItem = WHEELS.find((w) => w.id === q.get('wheels'));
+if (wheelsItem) Object.assign(look, { rim: wheelsItem.look.rim, rimDepthMm: wheelsItem.rimDepthMm, wheel: wheelsItem.look });
+const kit = JERSEYS.find((j) => j.id === q.get('kit'));
+if (kit) Object.assign(look, { jersey: kit.look.jersey, jerseyAccent: kit.look.accent, helmet: kit.look.helmet, jerseyDesign: kit.look.design, skinsuit: kit.cut === 'skinsuit' });
 
 type View = { name: string; pos: Vector3; target: Vector3; up?: Vector3; ortho?: number; vp: [number, number, number, number] };
 const VIEWS: View[] = [
@@ -80,6 +86,8 @@ function studio3d(withRider: boolean): void {
   const only = q.get('view');
   const zoom = Number(q.get('zoom') ?? 1);
   const views = only === null ? VIEWS : [{ ...VIEWS[Number(only)]!, vp: [0, 0, 1, 1] as View['vp'] }];
+  // ?mirror=1 looks from the other side (non-drive side)
+  if (q.get('mirror')) for (const v of views) v.pos = new Vector3(-v.pos.x, v.pos.y, v.pos.z);
   const cams = views.map((view) => {
     let v = view;
     const cam = new UniversalCamera(v.name, v.pos, scene);

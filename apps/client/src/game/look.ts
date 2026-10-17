@@ -10,9 +10,11 @@ export function lookFromLoadout(loadout: Loadout): RiderLook {
     frameStyle: bike.category,
     rim: wheels.look.rim,
     rimDepthMm: wheels.rimDepthMm,
+    wheel: wheels.look,
     jersey: jersey.look.jersey,
     jerseyAccent: jersey.look.accent,
     helmet: jersey.look.helmet,
     skinsuit: jersey.cut === 'skinsuit',
+    jerseyDesign: jersey.look.design,
   };
 }

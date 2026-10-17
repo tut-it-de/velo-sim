@@ -1,7 +1,9 @@
 import { Bone, BoundingInfo, Color3, Matrix, Mesh, Quaternion, Skeleton, TransformNode, Vector3, type Scene } from '@babylonjs/core';
 import { BODY, riderPose, solveJoint, type BikePoints, type RiderPose } from './geometry';
 import { MeshKit, basis, hex, type Paint } from './meshKit';
-import { avatarMaterials } from './materials';
+import type { JerseyDesign } from '@velo/equipment';
+import { avatarMaterials, jerseyMaterial } from './materials';
+import { sleeveUv, torsoUv } from './jerseyArt';
 
 export interface CyclistLook {
   jersey: string;
@@ -9,6 +11,8 @@ export interface CyclistLook {
   helmet?: string;
   skinsuit?: boolean;
   skin?: string;
+  /** Printed jersey (pattern, colours, lettering); without it the jersey is plain `jersey`/`jerseyAccent`. */
+  jerseyDesign?: JerseyDesign;
 }
 
 const v = (x: number, y: number, z: number) => new Vector3(x, y, z);
@@ -107,8 +111,12 @@ export class Cyclist {
     const tl = cumulative(torso);
     const seat = tl[2]!;
     const tTotal = tl[tl.length - 1]!;
+    const design = look.jerseyDesign;
+    const white = Color3.White();
+    const jerseyT = (tRaw: number) => (tRaw * tTotal - seat) / (tTotal - seat);
     const jerseyPaint: Paint = (tRaw, a) => {
-      const t = (tRaw * tTotal - seat) / (tTotal - seat);
+      const t = jerseyT(tRaw);
+      if (design) return t < 0.1 ? shorts : white;
       const flank = Math.abs(Math.cos(a));
       const up = Math.sin(a);
       if (t < 0.1) return shorts;
@@ -118,7 +126,12 @@ export class Cyclist {
       if (t < 0.3 && up > 0.5) return shade(jersey, Math.abs(Math.cos(a * 3)) < 0.12 || (t > 0.27 && t < 0.29) ? 0.62 : 0.9);
       return jersey;
     };
-    body.loft(torso, tw, td, jerseyPaint, { hint: back, seg: 24 });
+    // printed jersey: u around by arc length (0 right seam, 0.25 chest, 0.75 back), s from hem to collar
+    const torsoMap = (tRaw: number, _a: number, arc: number): [number, number] | null => {
+      const t = jerseyT(tRaw);
+      return t < 0.1 ? null : torsoUv(1 - arc, (t - 0.1) / 0.9);
+    };
+    body.loft(torso, tw, td, jerseyPaint, { hint: back, seg: design ? 48 : 24, map: design ? torsoMap : undefined });
     // Glutes on the saddle.
     for (const sx of [-1, 1]) body.ellipsoid(v(0.065 * sx, pose.hip.y - 0.025, pose.hip.z - 0.055), v(0.075, 0.07, 0.085), shorts, undefined, 20, 14);
 
@@ -166,7 +179,9 @@ export class Cyclist {
       const S = m(pose.shoulder);
       const E = m(pose.elbow);
       const W = m(pose.wrist);
-      body.ellipsoid(S.add(v(-0.004 * sx, 0.004, -0.004)), v(0.052, 0.05, 0.056), accent, undefined, 12, 8);
+      if (design) body.texAt = sleeveUv(0.25, 0.03);
+      body.ellipsoid(S.add(v(-0.004 * sx, 0.004, -0.004)), v(0.052, 0.05, 0.056), design ? white : accent, undefined, 12, 8);
+      body.texAt = null;
       // One skin from the shoulder over a rounded elbow to the wrist, so the joint has no seam.
       const pts: Vector3[] = [];
       const rw: number[] = [];
@@ -203,7 +218,17 @@ export class Cyclist {
       const total = len[len.length - 1]!;
       const sleeve = (0.5 * BODY.upperArm) / total;
       const cuff = 1 - (0.08 * BODY.forearm) / total;
-      body.loft(pts, rw, rd, (t) => (t < sleeve ? accent : t < sleeve + 0.03 ? shade(accent, 0.75) : t > cuff ? glove : skin), { seg: 16, hint, shift: sh, step: 0.025 });
+      const hem = sleeve + 0.03;
+      // sleeve print: u around the arm from its seam (mirrored on the left so lettering reads the same
+      // way), s shoulder → cuff; u 0.25 / 0.75 (where the sleeve marks sit) face the elbow point and the crook
+      const sleeveMap = (t: number, _a: number, arc: number): [number, number] | null => (t > hem ? null : sleeveUv(sx > 0 ? arc : 1 - arc, t / hem));
+      body.loft(
+        pts,
+        rw,
+        rd,
+        (t) => (t < sleeve ? (design ? white : accent) : t < hem ? (design ? white : shade(accent, 0.75)) : t > cuff ? glove : skin),
+        { seg: design ? 24 : 16, hint, shift: sh, step: 0.025, map: design ? sleeveMap : undefined },
+      );
       // Hand wrapped around the hood.
       const hood = m(bike.hood);
       const dir = hood.subtract(W).normalize();
@@ -211,7 +236,7 @@ export class Cyclist {
       body.ellipsoid(hood.add(v(-0.016 * sx, -0.012, 0.014)), v(0.012, 0.02, 0.012), glove, undefined, 8, 6);
     }
 
-    body.build(`${name}-body`, scene, mats.cloth, parent);
+    body.build(`${name}-body`, scene, design ? jerseyMaterial(scene, design) : mats.cloth, parent);
     shell.build(`${name}-helmet`, scene, mats.gloss, parent);
 
     // --- Legs: one skinned mesh, bones at pelvis, hips, knees and ankles -----------------------
