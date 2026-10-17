@@ -1,24 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { settingsStore } from '../state/settings';
-import { refreshAccount } from '../net/api';
+import { accountStore, refreshAccount } from '../net/api';
 import { refreshStravaStatus } from '../net/strava';
 import { deviceManager } from '../devices/deviceManager';
 import { useStore } from '../state/store';
-import { uiStore } from '../state/ui';
+import { pageStore, uiStore, type Page } from '../state/ui';
 import { ActivitiesPage } from './ActivitiesPage';
 import { BluetoothChooser } from './BluetoothChooser';
 import { StatusDot } from './components';
 import { DevicesPage } from './DevicesPage';
 import { GaragePage } from './GaragePage';
+import { LoginPage } from './LoginPage';
 import { balance, garageStore } from '../state/garage';
 import { formatCoins } from '@velo/equipment';
 import { RidePage } from './RidePage';
 import { SettingsPage } from './SettingsPage';
 import { useSimulatorKeys } from './useSimulatorKeys';
 
-type Page = 'ride' | 'garage' | 'activities' | 'devices' | 'settings';
-
-const PAGES: Array<{ id: Page; label: string }> = [
+const PAGES: Array<{ id: Exclude<Page, 'login'>; label: string }> = [
   { id: 'ride', label: 'Fahren' },
   { id: 'garage', label: 'Garage' },
   { id: 'activities', label: 'Aktivitäten' },
@@ -27,7 +26,9 @@ const PAGES: Array<{ id: Page; label: string }> = [
 ];
 
 export function App() {
-  const [page, setPage] = useState<Page>('ride');
+  const page = useStore(pageStore);
+  const setPage = (p: Page) => pageStore.set(p);
+  const account = useStore(accountStore);
   const slots = useStore(deviceManager.slots);
   const { immersive } = useStore(uiStore);
   const garage = useStore(garageStore);
@@ -60,6 +61,15 @@ export function App() {
           <StatusDot state={slots.trainer.state} label="Trainer" />
           <StatusDot state={slots.hrm.state} label="HF" />
         </div>
+        {account.user ? (
+          <button className="account-link" onClick={() => setPage('login')} title="Konto">
+            {account.user.name}
+          </button>
+        ) : (
+          <button className={`account-link login${page === 'login' ? ' active' : ''}`} onClick={() => setPage('login')}>
+            Anmelden
+          </button>
+        )}
         <button className="wallet-chip" onClick={() => setPage('garage')} title="Watt-Taler – zur Garage">
           {formatCoins(balance(garage))} <span className="muted">Taler</span>
         </button>
@@ -69,6 +79,7 @@ export function App() {
       {page === 'activities' && <ActivitiesPage />}
       {page === 'devices' && <DevicesPage />}
       {page === 'settings' && <SettingsPage />}
+      {page === 'login' && <LoginPage />}
       <BluetoothChooser />
     </div>
   );

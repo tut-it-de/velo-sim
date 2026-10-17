@@ -23,6 +23,10 @@ export interface RiderInfo {
   bot?: boolean;
 }
 
+/** Short animations other riders see (V: a puff from the vape). */
+export const EMOTES = ['vape'] as const;
+export type Emote = (typeof EMOTES)[number];
+
 /** [id, distance m, speed m/s, lateral m, power W, cadence rpm] */
 export type RiderTuple = [string, number, number, number, number, number];
 
@@ -31,6 +35,7 @@ export type ClientMessage =
   | { type: 'state'; d: number; v: number; p: number; c: number; lat: number; hr?: number }
   | { type: 'chat'; text: string }
   | { type: 'rideOn'; to: string }
+  | { type: 'emote'; e: Emote }
   | { type: 'bye' };
 
 export interface RideSummaryDTO {
@@ -49,6 +54,7 @@ export type ServerMessage =
   | { type: 'snapshot'; t: number; r: RiderTuple[] }
   | { type: 'chat'; from: string; name: string; text: string; at: number }
   | { type: 'rideOn'; from: string; name: string; to: string }
+  | { type: 'emote'; from: string; e: Emote }
   | { type: 'rideSummary'; summary: RideSummaryDTO }
   | { type: 'error'; message: string };
 
@@ -110,6 +116,8 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     case 'rideOn':
       if (!isStr(o.to, 64)) return null;
       return { type: 'rideOn', to: o.to };
+    case 'emote':
+      return (EMOTES as readonly unknown[]).includes(o.e) ? { type: 'emote', e: o.e as Emote } : null;
     case 'bye':
       return { type: 'bye' };
     default:

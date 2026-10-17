@@ -4,6 +4,10 @@ import { countryCode, encodeTuple, parseClientMessage } from '../src';
 const loadout = { bike: 'bike-basis', wheels: 'wheels-basis', jersey: 'jersey-club-orange' };
 
 describe('parseClientMessage', () => {
+  it('accepts known emotes only', () => {
+    expect(parseClientMessage(JSON.stringify({ type: 'emote', e: 'vape' }))).toEqual({ type: 'emote', e: 'vape' });
+    expect(parseClientMessage(JSON.stringify({ type: 'emote', e: 'dance' }))).toBeNull();
+  });
   it('accepts a valid hello and normalises values', () => {
     const m = parseClientMessage(JSON.stringify({ type: 'hello', v: 1, name: '  Ali  ', routeId: 'kuestenrunde', loadout, weightKg: 500 }));
     expect(m).toEqual({ type: 'hello', v: 1, token: undefined, name: 'Ali', routeId: 'kuestenrunde', loadout, weightKg: 200, bot: false, simulated: false });

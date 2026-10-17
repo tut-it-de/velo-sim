@@ -39,6 +39,7 @@ export interface Rider {
   c: number;
   updatedAt: number;
   lastChatAt: number;
+  lastEmoteAt: number;
   telemetry: Telemetry;
 }
 
@@ -108,6 +109,12 @@ export class Room {
         r.conn.send(m);
         break;
       }
+      case 'emote':
+        // one puff takes ~8 s; anything faster is spam
+        if (now - r.lastEmoteAt < 8000) return;
+        r.lastEmoteAt = now;
+        for (const other of this.riders.values()) if (other.id !== r.id) other.conn.send({ type: 'emote', from: r.id, e: msg.e });
+        break;
       default:
         break;
     }
@@ -237,6 +244,7 @@ export class Game {
       c: 0,
       updatedAt: 0,
       lastChatAt: 0,
+      lastEmoteAt: 0,
       telemetry: { startedAt: now, lastAt: now, kilojoules: 0, maxDistance: 0, lastDistance: 0, lastSpeed: 0, window: [], flags: new Set() },
     };
     const room = this.roomFor(hello.routeId);

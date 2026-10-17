@@ -14,7 +14,7 @@ import { creditRide, garageStore } from '../state/garage';
 import { lookFromLoadout } from '../game/look';
 import { settingsStore, updateSettings } from '../state/settings';
 import { useStore } from '../state/store';
-import { uiStore } from '../state/ui';
+import { pageStore, uiStore } from '../state/ui';
 import { ElevationProfile } from './ElevationProfile';
 import { Hud } from './Hud';
 import { RideSummary } from './RideSummary';
@@ -146,6 +146,7 @@ function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean, wo
   const [workout, setWorkout] = useState<Workout | undefined>();
   const [online, setOnline] = useState<Record<string, number> | null>(null);
   const hasServer = !!settings.serverUrl.trim();
+  const account = useStore(accountStore);
 
   useEffect(() => {
     if (!hasServer) return;
@@ -202,6 +203,15 @@ function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean, wo
               <strong>Kein Trainer verbunden.</strong> Verbinde deinen KICKR unter „Geräte“ – oder teste mit dem Simulator.
             </span>
             {!settings.useSimulator || slots.trainer.state === 'disconnected' ? <button onClick={useSimulator}>Simulator starten</button> : null}
+          </div>
+        )}
+
+        {!account.user && (
+          <div className="callout neutral">
+            <span className="callout-text">
+              <strong>Du fährst allein.</strong> Mit einem Konto siehst du andere Fahrer auf der Strecke, und deine Taler liegen sicher auf dem Server.
+            </span>
+            <button onClick={() => pageStore.set('login')}>Anmelden</button>
           </div>
         )}
 
@@ -378,6 +388,9 @@ function RideView({
         if (net) {
           net.on('joined', (info) => created.ensureRider(info.id, lookFromLoadout(info.loadout)));
           net.on('left', (id) => created.removeRider(id));
+          net.on('emote', ({ from, e }) => {
+            if (e === 'vape') created.vapeOther(from);
+          });
           net.connect();
         }
         created.setFrameProvider((dt) => s.frame(dt));
@@ -408,6 +421,7 @@ function RideView({
         setCamera(next);
       } else if (e.key === 'v' || e.key === 'V') {
         world.vape();
+        session.net?.sendEmote('vape');
       } else if (e.key === 'p' || e.key === 'P') {
         const st = session.snapshot.get().state;
         if (st === 'riding') session.pause();

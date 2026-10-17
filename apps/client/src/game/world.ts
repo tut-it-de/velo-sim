@@ -198,6 +198,11 @@ export class GameWorld {
     this.camPos = undefined; // snap instead of flying across the map
   }
 
+  /** Another rider takes a puff (multiplayer emote). */
+  vapeOther(id: string): void {
+    this.others.get(id)?.vape();
+  }
+
   /** Other riders (bots now, multiplayer later). */
   ensureRider(id: string, look: RiderLook): RiderAvatar {
     let r = this.others.get(id);

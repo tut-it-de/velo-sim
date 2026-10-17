@@ -1,5 +1,5 @@
 import { Emitter } from '@velo/ble';
-import { PROTOCOL_VERSION, type LoadoutDTO, type RiderInfo, type RideSummaryDTO, type ServerMessage } from '@velo/protocol';
+import { PROTOCOL_VERSION, type Emote, type LoadoutDTO, type RiderInfo, type RideSummaryDTO, type ServerMessage } from '@velo/protocol';
 import { Store } from '../state/store';
 import { webSocketUrl } from './serverUrl';
 
@@ -36,6 +36,7 @@ export interface NetState {
 type NetEvents = {
   joined: RiderInfo;
   left: string;
+  emote: { from: string; e: Emote };
   [key: string]: unknown;
 };
 
@@ -141,6 +142,9 @@ export class MultiplayerClient extends Emitter<NetEvents> {
       case 'rideOn':
         if (m.to === this.myId) this.patch({ lastRideOn: { name: m.name, at: Date.now() } });
         break;
+      case 'emote':
+        this.emit('emote', { from: m.from, e: m.e });
+        break;
       case 'rideSummary':
         this.summaryWaiter?.(m.summary);
         this.summaryWaiter = undefined;
@@ -165,6 +169,10 @@ export class MultiplayerClient extends Emitter<NetEvents> {
 
   sendRideOn(to: string): void {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ type: 'rideOn', to }));
+  }
+
+  sendEmote(e: Emote): void {
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ type: 'emote', e }));
   }
 
   /** Interpolated position of a remote rider (or extrapolated when samples are late). */

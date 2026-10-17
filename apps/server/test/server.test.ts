@@ -152,6 +152,8 @@ describe('server', () => {
     expect((await a.waitFor('chat')).text).toBe('Servus!');
     b.send({ type: 'rideOn', to: wa.id });
     expect((await a.waitFor('rideOn')).name).toBe('Ben');
+    b.send({ type: 'emote', e: 'vape' });
+    expect(await a.waitFor('emote')).toEqual({ type: 'emote', from: wb.id, e: 'vape' });
 
     b.ws.close();
     await a.waitFor('left', (m) => m.id === wb.id);
