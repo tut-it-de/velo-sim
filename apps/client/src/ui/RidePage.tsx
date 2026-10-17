@@ -174,7 +174,7 @@ function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean, wo
   const sel = routes.find((x) => x.r.id === routeId) ?? routes[0]!;
 
   const useSimulator = async () => {
-    updateSettings({ useSimulator: true });
+    await deviceManager.setSimulator(true);
     await deviceManager.connect('trainer');
     await deviceManager.connect('hrm');
   };

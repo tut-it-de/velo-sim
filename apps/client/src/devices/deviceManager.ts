@@ -13,7 +13,7 @@ import {
   type TrainerSimParams,
 } from '@velo/ble';
 import { log } from '../state/log';
-import { settingsStore } from '../state/settings';
+import { settingsStore, updateSettings } from '../state/settings';
 import { Store } from '../state/store';
 import { getBluetoothTransport } from './platform';
 
@@ -145,6 +145,18 @@ class DeviceManager {
     }
     this.patchSlot(slot, { state: 'disconnected', name: undefined });
     this.recompute({});
+  }
+
+  /**
+   * Switches between the simulator and real Bluetooth devices. Everything connected through the
+   * other transport is disconnected first, so "Verbinden" never reuses a device of the wrong kind.
+   */
+  async setSimulator(on: boolean): Promise<void> {
+    if (settingsStore.get().useSimulator === on) return;
+    const slots = this.slots.get();
+    await Promise.all((Object.keys(slots) as DeviceSlot[]).filter((k) => slots[k].state !== 'disconnected').map((k) => this.disconnect(k)));
+    updateSettings({ useSimulator: on });
+    log('info', on ? 'Simulator-Modus an' : 'Simulator-Modus aus – Verbinden nutzt Bluetooth');
   }
 
   /** Full GATT table of the trainer — paste this into an issue when something does not work. */

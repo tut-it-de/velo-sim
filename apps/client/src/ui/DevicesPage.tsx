@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { deviceManager, type DeviceSlot } from '../devices/deviceManager';
 import { platform } from '../devices/platform';
 import { logStore, logText } from '../state/log';
-import { settingsStore, updateSettings } from '../state/settings';
+import { settingsStore } from '../state/settings';
 import { useStore } from '../state/store';
 import { StatusDot, Tile, Toggle, fmt } from './components';
 
@@ -30,6 +30,16 @@ export function DevicesPage() {
         </div>
 
         {platform.bluetoothHint && !settings.useSimulator && <div className="notice">{platform.bluetoothHint}</div>}
+        {settings.useSimulator && (
+          <div className="notice row" style={{ justifyContent: 'space-between', gap: 16 }}>
+            <span>
+              <strong>Simulator-Modus ist an.</strong> „Verbinden“ nutzt den virtuellen KICKR, es öffnet sich kein Bluetooth-Fenster.
+            </span>
+            <button className="primary" onClick={() => void deviceManager.setSimulator(false)}>
+              Echte Geräte verwenden
+            </button>
+          </div>
+        )}
 
         <div className="card row" style={{ justifyContent: 'space-between', flexWrap: 'nowrap', gap: 24 }}>
           <div>
@@ -42,8 +52,8 @@ export function DevicesPage() {
           </div>
           <Toggle
             checked={settings.useSimulator}
-            onChange={(v) => updateSettings({ useSimulator: v })}
-            disabled={Object.values(slots).some((s) => s.state !== 'disconnected')}
+            onChange={(v) => void deviceManager.setSimulator(v)}
+            disabled={Object.values(slots).some((s) => s.state === 'connecting')}
             label={settings.useSimulator ? 'aktiv' : 'aus'}
           />
         </div>
@@ -65,7 +75,7 @@ export function DevicesPage() {
                     <button onClick={() => deviceManager.disconnect(slot)}>Trennen</button>
                   ) : (
                     <button className="primary" disabled={busy || (slot === 'cadence' && settings.useSimulator)} onClick={() => deviceManager.connect(slot)}>
-                      {busy ? 'Verbinde …' : 'Verbinden'}
+                      {busy ? 'Verbinde …' : settings.useSimulator ? 'Simulator verbinden' : 'Verbinden'}
                     </button>
                   )}
                 </div>
