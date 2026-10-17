@@ -172,6 +172,7 @@ export function buildRouteRibbon(
   const capMat = new StandardMaterial('wall-cap', scene);
   capMat.diffuseColor = new Color3(0.7, 0.67, 0.62);
   capMat.specularColor = new Color3(0.03, 0.03, 0.03);
+  capMat.backFaceCulling = false; // the slab ends are open where a wall stops
   if (detail) {
     // fine asphalt grain and stone courses on top of the base textures (one tile per 1.5 m along the lap, 2 m for stone)
     for (const m of [openMat, townMat]) applyDetail(m, scene, 'asphalt', [ROAD_DETAIL_ACROSS, texRepeat / 1.5], { diffuse: 0.45, bump: 0.5 });
@@ -341,15 +342,18 @@ export function buildRouteRibbon(
               [o, f.y - 0.05],
               [o, f.y + PARAPET_H],
               [o + PARAPET_W, f.y + PARAPET_H],
-              [o + PARAPET_W, f.y - 2.5],
+              [o + PARAPET_W, f.y - 6],
             ];
           }
           if (edge === EDGE.wall) {
             const top = f.y + c.wallH[side]![r]!;
+            // the back face reaches below the road: where the slope behind is lower than the crown,
+            // the wall stays a solid block instead of a shell you can look into
             return [
               [o, f.y - 0.05],
               [o, top],
               [o + WALL_THICK, top],
+              [o + WALL_THICK, f.y - 1.5],
             ];
           }
           return null;
@@ -432,6 +436,16 @@ export function buildRouteRibbon(
               walls.quad(a0, a1, b1, b0, facing * fa.rx, vertical ? 0 : 1, facing * fa.rz);
             }
           }
+          // end faces where a wall or parapet starts or stops, so it is solid seen from the side
+          const capEnd = (kk: number, prof: Array<[number, number]>, dir: number) => {
+            const fr = frames[kk]!;
+            const nx = -fr.rz * dir;
+            const nz = fr.rx * dir;
+            const ids = prof.map((p) => walls.vertex(fr.x + sg * fr.rx * p[0], p[1], fr.z + sg * fr.rz * p[0], nx, 0, nz, p[0] / STONE_REPEAT, p[1] / STONE_REPEAT));
+            for (let q = 1; q < ids.length - 1; q++) walls.tri(ids[0]!, ids[q]!, ids[q + 1]!, nx, 0, nz);
+          };
+          if (pa && (k === 0 || profileOf(k - 1)?.length !== pa.length)) capEnd(k, pa, -1);
+          if (pb && (k + 1 === rows.length - 1 || profileOf(k + 2)?.length !== pb.length)) capEnd(k + 1, pb, 1);
           if (c.edge[side]![r] === EDGE.rail && c.edge[side]![rows[k + 1]!.r] === EDGE.rail) {
             const fa = frames[k]!;
             const fb = frames[k + 1]!;
