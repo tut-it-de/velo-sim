@@ -2,6 +2,8 @@ import { Color3, DynamicTexture, StandardMaterial, type Scene } from '@babylonjs
 import type { JerseyDesign } from '@velo/equipment';
 import { JERSEY_TEX, paintJersey } from './jerseyArt';
 import { FabricPlugin } from './fabricPlugin';
+import { DecalPlugin } from './decalPlugin';
+import { FRAME_TEX_H, FRAME_TEX_W, decalFontsReady, paintFrameDecals, type DecalSlot } from './frameArt';
 
 export interface AvatarMaterials {
   /** Lacquered paint, helmet shell, lenses. */
@@ -55,6 +57,32 @@ export function jerseyMaterial(scene: Scene, design: JerseyDesign): StandardMate
     tex.anisotropicFilteringLevel = 8;
     m = make(scene, `jersey-${byKey.size}`, 0.12, 20);
     new FabricPlugin(m, tex);
+    byKey.set(key, m);
+  }
+  return m;
+}
+
+const frames = new WeakMap<Scene, Map<string, StandardMaterial>>();
+
+/** Frame paint with printed decals, one material per distinct set of decals (lacquered or satin). */
+export function frameMaterial(scene: Scene, finish: 'gloss' | 'satin', slots: DecalSlot[]): StandardMaterial {
+  let byKey = frames.get(scene);
+  if (!byKey) frames.set(scene, (byKey = new Map()));
+  const key = `${finish}|${JSON.stringify(slots)}`;
+  let m = byKey.get(key);
+  if (!m) {
+    const tex = new DynamicTexture(`frame-tex-${byKey.size}`, { width: FRAME_TEX_W, height: FRAME_TEX_H }, scene, true);
+    tex.hasAlpha = true;
+    const paint = () => {
+      paintFrameDecals(tex.getContext() as unknown as CanvasRenderingContext2D, slots);
+      tex.update();
+    };
+    paint();
+    // the wordmark fonts load lazily: repaint once they are there
+    void decalFontsReady(slots).then(() => tex.getInternalTexture() && paint());
+    tex.anisotropicFilteringLevel = 16;
+    m = finish === 'gloss' ? make(scene, `frame-${byKey.size}`, 0.7, 96) : make(scene, `frame-${byKey.size}`, 0.22, 28);
+    new DecalPlugin(m, tex);
     byKey.set(key, m);
   }
   return m;

@@ -1,7 +1,8 @@
 import { Color3, Curve3, Quaternion, Vector3 } from '@babylonjs/core';
 import type { FrameBuild } from '@velo/equipment';
 import type { BikePoints, FrameSpec, FrameStyle } from './geometry';
-import { AERO, MeshKit, ROUND, SQUIRCLE, hex, type Paint, type Profile } from './meshKit';
+import { AERO, MeshKit, ROUND, SQUIRCLE, frameAt, hex, type LoftOptions, type Paint, type Profile } from './meshKit';
+import { brandMark, decalUv, modelMark, type DecalMark, type DecalSlot, type FrameRow, type MarkStyle } from './frameArt';
 
 const X = new Vector3(1, 0, 0);
 const Y = new Vector3(0, 1, 0);
@@ -37,6 +38,10 @@ export interface FrameKit {
   metal: MeshKit;
   frame: Color3;
   accent: Color3;
+  /** Brand and model for the lettering; none prints nothing. */
+  label?: { brand: string; model: string };
+  /** Filled by the builders: the decorated tubes, painted into the frame's decal texture. */
+  decals: DecalSlot[];
 }
 
 const carbon = hex('#1b1c1f');
@@ -59,22 +64,61 @@ function scheme(k: FrameKit) {
     return frame;
   };
   const mark = (rear: boolean) => (build.paint === 'split' && rear ? frame : accent);
-  /**
-   * Paint for a tube from p0 to p1: the base colour (following the scheme along z) with lettering
-   * blocks on both flanks between t0 and t1 (t0 ≥ t1 for none).
-   */
-  const tube = (p0: Vector3, p1: Vector3, t0 = 0, t1 = 0, rear = false): Paint => (t, a) => {
-    const b = base(p0.z + (p1.z - p0.z) * t, rear);
-    const flank = Math.abs(Math.cos(a)) > 0.7;
-    if (!flank || t <= t0 || t >= t1) return b;
-    const u = (t - t0) / (t1 - t0);
-    return (u * 9) % 1 < 0.72 ? mark(rear) : b;
-  };
-  return { base, tube };
+  /** Paint for a tube from p0 to p1: the base colour, following the scheme along z. */
+  const tube = (p0: Vector3, p1: Vector3, rear = false): Paint => (t) => base(p0.z + (p1.z - p0.z) * t, rear);
+  return { base, tube, mark };
 }
 
 function profileOf(build: FrameBuild): Profile {
   return build.tubes === 'aero' ? AERO : build.tubes === 'squircle' ? SQUIRCLE : ROUND;
+}
+
+/** A wordmark to print: style, centre along the tube, cap height as a share of the tube depth, longest run. */
+interface Print {
+  style: MarkStyle;
+  at: number;
+  cap: number;
+  len: number;
+}
+
+/**
+ * Prints marks on a tube lofted through `pts` with mid-section half width `w`, half depth `d`:
+ * registers the tube's texture row and returns the loft's uv map. Flank lettering is
+ * `cap × d` high (d is the half depth across the flank) and turned to read along the tube from
+ * either side. The ink is the accent, white or black, whichever stands out most on the paint.
+ */
+function print(k: FrameKit, row: FrameRow, pts: Vector3[], w: number, d: number, profile: Profile, hint: Vector3 | undefined, prints: Print[], rear = false): LoftOptions['map'] {
+  if (!k.label) return undefined;
+  const map: LoftOptions['map'] = (t, _a, arc) => decalUv(row, t, arc);
+  if (k.decals.some((s) => s.row === row)) return map;
+  let length = 0;
+  for (let i = 1; i < pts.length; i++) length += Vector3.Distance(pts[i]!, pts[i - 1]!);
+  let perimeter = 0;
+  for (let i = 0; i < 64; i++) {
+    const [a0, b0] = profile((i / 64) * Math.PI * 2);
+    const [a1, b1] = profile(((i + 1) / 64) * Math.PI * 2);
+    perimeter += Math.hypot((a1 - a0) * w, (b1 - b0) * d);
+  }
+  const T = pts[pts.length - 1]!.subtract(pts[0]!).normalize();
+  const side = Vector3.Cross(frameAt(T, hint, null), T).normalize();
+  // read left to right: along +T when the screen's right (forwards from the drive side) agrees
+  const turn = (out: Vector3) => (Vector3.Dot(out.x > 0 ? Z : Z.negate(), T) >= 0 ? 0 : Math.PI);
+  const { base, mark } = scheme(k);
+  const along = [0, 0.25, 0.5, 0.75, 1].map((t) => base(pts[0]!.z + (pts[pts.length - 1]!.z - pts[0]!.z) * t, rear));
+  const color = ink(along, mark(rear));
+  const marks: DecalMark[] = prints.map((p) => ({ style: p.style, at: p.at, cap: p.cap * d, maxLen: p.len * length, color }));
+  k.decals.push({ row, length, perimeter, turn: [turn(side), turn(side.negate())], marks });
+  return map;
+}
+
+/** Lettering colour that stands out on every paint colour of the tube; the accent when it does. */
+function ink(paint: Color3[], accent: Color3): string {
+  const lum = (c: Color3) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  const score = (c: Color3) => Math.min(...paint.map((p) => Math.abs(lum(c) - lum(p)) + 0.35 * Math.hypot(c.r - p.r, c.g - p.g, c.b - p.b)));
+  if (score(accent) > 0.32) return accent.toHexString();
+  const white = hex('#f4f4f2');
+  const black = hex('#141416');
+  return (score(white) >= score(black) ? white : black).toHexString();
 }
 
 /** Rear derailleur, disc calipers and the chain path from the big ring over `via` to the sprocket. */
@@ -129,7 +173,8 @@ function fork(k: FrameKit, dk: number, paintAt: (p0: Vector3, p1: Vector3) => Pa
         : [crownSide, lerp(crownSide, onAxis, 0.55), lerp(crownSide, onAxis, 0.88), axleSide];
     const blade = smooth(ctrl, 4);
     const bn = blade.length;
-    paint.loft(blade, blade.map((_, i) => 0.0135 - (0.005 * i) / (bn - 1)), blade.map((_, i) => (0.022 - (0.009 * i) / (bn - 1)) * Math.sqrt(dk)), paintAt(crownSide, axleSide), { profile: prof, hint: Z, seg: 12 });
+    const map = k.label && print(k, 'fork', blade, 0.011, 0.018 * Math.sqrt(dk), prof, Z, [{ style: brandMark(k.label.brand), at: 0.5, cap: 0.75, len: 0.46 }], true);
+    paint.loft(blade, blade.map((_, i) => 0.0135 - (0.005 * i) / (bn - 1)), blade.map((_, i) => (0.022 - (0.009 * i) / (bn - 1)) * Math.sqrt(dk)), paintAt(crownSide, axleSide), { profile: prof, hint: Z, seg: 12, map: map || undefined });
     paint.box(P.frontAxle.add(v(0.053 * sx, 0.004, 0)), v(0.008, 0.026, 0.026), frame);
   }
   const crown = P.headBottom.subtract(up.scale(0.022));
@@ -153,23 +198,31 @@ export function diamondFrame(k: FrameKit): void {
   // --- Main triangle ---------------------------------------------------------------------------
   const htBot = P.headBottom.subtract(up.scale(0.014));
   const htTop = P.headTop.add(up.scale(0.006));
-  paint.loft([htBot, lerp(htBot, htTop, 0.5), htTop], [0.025 * fat, 0.022 * fat, 0.021 * fat], [0.026 * Math.sqrt(dk), 0.024 * Math.sqrt(dk), 0.023 * Math.sqrt(dk)], tube(htBot, htTop, 0.25, 0.75), { profile: prof, seg: 16 });
+  paint.loft([htBot, lerp(htBot, htTop, 0.5), htTop], [0.025 * fat, 0.022 * fat, 0.021 * fat], [0.026 * Math.sqrt(dk), 0.024 * Math.sqrt(dk), 0.023 * Math.sqrt(dk)], tube(htBot, htTop), { profile: prof, seg: 16 });
   // Head-tube badge.
   paint.ellipsoid(lerp(htBot, htTop, 0.55).add(Z.scale(0.022 * Math.sqrt(dk))), v(0.012, 0.022, 0.006), accent);
 
   const seatTop = P.seatCluster.add(P.seatUp.scale(0.045));
   const stFront = P.seatCluster.add(P.seatUp.scale(-0.01)).add(Z.scale(0.004));
   const ttFront = P.headTop.subtract(up.scale(0.03));
-  paint.loft([ttFront, lerp(ttFront, stFront, 0.5), stFront], [0.02 * fat, 0.017 * fat, 0.015 * fat], [0.018 * fat, 0.016 * fat, 0.014 * fat], tube(ttFront, stFront, 0.15, 0.3), { hint: Y, seg: 14, profile: build.tubes === 'round' || alu ? ROUND : SQUIRCLE });
+  const ttProf = build.tubes === 'round' || alu ? ROUND : SQUIRCLE;
+  const ttPts = [ttFront, lerp(ttFront, stFront, 0.5), stFront];
+  const label = k.label;
+  const ttMap = label && print(k, 'top', ttPts, 0.017 * fat, 0.016 * fat, ttProf, Y, [{ style: modelMark(label.model), at: 0.5, cap: 0.85, len: 0.4 }]);
+  paint.loft(ttPts, [0.02 * fat, 0.017 * fat, 0.015 * fat], [0.018 * fat, 0.016 * fat, 0.014 * fat], tube(ttFront, stFront), { hint: Y, seg: 14, profile: ttProf, map: ttMap || undefined });
 
   const dtTop = P.headBottom.add(up.scale(0.03));
   const dtBot = P.bb.add(v(0, 0.012, 0.012));
-  paint.loft([dtBot, lerp(dtBot, dtTop, 0.15), lerp(dtBot, dtTop, 0.6), dtTop], [0.034 * fat, 0.03 * fat, 0.025 * fat, 0.024 * fat], [0.026 * dk * fat, 0.024 * dk * fat, 0.022 * dk * fat, 0.022 * dk * fat], tube(dtBot, dtTop, 0.3, 0.82), { profile: prof, seg: 16 });
+  const dtPts = [dtBot, lerp(dtBot, dtTop, 0.15), lerp(dtBot, dtTop, 0.6), dtTop];
+  const dtMap = label && print(k, 'down', dtPts, 0.027 * fat, 0.023 * dk * fat, prof, undefined, [{ style: brandMark(label.brand), at: 0.5, cap: 1.05, len: 0.6 }]);
+  paint.loft(dtPts, [0.034 * fat, 0.03 * fat, 0.025 * fat, 0.024 * fat], [0.026 * dk * fat, 0.024 * dk * fat, 0.022 * dk * fat, 0.022 * dk * fat], tube(dtBot, dtTop), { profile: prof, seg: 16, map: dtMap || undefined });
 
   const stBot = P.bb.add(P.seatUp.scale(0.01));
   const mastTop = P.saddleTop.subtract(P.seatUp.scale(0.11));
   const stEnd = build.seatpost === 'mast' ? mastTop : seatTop;
-  paint.loft([stBot, lerp(stBot, seatTop, 0.3), seatTop, ...(build.seatpost === 'mast' ? [stEnd] : [])], [0.024 * fat, 0.017 * fat, 0.016 * fat, ...(build.seatpost === 'mast' ? [0.016] : [])], [0.022 * Math.sqrt(dk) * fat, 0.018 * dk * fat, 0.017 * dk * fat, ...(build.seatpost === 'mast' ? [0.017 * dk] : [])], tube(stBot, stEnd, 0.62, 0.8), { profile: prof, seg: 14 });
+  const stPts = [stBot, lerp(stBot, seatTop, 0.3), seatTop, ...(build.seatpost === 'mast' ? [stEnd] : [])];
+  const stMap = label && print(k, 'seat', stPts, 0.017 * fat, 0.018 * dk * fat, prof, undefined, [{ style: brandMark(label.brand), at: build.seatpost === 'mast' ? 0.4 : 0.48, cap: 0.75, len: 0.44 }]);
+  paint.loft(stPts, [0.024 * fat, 0.017 * fat, 0.016 * fat, ...(build.seatpost === 'mast' ? [0.016] : [])], [0.022 * Math.sqrt(dk) * fat, 0.018 * dk * fat, 0.017 * dk * fat, ...(build.seatpost === 'mast' ? [0.017 * dk] : [])], tube(stBot, stEnd), { profile: prof, seg: 14, map: stMap || undefined });
   if (build.seatpost !== 'mast') parts.disc(seatTop.subtract(P.seatUp.scale(0.006)), P.seatUp, 0.019 * Math.max(1, dk * 0.8), 0.014, carbon, 16);
 
   paint.disc(P.bb, X, 0.024 * fat, 0.088, base(P.bb.z, false), 20);
@@ -180,23 +233,23 @@ export function diamondFrame(k: FrameKit): void {
     const cs0 = P.bb.add(v(0.032 * sx, 0.004, -0.018));
     const cs1 = lerp(P.bb, P.rearAxle, 0.45).add(v(0.052 * sx, sx > 0 ? -0.006 : 0.004, 0));
     const cs2 = P.rearAxle.add(v(0.062 * sx, 0.01, 0.022));
-    paint.loft(smooth([cs0, cs1, cs2], 4), [0.015, 0.013, 0.011, 0.01, 0.009, 0.008, 0.0075, 0.007, 0.0068].map((x) => x * fat), [0.021, 0.019, 0.017, 0.015, 0.013, 0.012, 0.011, 0.01, 0.0095].map((x) => x * fat), tube(cs0, cs2, 0, 0, true), { profile: alu ? ROUND : SQUIRCLE, seg: 10 });
+    paint.loft(smooth([cs0, cs1, cs2], 4), [0.015, 0.013, 0.011, 0.01, 0.009, 0.008, 0.0075, 0.007, 0.0068].map((x) => x * fat), [0.021, 0.019, 0.017, 0.015, 0.013, 0.012, 0.011, 0.01, 0.0095].map((x) => x * fat), tube(cs0, cs2, true), { profile: alu ? ROUND : SQUIRCLE, seg: 10 });
     const ss0 = ssTop.add(v(0.012 * sx, 0, -0.012));
     const ss2 = P.rearAxle.add(v(0.06 * sx, 0.02, 0.006));
     const ctrl =
       build.stays === 'wave'
         ? [ss0, lerp(ss0, ss2, 0.3).add(v(0.034 * sx, 0.018, 0)), lerp(ss0, ss2, 0.62).add(v(0.04 * sx, -0.016, 0)), ss2]
         : [ss0, lerp(ss0, ss2, 0.35).add(v(0.03 * sx, 0, 0)), ss2];
-    paint.loft(smooth(ctrl, 4), smooth(ctrl, 4).map((_, i, all) => (0.0095 - (0.0035 * i) / (all.length - 1)) * fat), aero ? 0.012 : 0.0095 * fat, tube(ss0, ss2, 0.82, 1.01, true), { hint: Z, seg: 10 });
+    paint.loft(smooth(ctrl, 4), smooth(ctrl, 4).map((_, i, all) => (0.0095 - (0.0035 * i) / (all.length - 1)) * fat), aero ? 0.012 : 0.0095 * fat, tube(ss0, ss2, true), { hint: Z, seg: 10 });
     paint.box(P.rearAxle.add(v(0.062 * sx, 0.006, 0.006)), v(0.008, 0.03, 0.034), base(P.rearAxle.z, true));
   }
   if (build.window) {
     // the top tube carries on behind the seat tube and curves down into the stays around an opening
     const back = P.seatCluster.subtract(Z.scale(0.075)).subtract(P.seatUp.scale(0.02));
     const pts = smooth([stFront.subtract(Z.scale(0.01)), back, lerp(back, ssTop.subtract(Z.scale(0.012)), 0.6), ssTop.subtract(Z.scale(0.012))], 4);
-    paint.loft(pts, 0.014, 0.013, tube(stFront, ssTop, 0, 0, true), { hint: Z, seg: 12, profile: SQUIRCLE });
+    paint.loft(pts, 0.014, 0.013, tube(stFront, ssTop, true), { hint: Z, seg: 12, profile: SQUIRCLE });
   }
-  fork(k, dk, (p0, p1) => tube(p0, p1, 0.6, 0.93, true));
+  fork(k, dk, (p0, p1) => tube(p0, p1, true));
 
   if (alu) {
     // weld beads where the tubes meet
@@ -309,15 +362,18 @@ export function recumbentFrame(k: FrameKit): void {
   const htBot = P.headBottom.subtract(P.steerUp.scale(0.014));
   const htTop = P.headTop.add(P.steerUp.scale(0.01));
   paint.loft([htBot, htTop], 0.026, 0.028, frame, { seg: 16 });
-  fork(k, 1.1, (p0, p1) => tube(p0, p1, 0.55, 0.9));
+  fork(k, 1.1, (p0, p1) => tube(p0, p1));
   paint.disc(P.steererTop.add(P.steerUp.scale(0.004)), P.steerUp, 0.017, 0.008, darkAlloy, 16);
 
   const under = v(0, S.y - 0.13, S.z - 0.02);
   const beam = smooth([lerp(htBot, htTop, 0.55), v(0, 0.66, 0.28), v(0, 0.58, 0.08), under], 5);
-  paint.loft(beam, beam.map((_, i) => 0.03 - (0.008 * i) / (beam.length - 1)), beam.map((_, i) => 0.04 - (0.01 * i) / (beam.length - 1)), tube(beam[0]!, under, 0.25, 0.6), { hint: Y, seg: 16, profile: SQUIRCLE });
+  const label = k.label;
+  const beamMap = label && print(k, 'down', beam, 0.026, 0.035, SQUIRCLE, Y, [{ style: brandMark(label.brand), at: 0.5, cap: 0.75, len: 0.42 }]);
+  paint.loft(beam, beam.map((_, i) => 0.03 - (0.008 * i) / (beam.length - 1)), beam.map((_, i) => 0.04 - (0.01 * i) / (beam.length - 1)), tube(beam[0]!, under), { hint: Y, seg: 16, profile: SQUIRCLE, map: beamMap || undefined });
   const boomStart = lerp(htBot, htTop, 0.9).subtract(Z.scale(0.01));
   const boom = smooth([boomStart, lerp(boomStart, P.bb, 0.5).add(Z.scale(-0.015)), P.bb.subtract(v(0, 0.01, 0.01))], 4);
-  paint.loft(boom, 0.021, 0.024, tube(boomStart, P.bb, 0.3, 0.7), { hint: Z, seg: 14 });
+  const boomMap = label && print(k, 'top', boom, 0.021, 0.024, ROUND, Z, [{ style: modelMark(label.model), at: 0.42, cap: 0.6, len: 0.5 }]);
+  paint.loft(boom, 0.021, 0.024, tube(boomStart, P.bb), { hint: Z, seg: 14, map: boomMap || undefined });
   paint.disc(P.bb, X, 0.024, 0.088, frame, 20);
   // front derailleur on the boom below the rings
   const fd = lerp(P.bb, boomStart, 0.32);
@@ -329,10 +385,10 @@ export function recumbentFrame(k: FrameKit): void {
   for (const sx of [-1, 1]) {
     const cs0 = under.add(v(0.022 * sx, 0, -0.01));
     const cs2 = P.rearAxle.add(v(0.062 * sx, 0.01, 0.02));
-    paint.loft(smooth([cs0, lerp(cs0, cs2, 0.5).add(v(0.04 * sx, 0, 0)), cs2], 4), [0.016, 0.014, 0.012, 0.011, 0.01, 0.0095, 0.009, 0.0085, 0.008], [0.022, 0.02, 0.018, 0.016, 0.014, 0.012, 0.011, 0.01, 0.01], tube(cs0, cs2, 0, 0, true), { profile: SQUIRCLE, seg: 10 });
+    paint.loft(smooth([cs0, lerp(cs0, cs2, 0.5).add(v(0.04 * sx, 0, 0)), cs2], 4), [0.016, 0.014, 0.012, 0.011, 0.01, 0.0095, 0.009, 0.0085, 0.008], [0.022, 0.02, 0.018, 0.016, 0.014, 0.012, 0.011, 0.01, 0.01], tube(cs0, cs2, true), { profile: SQUIRCLE, seg: 10 });
     const ss0 = stayTop.add(v(0.05 * sx, 0, 0));
     const ss2 = P.rearAxle.add(v(0.06 * sx, 0.02, 0.006));
-    paint.loft(smooth([ss0, lerp(ss0, ss2, 0.4).add(v(0.02 * sx, 0, 0)), ss2], 4), 0.009, 0.011, tube(ss0, ss2, 0.15, 0.45, true), { hint: Z, seg: 10 });
+    paint.loft(smooth([ss0, lerp(ss0, ss2, 0.4).add(v(0.02 * sx, 0, 0)), ss2], 4), 0.009, 0.011, tube(ss0, ss2, true), { hint: Z, seg: 10 });
     paint.box(P.rearAxle.add(v(0.062 * sx, 0.006, 0.006)), v(0.008, 0.03, 0.034), frame);
   }
 

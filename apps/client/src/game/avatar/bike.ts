@@ -3,7 +3,7 @@ import type { FrameBuild } from '@velo/equipment';
 import { bikePoints, frameSpec, type BikePoints, type FrameStyle } from './geometry';
 import { RING_X, SPROCKETS, SPROCKET_X, defaultBuild, diamondFrame, pitchRadius, recumbentFrame, type FrameKit } from './frames';
 import { MeshKit, SQUIRCLE, basis, hex } from './meshKit';
-import { avatarMaterials } from './materials';
+import { avatarMaterials, frameMaterial } from './materials';
 import { buildRim } from './rimMesh';
 import type { WheelLook } from './wheelArt';
 
@@ -17,6 +17,8 @@ export interface BikeLook {
   wheel?: WheelLook;
   /** Brand-specific frame build; without it the category's typical frame. */
   build?: FrameBuild;
+  /** Brand and model printed on the frame. */
+  label?: { brand: string; model: string };
 }
 
 const X = new Vector3(1, 0, 0);
@@ -52,11 +54,12 @@ export class BikeModel {
     const alloy = hex('#a9adb3');
     const darkAlloy = hex('#55585e');
     const build = look.build ?? defaultBuild(look.frameStyle);
-    const kit: FrameKit = { P, spec, build, paint, parts, metal, frame, accent };
+    const kit: FrameKit = { P, spec, build, paint, parts, metal, frame, accent, label: look.label, decals: [] };
     if (spec.layout === 'recumbent') recumbentFrame(kit);
     else diamondFrame(kit);
     // alloy frames are satin, carbon ones lacquered
-    paint.build(`${name}-frame`, scene, build.material === 'alu' ? mats.satin : mats.gloss, this.root);
+    const finish = build.material === 'alu' ? 'satin' : 'gloss';
+    paint.build(`${name}-frame`, scene, kit.decals.length ? frameMaterial(scene, finish, kit.decals) : mats[finish], this.root);
     parts.build(`${name}-parts`, scene, mats.satin, this.root);
     metal.build(`${name}-metal`, scene, mats.metal, this.root);
 

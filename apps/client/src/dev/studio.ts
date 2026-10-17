@@ -41,7 +41,7 @@ const look: RiderLook = {
   helmet: '#f4f4f4',
 };
 const bikeItem = BIKES.find((b) => b.id === q.get('bike'));
-if (bikeItem) Object.assign(look, { frame: bikeItem.look.frame, frameAccent: bikeItem.look.accent, frameStyle: bikeItem.category, build: bikeItem.look.build });
+if (bikeItem) Object.assign(look, { frame: bikeItem.look.frame, frameAccent: bikeItem.look.accent, frameStyle: bikeItem.category, build: bikeItem.look.build, label: { brand: bikeItem.brand, model: bikeItem.model } });
 const wheelsItem = WHEELS.find((w) => w.id === q.get('wheels'));
 if (wheelsItem) Object.assign(look, { rim: wheelsItem.look.rim, rimDepthMm: wheelsItem.rimDepthMm, wheel: wheelsItem.look });
 const kit = JERSEYS.find((j) => j.id === q.get('kit'));

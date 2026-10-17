@@ -45,7 +45,7 @@ export interface LoftOptions {
 
 const tmp = new Vector3();
 
-function frameAt(t: Vector3, hint: Vector3 | undefined, prev: Vector3 | null): Vector3 {
+export function frameAt(t: Vector3, hint: Vector3 | undefined, prev: Vector3 | null): Vector3 {
   const h = hint ?? (Math.abs(t.z) > 0.85 ? new Vector3(0, 1, 0) : new Vector3(0, 0, 1));
   let n = h.subtract(t.scale(Vector3.Dot(h, t)));
   if (n.lengthSquared() < 1e-6 && prev) n = prev.subtract(t.scale(Vector3.Dot(prev, t)));
