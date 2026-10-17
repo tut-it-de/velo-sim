@@ -959,7 +959,7 @@ Grundlagen aus dem Code:
 | P6.2 | 6A | Fahrtwind-Unschärfe am Bildrand (nur Ultra) | fertig |
 | P6.3 | 6A | Ferner See ohne weißes Band | fertig |
 | P6.4 | 6B | Haut: weicher, warmer Schatten und Randlicht | fertig |
-| P6.5 | 6C | Abschluss: Vergleich Phase 0 → Phase 6, Bildrate | offen |
+| P6.5 | 6C | Abschluss: Vergleich Phase 0 → Phase 6, Bildrate | fertig |
 
 **P6.1 Lycra: Falten, Struktur und Glanz**
 - Dateien: `apps/client/src/game/avatar/meshKit.ts`, `apps/client/src/game/avatar/cyclist.ts`,
@@ -1052,6 +1052,16 @@ Grundlagen aus dem Code:
 - Screenshots `wall`, `forest`, `descent` mit `ultra`, `hoch`, `mittel` gegen den Stand **vor Phase 0**
   (`baseline/dist-p0`) und vor Phase 6; Bildrate Wald/Ort/Abfahrt auf Ultra und Mittel; Zusammenfassung
   aller Phasen und offenen Punkte an den Nutzer.
+- Ergebnis (Orchestrator): Bildzeit pro Frame (avg / p95):
+
+  | Stelle | vor Phase 0, hoch | jetzt, Ultra | vor Phase 0, mittel | jetzt, mittel |
+  |---|---|---|---|---|
+  | Wald 8500 | 3.51 / 5.2 ms | 14.50 / 16.2 ms | 2.22 / 5.6 ms | 2.25 / 5.4 ms |
+  | Ort 15600 | 3.27 / 4.9 ms | 15.58 / 31.7 ms | 1.95 / 3.5 ms | 2.11 / 3.7 ms |
+  | Abfahrt 18000 | 3.43 / 5.4 ms | 13.49 / 15.2 ms | 2.12 / 3.6 ms | 2.45 / 4.0 ms |
+
+  „Ultra“ gab es vor Phase 0 nicht; es läuft knapp unter 60 Bilder/s (Ausreißer am Ort bis 32 ms).
+  „Mittel“ kostet fast nichts mehr als vorher.
 
 ---
 
