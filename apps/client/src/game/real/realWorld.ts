@@ -23,6 +23,7 @@ import { BuildingIndex, HeightField } from './heightField';
 import type { QualityProfile } from './quality';
 import { buildRouteRibbon } from './roadRibbon';
 import { buildRoadsideFlora, type RoadsideFlora } from './roadsideFlora';
+import { buildLandscapeScatter } from './landscapeScatter';
 import { buildRoadsideProps } from './roadsideProps';
 import { buildParking } from './parking';
 import { buildSideRoads } from './sideRoads';
@@ -136,6 +137,8 @@ export class RealWorld {
     await step('Gras und Blumen am Straßenrand …');
     const flora = quality.level === 'niedrig' ? null : await buildRoadsideFlora(scene, corridor, buildingIndex, quality);
     const props = await buildRoadsideProps(scene, corridor, buildingIndex, data.look.architecture, quality);
+    await step('Felsen, Hecken und Weiden …');
+    const scatter = await buildLandscapeScatter(scene, data, corridor, buildingIndex, quality);
 
     buildGate(scene, track, 0, 'START · ZIEL', '#ff7a1a');
     buildSegmentGates(scene, track, track.segments);
@@ -168,6 +171,7 @@ export class RealWorld {
         ...vegetation.meshes,
         ...buildings,
         ...props,
+        ...scatter,
         ...ribbon.other.filter((m) => !m.name.startsWith('verge-')),
         ...(landmarks.solid ? [landmarks.solid] : []),
       ];
