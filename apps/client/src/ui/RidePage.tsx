@@ -26,8 +26,12 @@ type Phase =
   | { kind: 'ride'; routeId: string; bots: boolean; workout?: Workout }
   | { kind: 'summary'; result: RideResult; activity: StoredActivity };
 
+/** Dev shortcut: `?ride=<route id>&km=<distance>` starts an offline ride at once (screenshots, tests). */
+const DEV = new URLSearchParams(location.search);
+const DEV_RIDE = ROUTES.some((r) => r.id === DEV.get('ride')) ? DEV.get('ride')! : null;
+
 export function RidePage() {
-  const [phase, setPhase] = useState<Phase>({ kind: 'select' });
+  const [phase, setPhase] = useState<Phase>(DEV_RIDE ? { kind: 'ride', routeId: DEV_RIDE, bots: false } : { kind: 'select' });
 
   useEffect(() => {
     uiStore.set({ immersive: phase.kind === 'ride' });
@@ -368,7 +372,7 @@ function RideView({
     const garage = garageStore.get();
     const st = settingsStore.get();
     const net =
-      st.rideOnline && serverBase()
+      st.rideOnline && serverBase() && !DEV_RIDE
         ? new MultiplayerClient(serverBase(), {
             name: accountStore.get().user?.name ?? st.riderName,
             country: st.country,
@@ -398,6 +402,7 @@ function RideView({
         }
         created.setFrameProvider((dt) => s.frame(dt));
         s.start();
+        if (DEV_RIDE && DEV.get('km')) s.teleport(Number(DEV.get('km')) * 1000);
         setWorld(created);
         setSession(s);
         (window as unknown as { __velo?: unknown }).__velo = { world: created, session: s };

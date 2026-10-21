@@ -258,7 +258,8 @@ export class Cyclist {
       const hem = long ? cuff : sleeve + 0.03;
       // sleeve print: u around the arm from its seam (mirrored on the left so lettering reads the same
       // way), s shoulder → cuff; u 0.25 / 0.75 (where the sleeve marks sit) face the elbow point and the crook
-      const sleeveMap = (t: number, _a: number, arc: number): [number, number] | null => (t > hem || t < seam ? null : sleeveUv(sx > 0 ? arc : 1 - arc, (t - seam) / (hem - seam)));
+      // inside the seam (the arm root in the torso) the plain top of the sleeve strip, so shoulders take the base colour
+      const sleeveMap = (t: number, _a: number, arc: number): [number, number] | null => (t > hem ? null : sleeveUv(sx > 0 ? arc : 1 - arc, Math.max(0.02, (t - seam) / (hem - seam))));
       const hood = m(bike.hood);
       if (sx > 0) {
         const [qU, qF] = armFrames(S, E, W);

@@ -168,6 +168,8 @@ interface Palette {
   logo: string;
   /** Brand lettering, e.g. VELO or NAAP. */
   mark: string;
+  /** The sleeve strip covers the whole arm down to the wrist. */
+  longSleeve?: boolean;
 }
 
 /**
@@ -559,6 +561,254 @@ function athletic(ctx: Ctx, p: Palette): void {
   sleeveMark(ctx, p, 150, p.second, 0.04);
 }
 
+/**
+ * Pro Air 3.0 "Mental Athletic": black halftone mesh, a teal field on the upper chest, two lines of
+ * huge slanted lettering on a band, claw brackets below; a yoke arc over the back, lettering at the waist.
+ */
+function athletic3(ctx: Ctx, p: Palette): void {
+  const acc = p.second;
+  const plum = p.trim;
+  const sp = ctx as Ctx & { letterSpacing?: string };
+  // the mesh tone: teal next to a green accent, a cooler grey-green next to a violet one
+  const [, ag, ab] = rgb(acc);
+  const cool = Math.min(1, Math.max(0, (ab - ag) / 70 + 0.4));
+  const meshHex = '#' + mix('#1b5f6a', '#45544d', cool).map((c) => Math.round(c).toString(16).padStart(2, '0')).join('');
+  const mesh = (a: number) => shade(meshHex, 1, a);
+  const clamp = (x: number) => Math.min(1, Math.max(0, x));
+  const c = 0.25;
+  const b = 0.75;
+  /** Dash rows (the printed mesh) between y0 and y1 in texture px; `k` 0…1 sets dash height and strength. */
+  const dashes = (y0: number, y1: number, k: (x: number, y: number) => number, color: (a: number) => string, step = 10, colW = 18) => {
+    for (let y = y0, row = 0; y < y1; y += step, row++) {
+      for (let x = (row % 2) * colW * 0.5 - colW; x < W + colW; x += colW) {
+        const kk = k(x, y);
+        if (kk <= 0.02) continue;
+        const h = 1 + 5 * kk;
+        ctx.fillStyle = color(0.25 + 0.75 * kk);
+        ctx.fillRect(x, y + (step - h) / 2, colW * 0.62, h);
+      }
+    }
+  };
+  const path = (pts: [number, number][], du = 0, d = 1) => {
+    ctx.beginPath();
+    pts.forEach(([x, s], i) => (i ? ctx.lineTo(X(du + d * x), Y(s)) : ctx.moveTo(X(du + d * x), Y(s))));
+    ctx.closePath();
+  };
+  // big italic lettering, left-aligned at (u, s); `clip` limits it to [u0, u1]
+  const big = (text: string, u: number, s: number, h: number, u0: number, u1: number) => {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(X(u0), 0, X(u1 - u0), TORSO_H);
+    ctx.clip();
+    ctx.translate(X(u), Y(s));
+    ctx.scale(1.22, TORSO_ASPECT);
+    ctx.transform(1, 0, -0.3, 1, 0, 0);
+    ctx.fillStyle = acc;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = `900 ${h}px ${FONT}`;
+    sp.letterSpacing = `${-h * 0.05}px`;
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
+  };
+
+  band(ctx, 0, 1, p.base);
+  // mesh all over: strongest down the middle of the front and back, faint on the flanks, fading to the hem
+  dashes(0, TORSO_H, (x, y) => {
+    const u = (((x / W) % 1) + 1) % 1;
+    const s = 1 - y / TORSO_H;
+    const fc = Math.abs(u - c);
+    const bc = Math.abs(u - b);
+    const k = fc < 0.17 ? 0.25 + 0.6 * clamp(1 - fc / 0.12) : bc < 0.17 ? 0.2 + 0.5 * clamp(1 - bc / 0.12) : 0.18;
+    return k * (0.3 + 0.7 * clamp(s / 0.55));
+  }, mesh);
+  // plum side panels
+  ctx.fillStyle = plum;
+  wrapped(ctx, () => {
+    for (const u of [0, 0.5]) {
+      path([[-0.022, 0.05], [-0.03, 0.6], [0.03, 0.6], [0.022, 0.05]], u);
+      ctx.fill();
+    }
+  });
+
+  // --- front: teal field under the collar, framed by accent shoulder wedges
+  const field = (top: number, bottom: number, u0: number, u1: number) => {
+    ctx.fillStyle = mesh(0.85);
+    ctx.fillRect(X(u0), Y(top), X(u1 - u0), Y(bottom) - Y(top));
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(X(u0), Y(top), X(u1 - u0), Y(bottom) - Y(top));
+    ctx.clip();
+    dashes(Y(top), Y(bottom), (_x, y) => 0.25 + 0.6 * clamp((Y(bottom) - y) / (Y(bottom) - Y(top))), (a) => shade(p.base, 1, a * 0.5), 12, 22);
+    ctx.restore();
+  };
+  field(0.94, 0.72, c - 0.14, c + 0.14);
+  const wedges = (u: number, s0: number) => {
+    for (const d of [-1, 1]) {
+      ctx.fillStyle = acc;
+      ctx.beginPath();
+      ctx.moveTo(X(u + d * 0.065), Y(0.94));
+      ctx.quadraticCurveTo(X(u + d * 0.105), Y(0.9), X(u + d * 0.112), Y(s0));
+      ctx.lineTo(X(u + d * 0.15), Y(s0));
+      ctx.lineTo(X(u + d * 0.15), Y(0.94));
+      ctx.closePath();
+      ctx.fill();
+      // halftone fringe along the inner edge
+      for (let i = 0; i < 9; i++) {
+        const t = i / 8;
+        const s = 0.935 - t * (0.935 - s0);
+        const ue = u + d * (0.065 + 0.047 * Math.sqrt(t));
+        for (let j = 1; j < 4; j++) {
+          ctx.beginPath();
+          ctx.arc(X(ue - d * j * 0.007), Y(s), 4.2 - j * 1.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+  };
+  wedges(c, 0.745);
+  // the chest band and the two lines of lettering
+  ctx.fillStyle = plum;
+  ctx.fillRect(X(c - 0.3), Y(0.75), X(0.6), Y(0.565) - Y(0.75));
+  ctx.fillRect(X(c - 0.3) + W, Y(0.75), X(0.6), Y(0.565) - Y(0.75));
+  big('Mental', c - 0.125, 0.705, 92, c - 0.2, 0.47);
+  big('Athletic', c - 0.115, 0.61, 92, c - 0.2, 0.47);
+
+  // the two claw brackets, mirrored about the zip
+  for (const d of [-1, 1]) {
+    const outline = () =>
+      path([[0.02, 0.53], [0.1, 0.55], [0.112, 0.52], [0.112, 0.44], [0.088, 0.405], [0.112, 0.37], [0.112, 0.1], [0.095, 0.075], [0.045, 0.1], [0.026, 0.14], [0.026, 0.25], [0.06, 0.315], [0.026, 0.37], [0.02, 0.52]], c, d);
+    outline();
+    ctx.fillStyle = p.base;
+    ctx.fill();
+    ctx.save();
+    outline();
+    ctx.clip();
+    dashes(Y(0.57), Y(0.07), (_x, y) => 0.35 + 0.3 * Math.sin(y / 40), mesh, 11, 16);
+    // accent halftone rising from the bottom
+    ctx.fillStyle = acc;
+    for (let y = Y(0.07); y > Y(0.3); y -= 9) {
+      const k = (y - Y(0.3)) / (Y(0.07) - Y(0.3));
+      for (let x = X(c + d * 0.02) - 160; x < X(c + d * 0.02) + 160; x += 9) {
+        ctx.beginPath();
+        ctx.arc(x + ((y / 9) % 2) * 4.5, y, 4.4 * k ** 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    // the claw: solid at the base, breaking into dots towards the root
+    ctx.beginPath();
+    ctx.moveTo(X(c + d * 0.05), Y(0.33));
+    ctx.quadraticCurveTo(X(c + d * 0.095), Y(0.2), X(c + d * 0.05), Y(0.085));
+    ctx.quadraticCurveTo(X(c + d * 0.07), Y(0.2), X(c + d * 0.035), Y(0.31));
+    ctx.closePath();
+    const g = ctx.createLinearGradient(0, Y(0.33), 0, Y(0.15));
+    g.addColorStop(0, shade(acc, 1, 0.15));
+    g.addColorStop(1, acc);
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.restore();
+    outline();
+    ctx.strokeStyle = acc;
+    ctx.lineWidth = 6;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
+
+  // --- back: plum yoke arc around a teal centre panel, accent wedges and curved lines, lettering at the waist
+  ctx.fillStyle = plum;
+  ctx.beginPath();
+  ctx.moveTo(X(b - 0.11), Y(0.94));
+  ctx.bezierCurveTo(X(b - 0.1), Y(0.8), X(b - 0.06), Y(0.66), X(b - 0.05), Y(0.55));
+  ctx.lineTo(X(b + 0.05), Y(0.55));
+  ctx.bezierCurveTo(X(b + 0.06), Y(0.66), X(b + 0.1), Y(0.8), X(b + 0.11), Y(0.94));
+  ctx.closePath();
+  ctx.fill();
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(X(b - 0.045), Y(0.45));
+  ctx.lineTo(X(b - 0.05), Y(0.78));
+  ctx.bezierCurveTo(X(b - 0.05), Y(0.9), X(b + 0.05), Y(0.9), X(b + 0.05), Y(0.78));
+  ctx.lineTo(X(b + 0.045), Y(0.45));
+  ctx.closePath();
+  ctx.clip();
+  field(0.9, 0.45, b - 0.06, b + 0.06);
+  ctx.restore();
+  wedges(b, 0.8);
+  ctx.strokeStyle = acc;
+  ctx.lineCap = 'round';
+  for (const d of [-1, 1]) {
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(X(b + d * 0.13), Y(0.82));
+    ctx.bezierCurveTo(X(b + d * 0.07), Y(0.7), X(b + d * 0.055), Y(0.56), X(b + d * 0.035), Y(0.46));
+    ctx.stroke();
+    // a small arrowhead outline on the shoulder blade
+    ctx.lineWidth = 4;
+    path([[0.095, 0.74], [0.135, 0.7], [0.135, 0.6], [0.105, 0.64]], b, d);
+    ctx.stroke();
+    // accent halftone trailing down to the lettering
+    ctx.fillStyle = acc;
+    for (let i = 0; i < 14; i++) {
+      const t = i / 13;
+      for (let j = 0; j < 5; j++) {
+        ctx.beginPath();
+        ctx.arc(X(b + d * (0.035 + 0.012 * t + j * 0.008)), Y(0.47 + t * 0.12), 4.5 * (1 - t) * (1 - j / 5), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+  ctx.fillStyle = plum;
+  ctx.fillRect(X(b - 0.16), Y(0.46), X(0.32), Y(0.3) - Y(0.46));
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(X(0.55), 0, X(0.4), TORSO_H);
+  ctx.clip();
+  big('Mental', b - 0.14, 0.42, 82, 0.55, 0.95);
+  big('Athletic', b - 0.13, 0.335, 82, 0.55, 0.95);
+  ctx.restore();
+  details(ctx, { ...p, logo: acc }, p.base, false, false);
+  // small spaced mark under the back collar
+  ctx.save();
+  ctx.translate(X(b), Y(0.905));
+  ctx.scale(1, TORSO_ASPECT);
+  ctx.fillStyle = acc;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `800 16px ${FONT}`;
+  sp.letterSpacing = '9px';
+  ctx.fillText(p.mark, 0, 0);
+  ctx.restore();
+
+  // --- sleeves: mesh, the word running down the outside, the spaced mark on the inside
+  const long = !!p.longSleeve;
+  sleeveBand(ctx, 0, 1, p.base);
+  ctx.save();
+  ctx.beginPath();
+  // the top few percent stay plain: the shoulder cap samples the strip there
+  ctx.rect(0, TORSO_H + 0.05 * SLEEVE_H, W, SLEEVE_H);
+  ctx.clip();
+  dashes(TORSO_H, JERSEY_TEX, (_x, y) => 0.6 - 0.4 * ((y - TORSO_H) / SLEEVE_H), mesh, long ? 4 : 8, 18);
+  const vert = (text: string, u: number, from: number, h: number, asp: number, spacing: number, skew: number) => {
+    ctx.save();
+    ctx.translate(X(u), TORSO_H + from * SLEEVE_H);
+    ctx.scale(1, asp);
+    ctx.rotate(Math.PI / 2);
+    ctx.transform(1, 0, skew, 1, 0, 0);
+    ctx.fillStyle = acc;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = `900 ${h}px ${FONT}`;
+    sp.letterSpacing = `${spacing}px`;
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
+  };
+  // a long sleeve's strip spans ~3× the length, so the lettering is squeezed along it to keep its shape
+  vert('Athletic', 0.25, 0.06, 340, long ? 0.13 : 0.3, -16, -0.3);
+  vert(p.mark.split('').join(' '), 0.75, 0.1, 170, long ? 0.1 : 0.22, 40, -0.2);
+  ctx.restore();
+  if (!long) sleeveBand(ctx, 0.9, 1, shade(p.base, 0.85));
+}
+
 /** Apex Aeon: one solid colour, tonal side panels, the lettering only on the sleeves. */
 function tonal(ctx: Ctx, p: Palette): void {
   band(ctx, 0, 1, p.base);
@@ -706,14 +956,13 @@ const PATTERNS: Record<JerseyDesign['pattern'], (ctx: Ctx, p: Palette) => void> 
   tonal,
   stamps,
   base: basePattern,
-  // placeholder until the Pro Air 3.0 print is drawn
-  athletic3: athletic,
+  athletic3,
 };
 
 /** Paints the whole jersey texture (torso and sleeves) into a JERSEY_TEX² context. */
 export function paintJersey(ctx: Ctx, design: JerseyDesign): void {
   const [base, second, trim] = design.colors;
-  const p: Palette = { base, second, trim, logo: design.logo, mark: design.mark ?? 'VELO' };
+  const p: Palette = { base, second, trim, logo: design.logo, mark: design.mark ?? 'VELO', longSleeve: design.longSleeve };
   ctx.save();
   ctx.clearRect(0, 0, W, JERSEY_TEX);
   PATTERNS[design.pattern](ctx, p);
