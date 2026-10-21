@@ -1,11 +1,13 @@
 import { DEFAULT_CRR, baseCdA, steadySpeed, type RiderSetup } from '@velo/physics';
 import type { Track } from '@velo/routes';
-import { BIKES, CATALOG, JERSEYS, WHEELS, getItem, type BikeItem, type EquipmentItem, type JerseyItem, type WheelsItem } from './catalog';
+import { BIKES, CATALOG, HELMETS, JERSEYS, WHEELS, getItem, type BikeItem, type EquipmentItem, type HelmetItem, type JerseyItem, type WheelsItem } from './catalog';
 
 export interface Loadout {
   bike: string;
   wheels: string;
   jersey: string;
+  /** Missing in loadouts saved before helmets were sold: the starter helmet. */
+  helmet?: string;
 }
 
 export interface RiderBody {
@@ -13,25 +15,27 @@ export interface RiderBody {
   heightCm: number;
 }
 
-export function resolveLoadout(l: Loadout): { bike: BikeItem; wheels: WheelsItem; jersey: JerseyItem } {
+export function resolveLoadout(l: Loadout): { bike: BikeItem; wheels: WheelsItem; jersey: JerseyItem; helmet: HelmetItem } {
   const bike = getItem(l.bike);
   const wheels = getItem(l.wheels);
   const jersey = getItem(l.jersey);
+  const helmet = l.helmet ? getItem(l.helmet) : undefined;
   return {
     bike: bike?.type === 'bike' ? bike : BIKES.find((b) => b.tier === 'start')!,
     wheels: wheels?.type === 'wheels' ? wheels : WHEELS.find((w) => w.tier === 'start')!,
     jersey: jersey?.type === 'jersey' ? jersey : JERSEYS.find((j) => j.tier === 'start')!,
+    helmet: helmet?.type === 'helmet' ? helmet : HELMETS.find((h) => h.tier === 'start')!,
   };
 }
 
 /** Physics parameters for a rider on the given equipment. */
 export function setupFor(body: RiderBody, loadout: Loadout): RiderSetup {
-  const { bike, wheels, jersey } = resolveLoadout(loadout);
+  const { bike, wheels, jersey, helmet } = resolveLoadout(loadout);
   return {
     riderMassKg: body.weightKg,
     bikeMassKg: bike.weightKg,
     wheelsMassKg: wheels.weightKg,
-    cda: baseCdA(body.heightCm, body.weightKg) + bike.cdaDelta + wheels.cdaDelta + jersey.cdaDelta,
+    cda: baseCdA(body.heightCm, body.weightKg) + bike.cdaDelta + wheels.cdaDelta + jersey.cdaDelta + helmet.cdaDelta,
     crr: DEFAULT_CRR,
   };
 }
@@ -52,7 +56,7 @@ export function aeroStars(item: EquipmentItem): number {
 /** Weight rating 1–5 relative to the same type (jerseys have none). */
 export function weightStars(item: EquipmentItem): number | undefined {
   if (item.type === 'jersey') return undefined;
-  const same = CATALOG.filter((i): i is BikeItem | WheelsItem => i.type === item.type).map((i) => i.weightKg);
+  const same = CATALOG.filter((i): i is BikeItem | WheelsItem | HelmetItem => i.type === item.type).map((i) => i.weightKg);
   return stars(item.weightKg, Math.min(...same), Math.max(...same));
 }
 

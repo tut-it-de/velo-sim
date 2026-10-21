@@ -12,7 +12,8 @@ describe('route catalogue', () => {
     expect(berg.length).toBeCloseTo(18000, -1);
     for (const r of ROUTES.filter((r) => !r.path)) {
       const t = getTrack(r.id);
-      expect(t.length).toBeGreaterThanOrEqual(10000);
+      // fantasy circuits are shorter laps (kart-racer style)
+      expect(t.length).toBeGreaterThanOrEqual(r.fantasy ? 6000 : 10000);
       expect(t.length).toBeLessThanOrEqual(20000);
     }
   });

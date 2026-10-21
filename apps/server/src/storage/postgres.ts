@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS loadouts (
   wheels text NOT NULL,
   jersey text NOT NULL
 );
+ALTER TABLE loadouts ADD COLUMN IF NOT EXISTS helmet text;
 CREATE TABLE IF NOT EXISTS route_laps (
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   route_id text NOT NULL,
@@ -96,11 +97,12 @@ export class PostgresStorage implements Storage {
         passwordHash,
       ]);
       for (const item of STARTER_ITEMS) await client.query('INSERT INTO owned_items (user_id, item_id) VALUES ($1, $2)', [id, item]);
-      await client.query('INSERT INTO loadouts (user_id, bike, wheels, jersey) VALUES ($1, $2, $3, $4)', [
+      await client.query('INSERT INTO loadouts (user_id, bike, wheels, jersey, helmet) VALUES ($1, $2, $3, $4, $5)', [
         id,
         STARTER_LOADOUT.bike,
         STARTER_LOADOUT.wheels,
         STARTER_LOADOUT.jersey,
+        STARTER_LOADOUT.helmet,
       ]);
       await client.query('COMMIT');
       return this.mapUser(res.rows[0]);
@@ -126,7 +128,7 @@ export class PostgresStorage implements Storage {
   async getGarage(userId: string): Promise<Garage> {
     const [owned, loadout, balance, laps, ledger] = await Promise.all([
       this.pool.query('SELECT item_id FROM owned_items WHERE user_id = $1', [userId]),
-      this.pool.query('SELECT bike, wheels, jersey FROM loadouts WHERE user_id = $1', [userId]),
+      this.pool.query('SELECT bike, wheels, jersey, helmet FROM loadouts WHERE user_id = $1', [userId]),
       this.pool.query('SELECT COALESCE(SUM(amount), 0)::int AS balance FROM ledger WHERE user_id = $1', [userId]),
       this.pool.query('SELECT route_id FROM route_laps WHERE user_id = $1', [userId]),
       this.pool.query('SELECT id, amount, label, created_at FROM ledger WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50', [userId]),
@@ -134,7 +136,7 @@ export class PostgresStorage implements Storage {
     const l = loadout.rows[0] as Loadout | undefined;
     return {
       owned: owned.rows.map((r) => r.item_id as string),
-      loadout: l ? { bike: l.bike, wheels: l.wheels, jersey: l.jersey } : { ...STARTER_LOADOUT },
+      loadout: l ? { bike: l.bike, wheels: l.wheels, jersey: l.jersey, helmet: l.helmet ?? undefined } : { ...STARTER_LOADOUT },
       balance: balance.rows[0].balance as number,
       routesWithLap: laps.rows.map((r) => r.route_id as string),
       ledger: ledger.rows.reverse().map((r) => ({ id: r.id, amount: r.amount, label: r.label, at: new Date(r.created_at).getTime() })),
@@ -178,9 +180,9 @@ export class PostgresStorage implements Storage {
 
   async setLoadout(userId: string, loadout: Loadout): Promise<void> {
     await this.pool.query(
-      `INSERT INTO loadouts (user_id, bike, wheels, jersey) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (user_id) DO UPDATE SET bike = EXCLUDED.bike, wheels = EXCLUDED.wheels, jersey = EXCLUDED.jersey`,
-      [userId, loadout.bike, loadout.wheels, loadout.jersey],
+      `INSERT INTO loadouts (user_id, bike, wheels, jersey, helmet) VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (user_id) DO UPDATE SET bike = EXCLUDED.bike, wheels = EXCLUDED.wheels, jersey = EXCLUDED.jersey, helmet = EXCLUDED.helmet`,
+      [userId, loadout.bike, loadout.wheels, loadout.jersey, loadout.helmet ?? null],
     );
   }
 

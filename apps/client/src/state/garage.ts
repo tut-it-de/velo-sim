@@ -61,7 +61,7 @@ export function buy(itemId: string): { ok: true } | { ok: false; error: string }
 export function equip(itemId: string): void {
   const item = getItem(itemId);
   const state = garageStore.get();
-  if (!item || !state.owned.includes(itemId)) return;
+  if (!item || (item.price > 0 && !state.owned.includes(itemId))) return;
   garageStore.set({ ...state, loadout: { ...state.loadout, [item.type]: itemId } });
 }
 

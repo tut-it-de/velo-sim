@@ -11,6 +11,7 @@ export interface LoadoutDTO {
   bike: string;
   wheels: string;
   jersey: string;
+  helmet?: string;
 }
 
 export interface RiderInfo {

@@ -19,6 +19,7 @@ import { DynamicResolution, resolveQuality, type GraphicsQuality, type QualityPr
 import { setupAmbientOcclusion, setupImagePipeline } from './real/grading';
 import { REAL_CAMERA_MAX_Z, RealWorld, type MinimapData } from './real/realWorld';
 import { SpeedBlur } from './real/speedBlur';
+import { buildFantasy } from './fantasy';
 
 export type CameraMode = 'chase' | 'side' | 'top' | 'pov';
 
@@ -95,8 +96,15 @@ export class GameWorld {
   ): Promise<GameWorld> {
     const track = getTrack(routeId);
     const world = new GameWorld(canvas, track, look);
-    if (track.definition.world) await world.buildReal(graphics, onProgress);
-    else await world.buildClassic(onProgress);
+    const { world: real, fantasy } = track.definition;
+    if (real) await world.buildReal(graphics, onProgress);
+    else if (fantasy) {
+      onProgress?.('Fantasy-Welt wird gebaut …');
+      await nextFrame();
+      await buildFantasy(world.scene, track, fantasy);
+      buildGate(world.scene, track, 0, 'START · ZIEL', '#ff7a1a');
+      buildSegmentGates(world.scene, track, track.segments);
+    } else await world.buildClassic(onProgress);
     await nextFrame();
     await world.scene.whenReadyAsync();
     world.scene.freezeMaterials();

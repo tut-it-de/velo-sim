@@ -65,10 +65,11 @@ export function RidePage() {
 
 const STYLE_LABEL: Record<RouteStyle, string> = { coast: 'Küste', hills: 'Hügel', alpine: 'Alpin', lake: 'See' };
 const STYLE_HUE: Record<RouteStyle, string> = { coast: '#22b8cf', hills: '#51cf66', alpine: '#b197fc', lake: '#4dabf7' };
-type RouteFilter = 'all' | 'real' | 'flat' | 'climb';
+type RouteFilter = 'all' | 'real' | 'fantasy' | 'flat' | 'climb';
 const FILTERS: Array<{ id: RouteFilter; label: string }> = [
   { id: 'all', label: 'Alle' },
   { id: 'real', label: 'Echte Straßen' },
+  { id: 'fantasy', label: 'Fantasy' },
   { id: 'flat', label: 'Flach & wellig' },
   { id: 'climb', label: 'Berge' },
 ];
@@ -170,7 +171,7 @@ function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean, wo
     });
   }, [settings, garage.loadout, power]);
   const shown = routes.filter(({ r, diff }) =>
-    filter === 'all' ? true : filter === 'real' ? !!r.world : filter === 'flat' ? diff <= 2 : diff >= 3,
+    filter === 'all' ? true : filter === 'real' ? !!r.world : filter === 'fantasy' ? !!r.fantasy : filter === 'flat' ? diff <= 2 : diff >= 3,
   );
   const sel = routes.find((x) => x.r.id === routeId) ?? routes[0]!;
 
@@ -223,6 +224,7 @@ function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean, wo
               {sel.r.region && <span className="badge-pill">{sel.r.region}</span>}
               <span className="badge-pill hue">{STYLE_LABEL[sel.r.style]}</span>
               {sel.r.world && <span className="badge-pill real">Echte Straßen</span>}
+              {sel.r.fantasy && <span className="badge-pill real">Fantasy</span>}
               {online && <span className="badge-pill live">● {online[sel.r.id] ?? 0} online</span>}
             </div>
             <h2 className="route-hero-title">{sel.r.name}</h2>
@@ -297,6 +299,7 @@ function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean, wo
                   <DifficultyPips value={diff} />
                   <span className="route-card-time">≈ {formatDuration(timeS)}</span>
                   {r.world && <span className="badge-pill real small">Echt</span>}
+                  {r.fantasy && <span className="badge-pill real small">Fantasy</span>}
                   {online && <span className="online-count">● {online[r.id] ?? 0}</span>}
                 </div>
               </button>

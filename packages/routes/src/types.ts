@@ -1,5 +1,8 @@
 export type RouteStyle = 'coast' | 'hills' | 'alpine' | 'lake';
 
+/** Fantasy circuits (kart-racer style): their own world instead of terrain, see apps/client/src/game/fantasy. */
+export type FantasyTheme = 'rainbow' | 'lava' | 'meadow' | 'snow';
+
 export type SegmentType = 'sprint' | 'climb' | 'descent';
 
 export interface RouteSegment {
@@ -34,6 +37,8 @@ export interface RouteDefinition {
   path?: RoutePath;
   /** Folder under /worlds with terrain, buildings and vegetation for real-world routes. */
   world?: string;
+  /** Fantasy circuit: built by the theme's world builder instead of the classic terrain. */
+  fantasy?: FantasyTheme;
   /** Short facts for the route card, e.g. the region. */
   region?: string;
   /** Moving-average window that rounds off the profile (default 120 m, real-world paths 8 m). */

@@ -214,7 +214,170 @@ export const TAUNUS_MAMMOLSHAIN: RouteDefinition = {
   segments: TAUNUS_MAMMOLSHAIN_SEGMENTS,
 };
 
-export const ROUTES: RouteDefinition[] = [LAGO_DI_COMO, FELDBERG_TAUNUS, TAUNUS_MAMMOLSHAIN, ALPE_D_HUEZ, KUESTENRUNDE, HUEGELRUNDE, BERGRUNDE];
+// --- Fantasy circuits: invented worlds in the style of kart racers -----------------------------
+
+export const REGENBOGEN_BOULEVARD: RouteDefinition = {
+  id: 'regenbogen-boulevard',
+  name: 'Regenbogen-Boulevard',
+  description: 'Eine leuchtende Regenbogenstraße schwebt durchs All: lange Wellen hinauf zu den Sternen, rasante Abfahrten, keine Leitplanken.',
+  region: 'Fantasy · Weltall',
+  style: 'alpine',
+  fantasy: 'rainbow',
+  lengthM: 9000,
+  shape: polarLoop(
+    56,
+    [
+      [2, 0.22, 0.4],
+      [3, 0.12, 1.9],
+      [5, 0.07, 0.8],
+      [7, 0.03, 2.6],
+    ],
+    1.5,
+    1,
+  ),
+  elevation: [
+    [0, 300],
+    [800, 302],
+    [2000, 380],
+    [2600, 395],
+    [3400, 340],
+    [4300, 290],
+    [5200, 345],
+    [6000, 360],
+    [7000, 310],
+    [8200, 296],
+  ],
+  segments: [
+    { id: 'sternenrampe', name: 'Sternenrampe', type: 'climb', startM: 800, endM: 2600 },
+    { id: 'kometensturz', name: 'Kometensturz', type: 'descent', startM: 2600, endM: 4300 },
+    { id: 'milchstrassen-sprint', name: 'Milchstraßen-Sprint', type: 'sprint', startM: 8300, endM: 8800 },
+  ],
+};
+
+export const LAVA_FESTUNG: RouteDefinition = {
+  id: 'lava-festung',
+  name: 'Lava-Festung',
+  description: 'Steinerne Brücken über glühende Lava, Feuersäulen und Zinnen: kurze, giftige Rampen hinauf zur dunklen Burg.',
+  region: 'Fantasy · Vulkan',
+  style: 'hills',
+  fantasy: 'lava',
+  lengthM: 7000,
+  shape: polarLoop(
+    48,
+    [
+      [2, 0.12, 1.2],
+      [4, 0.1, 0.3],
+      [6, 0.05, 2.2],
+    ],
+    1.2,
+    1,
+  ),
+  elevation: [
+    [0, 60],
+    [900, 62],
+    [1500, 95],
+    [1900, 98],
+    [2600, 70],
+    [3300, 66],
+    [3900, 112],
+    [4500, 118],
+    [5400, 74],
+    [6300, 60],
+  ],
+  segments: [
+    { id: 'zugbruecke', name: 'Zugbrücke', type: 'climb', startM: 900, endM: 1500 },
+    { id: 'burgrampe', name: 'Burgrampe', type: 'climb', startM: 3300, endM: 4500 },
+    { id: 'lavasprint', name: 'Lavasprint', type: 'sprint', startM: 6300, endM: 6800 },
+  ],
+};
+
+export const KUHWEIDEN_RING: RouteDefinition = {
+  id: 'kuhweiden-ring',
+  name: 'Kuhweiden-Ring',
+  description: 'Sattgrüne Hügel, Holzzäune, ein roter Bauernhof und grasende Kühe am Straßenrand – die gemütliche Runde zum Einrollen.',
+  region: 'Fantasy · Bauernland',
+  style: 'hills',
+  fantasy: 'meadow',
+  lengthM: 8000,
+  shape: polarLoop(
+    48,
+    [
+      [2, 0.1, 0.2],
+      [3, 0.08, 1.4],
+      [5, 0.04, 0.5],
+    ],
+    1.4,
+    1,
+  ),
+  elevation: [
+    [0, 120],
+    [1200, 124],
+    [2000, 146],
+    [2800, 140],
+    [3600, 122],
+    [4700, 128],
+    [5500, 150],
+    [6200, 138],
+    [7200, 121],
+  ],
+  segments: [
+    { id: 'scheunenhuegel', name: 'Scheunenhügel', type: 'climb', startM: 1200, endM: 2000 },
+    { id: 'weidenwelle', name: 'Weidenwelle', type: 'climb', startM: 4700, endM: 5500 },
+    { id: 'hofsprint', name: 'Hofsprint', type: 'sprint', startM: 7300, endM: 7800 },
+  ],
+};
+
+export const SCHNEEGIPFEL_PASS: RouteDefinition = {
+  id: 'schneegipfel-pass',
+  name: 'Schneegipfel-Pass',
+  description: 'Verschneiter Bergpass mit Tannen, Holzhütten und einer Schanze am Gipfel: 4 km bergauf durch den Schnee, dann die Abfahrt ins Tal.',
+  region: 'Fantasy · Winterberge',
+  style: 'alpine',
+  fantasy: 'snow',
+  lengthM: 11000,
+  shape: polarLoop(
+    56,
+    [
+      [2, 0.18, 0.9],
+      [4, 0.08, 2.1],
+      [7, 0.04, 0.4],
+      [10, 0.015, 1.3],
+    ],
+    1,
+    1.4,
+  ),
+  elevation: [
+    [0, 900],
+    [700, 905],
+    [1500, 950],
+    [2500, 1030],
+    [3500, 1110],
+    [4700, 1190],
+    [5300, 1195],
+    [6500, 1100],
+    [8000, 980],
+    [9500, 905],
+  ],
+  segments: [
+    { id: 'tannenanstieg', name: 'Tannenanstieg', type: 'climb', startM: 700, endM: 4700 },
+    { id: 'schussfahrt', name: 'Schussfahrt', type: 'descent', startM: 5300, endM: 9500 },
+    { id: 'huettensprint', name: 'Hüttensprint', type: 'sprint', startM: 10000, endM: 10500 },
+  ],
+};
+
+export const ROUTES: RouteDefinition[] = [
+  LAGO_DI_COMO,
+  FELDBERG_TAUNUS,
+  TAUNUS_MAMMOLSHAIN,
+  ALPE_D_HUEZ,
+  KUESTENRUNDE,
+  HUEGELRUNDE,
+  BERGRUNDE,
+  REGENBOGEN_BOULEVARD,
+  LAVA_FESTUNG,
+  KUHWEIDEN_RING,
+  SCHNEEGIPFEL_PASS,
+];
 
 const trackCache = new Map<string, Track>();
 

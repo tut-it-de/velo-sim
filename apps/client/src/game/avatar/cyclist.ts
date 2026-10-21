@@ -1,7 +1,8 @@
 import { Bone, BoundingInfo, Color3, Matrix, Mesh, Quaternion, Skeleton, TransformNode, Vector3, type Scene } from '@babylonjs/core';
 import { BODY, riderPose, solveJoint, type BikePoints, type RiderPose } from './geometry';
 import { MeshKit, basis, hex, type Paint } from './meshKit';
-import type { JerseyDesign } from '@velo/equipment';
+import type { HelmetItem, JerseyDesign } from '@velo/equipment';
+import { buildHelmet } from './helmets';
 import { avatarMaterials, jerseyMaterial } from './materials';
 import { sleeveUv, torsoUv } from './jerseyArt';
 
@@ -9,6 +10,8 @@ export interface CyclistLook {
   jersey: string;
   jerseyAccent?: string;
   helmet?: string;
+  /** Helmet shape and colours; without it the vented road helmet in `helmet`. */
+  helmetLook?: HelmetItem['look'];
   skinsuit?: boolean;
   skin?: string;
   /** Printed jersey (pattern, colours, lettering); without it the jersey is plain `jersey`/`jerseyAccent`. */
@@ -173,20 +176,8 @@ export class Cyclist {
     for (const sx of [-1, 1]) body.ellipsoid(H.add(v(0.074 * sx, -0.01, -0.006)), v(0.012, 0.026, 0.018), shade(skin, 0.92), undefined, 8, 6);
     body.ellipsoid(H.add(v(0, -0.035, -0.062)), v(0.066, 0.05, 0.045), hex('#3b2a20'), undefined, 10, 8);
 
-    // Helmet: shell over the head, lower at the back, dark vents front to back.
-    const helmetCol = hex(look.helmet ?? '#f2f2f2');
-    const ventCol = hex('#1e2024');
-    const hRot = Quaternion.RotationAxis(X, -0.28);
-    const cut = 0.56;
-    shell.ellipsoid(H.add(v(0, 0.018, -0.014)), v(0.101, 0.094, 0.146), (t, th) => {
-      const phi = t * Math.PI * cut;
-      const lx = Math.sin(phi) * Math.cos(th);
-      const lz = Math.sin(phi) * Math.sin(th);
-      const ax = Math.abs(lx);
-      if (t > 0.93) return ventCol;
-      const vent = (ax > 0.15 && ax < 0.27) || (ax > 0.43 && ax < 0.53) || (ax < 0.05 && lz > -0.3);
-      return vent && lz > -0.75 && lz < 0.82 && t > 0.12 ? ventCol : helmetCol;
-    }, hRot, 44, 22, cut);
+    // Helmet: shape and colours from the helmet item (helmets.ts).
+    buildHelmet(shell, H, look.helmetLook ?? { shape: 'road', shell: look.helmet ?? '#f2f2f2', accent: '#ff7a1a', vents: '#1e2024' });
     // Straps and glasses.
     const strapCol = hex('#202124');
     for (const sx of [-1, 1]) {
@@ -205,6 +196,8 @@ export class Cyclist {
     // The right arm is its own skinned mesh (upper arm, elbow helper, forearm with the hand).
     const armKit = new MeshKit();
     armKit.kind = body.kind;
+    const long = !!design?.longSleeve;
+    const cuffTint = shade(white, 0.82);
     const armSkel = new Skeleton(`${name}-arm`, `${name}-arm`, scene);
     new Bone(`${name}-arm-root`, armSkel, null, Matrix.Identity());
     for (const sx of [-1, 1]) {
@@ -249,17 +242,20 @@ export class Cyclist {
       add2(E.subtract(u1.scale(0.045)), 0.04, 0.038, 0.003);
       add2(E, 0.041, 0.037, 0.009);
       add2(E.add(u2.scale(0.045)), 0.043, 0.036, 0.003);
-      add2(Vector3.Lerp(E, W, 0.25), 0.043, 0.037, -0.002);
-      add2(Vector3.Lerp(E, W, 0.55), 0.035, 0.03, 0);
-      add2(Vector3.Lerp(E, W, 0.85), 0.027, 0.021, 0);
+      // long sleeve: a thin layer of fabric over the forearm, the cuff band snug on the wrist
+      const fab = long ? 0.0015 : 0;
+      add2(Vector3.Lerp(E, W, 0.25), 0.043 + fab, 0.037 + fab, -0.002);
+      add2(Vector3.Lerp(E, W, 0.55), 0.035 + fab, 0.03 + fab, 0);
+      add2(Vector3.Lerp(E, W, 0.85), 0.027 + fab * 0.3, 0.021 + fab * 0.3, 0);
       add2(W, 0.025, 0.02, 0);
       const len = cumulative(pts);
       const total = len[len.length - 1]!;
       // the sleeve seam sits on the shoulder joint; inwards it is part of the jersey body
       const seam = len[2]! / total;
-      const sleeve = (len[2]! + 0.5 * BODY.upperArm) / total;
       const cuff = 1 - (0.08 * BODY.forearm) / total;
-      const hem = sleeve + 0.03;
+      // short: hem at mid upper arm; long: down to the glove, the last 3.5 cm a cuff band
+      const sleeve = long ? cuff - 0.035 / total : (len[2]! + 0.5 * BODY.upperArm) / total;
+      const hem = long ? cuff : sleeve + 0.03;
       // sleeve print: u around the arm from its seam (mirrored on the left so lettering reads the same
       // way), s shoulder → cuff; u 0.25 / 0.75 (where the sleeve marks sit) face the elbow point and the crook
       const sleeveMap = (t: number, _a: number, arc: number): [number, number] | null => (t > hem || t < seam ? null : sleeveUv(sx > 0 ? arc : 1 - arc, (t - seam) / (hem - seam)));
@@ -295,7 +291,7 @@ export class Cyclist {
         pts,
         rw,
         rd,
-        (t) => (t < seam ? (design ? white : jersey) : t < sleeve ? (design ? white : accent) : t < hem ? (design ? white : shade(accent, 0.75)) : t > cuff ? glove : skin),
+        (t) => (t < seam ? (design ? white : jersey) : t < sleeve ? (design ? white : accent) : t < hem ? (design ? (long ? cuffTint : white) : shade(accent, 0.75)) : t > cuff ? glove : skin),
         { seg: design ? 24 : 16, hint, shift: sh, step: 0.025, map: design ? sleeveMap : undefined },
       );
       // Hand wrapped around the hood.

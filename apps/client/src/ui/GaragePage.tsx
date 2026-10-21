@@ -3,6 +3,7 @@ import {
   CATALOG,
   CATEGORY_LABEL,
   CUT_LABEL,
+  HELMET_LABEL,
   TIER_LABEL,
   aeroStars,
   compareLoadouts,
@@ -29,6 +30,7 @@ const TABS: Array<{ id: ItemType; label: string }> = [
   { id: 'bike', label: 'Räder' },
   { id: 'wheels', label: 'Laufräder' },
   { id: 'jersey', label: 'Trikots' },
+  { id: 'helmet', label: 'Helme' },
 ];
 
 function Rating({ label, value }: { label: string; value?: number }) {
@@ -49,7 +51,13 @@ function Rating({ label, value }: { label: string; value?: number }) {
 
 function Swatch({ item }: { item: EquipmentItem }) {
   const colors =
-    item.type === 'bike' ? [item.look.frame, item.look.accent] : item.type === 'wheels' ? [item.look.rim, '#141414'] : [item.look.jersey, item.look.accent];
+    item.type === 'bike'
+      ? [item.look.frame, item.look.accent]
+      : item.type === 'wheels'
+        ? [item.look.rim, '#141414']
+        : item.type === 'helmet'
+          ? [item.look.shell, item.look.accent]
+          : [item.look.jersey, item.look.accent];
   return (
     <div className="swatch">
       {colors.map((c, i) => (
@@ -116,6 +124,7 @@ export function GaragePage() {
               <span>{itemName(current.bike)}</span>
               <span>{itemName(current.wheels)}</span>
               <span>{itemName(current.jersey)}</span>
+              <span>{itemName(current.helmet)}</span>
             </div>
             <div className="muted small">
               CdA {setup.cda.toFixed(3)} m² · Rad + Laufräder {(setup.bikeMassKg + setup.wheelsMassKg).toFixed(1)} kg · Gesamt {totalMass(setup).toFixed(1)} kg
@@ -158,7 +167,7 @@ export function GaragePage() {
 
         <div className="item-grid">
           {items.map((item) => {
-            const owned = garage.owned.includes(item.id);
+            const owned = item.price === 0 || garage.owned.includes(item.id);
             const equipped = garage.loadout[item.type] === item.id;
             const affordable = coins >= item.price;
             const sub =
@@ -166,7 +175,9 @@ export function GaragePage() {
                 ? `${CATEGORY_LABEL[item.category]} · ${item.weightKg.toFixed(1)} kg`
                 : item.type === 'wheels'
                   ? `${item.rimDepthMm} mm Felge · ${item.weightKg.toFixed(2)} kg`
-                  : CUT_LABEL[item.cut];
+                  : item.type === 'helmet'
+                    ? `${HELMET_LABEL[item.look.shape]} · ${Math.round(item.weightKg * 1000)} g`
+                    : CUT_LABEL[item.cut];
             return (
               <div
                 key={item.id}

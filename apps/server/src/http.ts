@@ -136,7 +136,7 @@ export async function handleHttp(ctx: ApiContext, req: IncomingMessage, res: Ser
         const item = getItem(String(b.itemId ?? ''));
         if (!item) throw new HttpError(404, 'Unbekannter Artikel');
         const garage = await ctx.storage.getGarage(user.id);
-        if (!garage.owned.includes(item.id)) throw new HttpError(403, 'Artikel nicht in deiner Garage');
+        if (item.price > 0 && !garage.owned.includes(item.id)) throw new HttpError(403, 'Artikel nicht in deiner Garage');
         await ctx.storage.setLoadout(user.id, { ...garage.loadout, [item.type]: item.id });
         return send(res, 200, { garage: await ctx.storage.getGarage(user.id) });
       }

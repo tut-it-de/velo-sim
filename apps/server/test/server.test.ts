@@ -9,7 +9,7 @@ import { PostgresStorage } from '../src/storage/postgres';
 import type { Storage } from '../src/storage/types';
 
 const SECRET = 'test-secret';
-const loadout = { bike: 'bike-basis', wheels: 'wheels-basis', jersey: 'jersey-club-orange' };
+const loadout = { bike: 'bike-basis', wheels: 'wheels-basis', jersey: 'jersey-club-orange', helmet: 'helmet-basis' };
 
 describe('auth', () => {
   it('hashes and verifies passwords', async () => {

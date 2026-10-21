@@ -4,7 +4,7 @@
  * realistic magnitude, not measurements. Edit freely: ratings are derived.
  */
 
-export type ItemType = 'bike' | 'wheels' | 'jersey';
+export type ItemType = 'bike' | 'wheels' | 'jersey' | 'helmet';
 export type Tier = 'start' | 'entry' | 'mid' | 'top';
 export type BikeCategory = 'aero' | 'allround' | 'climber' | 'endurance' | 'recumbent' | 'trike' | 'unicycle';
 export type JerseyCut = 'club' | 'retro' | 'standard' | 'racefit' | 'skinsuit';
@@ -129,8 +129,27 @@ export interface JerseyItem extends BaseItem {
   look: { jersey: string; accent: string; helmet: string; design: JerseyDesign };
 }
 
-export type EquipmentItem = BikeItem | WheelsItem | JerseyItem;
+/**
+ * Helmet shell (see apps/client/src/game/avatar/helmets.ts):
+ * - `road`: classic vented road helmet, many long vents front to back
+ * - `aero`: aero road helmet, closed rounded shell with a few small vents and a short tail
+ * - `tt`: time-trial helmet, long teardrop tail down onto the back, wrap-around visor
+ * - `retro`: 80s leather hairnet, padded strips over a bare head
+ * - `mtb`: trail helmet with a peak (visor) over the eyes, deep at the back
+ * - `bubble`: smooth, round commuter shell without vents (skate style)
+ */
+export type HelmetShape = 'road' | 'aero' | 'tt' | 'retro' | 'mtb' | 'bubble';
 
+export interface HelmetItem extends BaseItem {
+  type: 'helmet';
+  weightKg: number;
+  /** shell = main colour, accent = stripes/details, vents = colour seen through the vents (usually dark). */
+  look: { shape: HelmetShape; shell: string; accent: string; vents: string };
+}
+
+export type EquipmentItem = BikeItem | WheelsItem | JerseyItem | HelmetItem;
+
+export const HELMET_LABEL: Record<HelmetShape, string> = { road: 'Straßenhelm', aero: 'Aero-Helm', tt: 'Zeitfahrhelm', retro: 'Retro-Haarnetz', mtb: 'Trail-Helm', bubble: 'Stadthelm' };
 export const TIER_LABEL: Record<Tier, string> = { start: 'Start', entry: 'Einsteiger', mid: 'Mittelklasse', top: 'Oberklasse' };
 export const CATEGORY_LABEL: Record<BikeCategory, string> = { aero: 'Aero', allround: 'Allround', climber: 'Kletterrad', endurance: 'Endurance', recumbent: 'Liegerad', trike: 'Dreirad', unicycle: 'Einrad' };
 export const CUT_LABEL: Record<JerseyCut, string> = {
@@ -310,9 +329,38 @@ export const JERSEYS: JerseyItem[] = [
   jersey('jersey-skinsuit-regenbogen', 'Skinsuit Regenbogen', 'skinsuit', -0.004, 15_000, 'top', 'rainbow', ['#f7f7f7', '#1d1d1d', '#1d1d1d'], '#1d1d1d', '#f7f7f7'),
 ];
 
-export const CATALOG: EquipmentItem[] = [...BIKES, ...WHEELS, ...JERSEYS];
+const helmet = (
+  id: string,
+  brand: string,
+  model: string,
+  tier: Tier,
+  shape: HelmetShape,
+  cdaDelta: number,
+  weightKg: number,
+  price: number,
+  shell: string,
+  accent: string,
+  vents = '#1a1b1e',
+  inspiredBy?: string,
+): HelmetItem => ({ id, type: 'helmet', brand, model, tier, cdaDelta, weightKg, price, look: { shape, shell, accent, vents }, inspiredBy });
 
-export const STARTER_LOADOUT = { bike: 'bike-basis', wheels: 'wheels-basis', jersey: 'jersey-club-orange' } as const;
+export const HELMETS: HelmetItem[] = [
+  helmet('helmet-basis', 'Velo', 'Basis', 'start', 'road', 0, 0.32, 0, '#f2f2f2', '#ff7a1a'),
+  helmet('helmet-bubble-mint', 'Velo', 'Stadt Mint', 'entry', 'bubble', 0.004, 0.42, 600, '#9be3c8', '#ffffff', '#2a2d31'),
+  helmet('helmet-retro-leder', 'Velo', 'Leder-Haarnetz 1984', 'entry', 'retro', 0.006, 0.25, 900, '#4a2c1a', '#c79a5b', '#2b1a10'),
+  helmet('helmet-mtb-trail', 'Gyro', 'Trail MIPS', 'entry', 'mtb', 0.003, 0.38, 1_400, '#2d3a2f', '#e8b931', '#141414', 'Giro Manifest'),
+  helmet('helmet-road-weiss', 'Kask', 'Volare Weiß', 'mid', 'road', -0.001, 0.24, 2_800, '#f5f5f3', '#d6001c', '#1a1b1e', 'Kask Valegro'),
+  helmet('helmet-road-rot', 'Specialised', 'Prevailing 3 Rot', 'mid', 'road', -0.001, 0.25, 3_200, '#c4161c', '#111111', '#151515', 'Specialized Prevail'),
+  helmet('helmet-aero-schwarz', 'POC', 'Ventral Aero Schwarz', 'top', 'aero', -0.004, 0.27, 6_500, '#141518', '#ff6a13', '#0d0d0f', 'POC Ventral Air'),
+  helmet('helmet-aero-orange', 'POC', 'Ventral Aero Fluo', 'top', 'aero', -0.004, 0.27, 6_800, '#ff6a13', '#141518', '#141518', 'POC Ventral Air'),
+  helmet('helmet-aero-weiss', 'Specialised', 'Evadi 3 Weiß', 'top', 'aero', -0.005, 0.29, 7_500, '#f4f4f2', '#1d1d1f', '#1d1d1f', 'S-Works Evade 3'),
+  helmet('helmet-tt-gold', 'Kask', 'Bambino Gold', 'top', 'tt', -0.012, 0.42, 11_000, '#c9a54a', '#141414', '#141414', 'Kask Bambino Pro'),
+  helmet('helmet-tt-schwarz', 'Giro', 'Aerohead Schwarz', 'top', 'tt', -0.011, 0.4, 9_500, '#16171a', '#e2e4e8', '#0f0f10', 'Giro Aerohead'),
+];
+
+export const CATALOG: EquipmentItem[] = [...BIKES, ...WHEELS, ...JERSEYS, ...HELMETS];
+
+export const STARTER_LOADOUT = { bike: 'bike-basis', wheels: 'wheels-basis', jersey: 'jersey-club-orange', helmet: 'helmet-basis' } as const;
 
 export function getItem(id: string): EquipmentItem | undefined {
   return CATALOG.find((i) => i.id === id);
