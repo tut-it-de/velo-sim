@@ -52,7 +52,8 @@ const VIEWS: View[] = [
   { name: 'Seite (Antrieb)', pos: new Vector3(6, 0.8, 0), target: new Vector3(0, 0.8, 0), ortho: 0.88, vp: [0, 0.5, 0.5, 0.5] },
   { name: 'Vorne', pos: new Vector3(0, 0.8, 6), target: new Vector3(0, 0.8, 0), ortho: 0.88, vp: [0.5, 0.5, 0.5, 0.5] },
   { name: 'Oben', pos: new Vector3(0, 6, 0), target: new Vector3(0, 0, 0), up: new Vector3(0, 0, 1), ortho: 0.88, vp: [0, 0, 0.5, 0.5] },
-  { name: 'Dreiviertel', pos: new Vector3(2.3, 1.45, 2.4), target: new Vector3(0, 0.7, 0.05), vp: [0.5, 0, 0.5, 0.5] },
+  { name: 'Dreiviertel', pos: new Vector3(2.3, 1.45, 2.4), target: new Vector3(0, 0.7, 0.05), vp: [0.5, 0, 0.5, 0.5] },  // only with ?view=4: behind and above, like the chase camera in the game
+  { name: 'Hinten', pos: new Vector3(0, 1.9, -2.6), target: new Vector3(0, 1.05, 0.2), vp: [0, 0, 1, 1] },
 ];
 
 function studio3d(withRider: boolean): void {
@@ -88,7 +89,7 @@ function studio3d(withRider: boolean): void {
 
   const only = q.get('view');
   const zoom = Number(q.get('zoom') ?? 1);
-  const views = only === null ? VIEWS : [{ ...VIEWS[Number(only)]!, vp: [0, 0, 1, 1] as View['vp'] }];
+  const views = only === null ? VIEWS.slice(0, 4) : [{ ...VIEWS[Number(only)]!, vp: [0, 0, 1, 1] as View['vp'] }];
   // ?mirror=1 looks from the other side (non-drive side)
   if (q.get('mirror')) for (const v of views) v.pos = new Vector3(-v.pos.x, v.pos.y, v.pos.z);
   const cams = views.map((view) => {

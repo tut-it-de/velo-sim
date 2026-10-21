@@ -118,7 +118,7 @@ export function Hud({
           <div className="hud-chip">Ø {Math.round(s.avgPower)} W · NP {Math.round(s.normalizedPower)} W</div>
           <div className="hud-chip">{Math.round(s.kilojoules)} kJ</div>
           <div className={`hud-chip coins ${s.coinsDisabled ? 'disabled' : ''}`} title={s.coinsDisabled ? 'Mit dem Simulator gibt es keine Watt-Taler' : 'Watt-Taler dieser Fahrt'}>
-            🪙 {s.teleported ? 'Teleport – keine Taler' : s.coinsDisabled ? 'Simulator – keine Taler' : formatCoins(s.coins)}
+            {s.teleported ? 'Teleport – keine Taler' : s.coinsDisabled ? 'Simulator – keine Taler' : formatCoins(s.coins)}
           </div>
         </div>
         <ActiveSegments snapshot={s} skipClimbs />

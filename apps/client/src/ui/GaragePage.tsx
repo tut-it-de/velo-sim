@@ -104,7 +104,7 @@ export function GaragePage() {
           </div>
           <div className="row">
             <span className="muted small">{account.user ? `Konto: ${account.user.name} (Server)` : 'lokal – unter Profil mit einem Server verbinden'}</span>
-            <div className="wallet-chip wallet-big">{formatCoins(coins)} Watt-Taler</div>
+            <div className="wallet-chip wallet-big">{settings.adminMode ? 'Unbegrenzt' : formatCoins(coins)} Watt-Taler</div>
           </div>
         </div>
 
@@ -194,7 +194,7 @@ export function GaragePage() {
                     <button
                       onClick={async () => {
                         try {
-                          if (isLoggedIn()) await serverEquip(item.id);
+                          if (isLoggedIn() && !settings.adminMode) await serverEquip(item.id);
                           else equip(item.id);
                           setMessage(`${itemName(item)} ausgerüstet`);
                         } catch (err) {
@@ -211,7 +211,7 @@ export function GaragePage() {
                       title={affordable ? '' : `Noch ${formatCoins(item.price - coins)} Taler`}
                       onClick={async () => {
                         try {
-                          if (isLoggedIn()) {
+                          if (isLoggedIn() && !settings.adminMode) {
                             await serverBuy(item.id);
                             await serverEquip(item.id);
                           } else {
@@ -225,7 +225,7 @@ export function GaragePage() {
                         }
                       }}
                     >
-                      🪙 {formatCoins(item.price)}
+                      {settings.adminMode ? 'Gratis holen' : `Kaufen · ${formatCoins(item.price)}`}
                     </button>
                   )}
                   {!owned && !affordable && <span className="muted small">noch {formatCoins(item.price - coins)}</span>}

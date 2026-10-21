@@ -1,4 +1,5 @@
 import { CATALOG, STARTER_LOADOUT, getItem, itemName, type EarningLine, type Loadout } from '@velo/equipment';
+import { settingsStore } from './settings';
 import { Store, loadJson, saveJson } from './store';
 
 export interface LedgerEntry {
@@ -34,6 +35,7 @@ export const garageStore = new Store<GarageState>(loadJson(KEY, DEFAULT));
 garageStore.subscribe(() => saveJson(KEY, garageStore.get()));
 
 export function balance(state = garageStore.get()): number {
+  if (settingsStore.get().adminMode) return Infinity;
   return state.ledger.reduce((a, e) => a + e.amount, 0);
 }
 
@@ -46,10 +48,12 @@ export function buy(itemId: string): { ok: true } | { ok: false; error: string }
   if (!item) return { ok: false, error: 'Unbekannter Artikel' };
   if (state.owned.includes(itemId)) return { ok: false, error: 'Schon in deiner Garage' };
   if (balance(state) < item.price) return { ok: false, error: 'Nicht genug Watt-Taler' };
+  // admin mode: unlimited money, the purchase costs nothing
+  const admin = settingsStore.get().adminMode;
   garageStore.set({
     ...state,
     owned: [...state.owned, itemId],
-    ledger: [...state.ledger, { id: entryId(), at: Date.now(), amount: -item.price, label: `Kauf: ${itemName(item)}` }],
+    ledger: [...state.ledger, { id: entryId(), at: Date.now(), amount: admin ? 0 : -item.price, label: `${admin ? 'Admin' : 'Kauf'}: ${itemName(item)}` }],
   });
   return { ok: true };
 }

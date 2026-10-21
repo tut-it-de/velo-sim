@@ -71,7 +71,7 @@ export function App() {
           </button>
         )}
         <button className="wallet-chip" onClick={() => setPage('garage')} title="Watt-Taler – zur Garage">
-          {formatCoins(balance(garage))} <span className="muted">Taler</span>
+          {settings.adminMode ? '∞' : formatCoins(balance(garage))} <span className="muted">Taler</span>
         </button>
       </header>
       {page === 'ride' && <RidePage />}

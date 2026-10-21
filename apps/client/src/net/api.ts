@@ -78,7 +78,12 @@ async function call<T>(path: string, body?: unknown): Promise<T> {
 
 /** The server is the source of truth for the wallet once logged in. */
 function applyGarage(g: ServerGarage): void {
-  const next: GarageState = { owned: g.owned, loadout: g.loadout, ledger: g.ledger, routesWithLap: g.routesWithLap };
+  let next: GarageState = { owned: g.owned, loadout: g.loadout, ledger: g.ledger, routesWithLap: g.routesWithLap };
+  if (settingsStore.get().adminMode) {
+    // admin mode buys locally for free: keep those items and the loadout chosen with them
+    const local = garageStore.get();
+    next = { ...next, owned: [...new Set([...g.owned, ...local.owned])], loadout: local.loadout };
+  }
   garageStore.set(next);
 }
 
