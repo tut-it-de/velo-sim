@@ -318,7 +318,7 @@ export const BODY = {
   /** Wrist to the centre of the grip. */
   hand: 0.075,
   hipWidth: 0.18,
-  shoulderWidth: 0.38,
+  shoulderWidth: 0.33,
   neck: 0.11,
 } as const;
 

@@ -134,7 +134,7 @@ export class Cyclist {
     const along = (t: number, hump: number) => Vector3.Lerp(pelvis, shoulders, t).add(back.scale(hump));
     // The first two rings round off the seat instead of ending in a flat cap.
     const torso = [along(-0.17, -0.03), along(-0.13, -0.018), along(-0.08, -0.01), along(0.05, 0.0), along(0.3, 0.012), along(0.55, 0.02), along(0.78, 0.016), along(0.95, 0.0), along(1.04, -0.02), along(1.1, -0.035)];
-    const tw = [0.07, 0.135, 0.172, 0.182, 0.15, 0.158, 0.172, 0.17, 0.13, 0.08];
+    const tw = [0.07, 0.135, 0.172, 0.178, 0.148, 0.152, 0.152, 0.132, 0.1, 0.07];
     const td = [0.045, 0.078, 0.09, 0.105, 0.095, 0.11, 0.118, 0.1, 0.08, 0.06];
     const tl = cumulative(torso);
     const seat = tl[2]!;
@@ -214,10 +214,10 @@ export class Cyclist {
       const W = m(pose.wrist);
       // Trapezius and shoulder top: a sloping roll from the base of the neck out over the joint, so
       // the torso runs into the arm in one rounded line instead of a flat edge with the sleeve beside it.
-      const yoke = [shoulders.add(v(0.04 * sx, 0.02, -0.015)), Vector3.Lerp(shoulders, S, 0.55).add(v(0, 0.018, -0.012)), S.add(v(-0.01 * sx, 0.01, -0.006))];
-      body.loft(yoke, [0.06, 0.062, 0.058], [0.055, 0.06, 0.058], design ? white : jersey, { hint: back, seg: 14 });
+      const yoke = [shoulders.add(v(0.03 * sx, 0.012, -0.015)), Vector3.Lerp(shoulders, S, 0.5).add(v(0, 0.006, -0.012)), Vector3.Lerp(shoulders, S, 0.85).add(v(0, 0.0, -0.008))];
+      body.loft(yoke, [0.048, 0.045, 0.038], [0.048, 0.046, 0.04], design ? white : jersey, { hint: back, seg: 14 });
       if (design) body.texAt = sleeveUv(0.25, 0.03);
-      body.ellipsoid(S.add(v(-0.002 * sx, 0.008, -0.004)), v(0.058, 0.056, 0.06), design ? white : accent, undefined, 14, 10);
+      body.ellipsoid(S.add(v(-0.004 * sx, 0.002, -0.004)), v(0.048, 0.047, 0.052), design ? white : accent, undefined, 14, 10);
       body.texAt = null;
       const kit = sx > 0 ? armKit : body;
       // One skin from the shoulder over a rounded elbow to the wrist, so the joint has no seam.
@@ -241,8 +241,8 @@ export class Cyclist {
         add(p, w, d);
         sh.push(f);
       };
-      add2(S, 0.056, 0.058, 0);
-      add2(Vector3.Lerp(S, E, 0.25), 0.05, 0.054, 0);
+      add2(S, 0.048, 0.05, 0);
+      add2(Vector3.Lerp(S, E, 0.25), 0.045, 0.048, 0);
       add2(Vector3.Lerp(S, E, 0.5), 0.046, 0.05, -0.002);
       add2(Vector3.Lerp(S, E, 0.75), 0.042, 0.044, 0);
       add2(E.subtract(u1.scale(0.045)), 0.04, 0.038, 0.003);
