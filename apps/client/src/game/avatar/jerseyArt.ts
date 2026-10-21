@@ -706,6 +706,8 @@ const PATTERNS: Record<JerseyDesign['pattern'], (ctx: Ctx, p: Palette) => void> 
   tonal,
   stamps,
   base: basePattern,
+  // placeholder until the Pro Air 3.0 print is drawn
+  athletic3: athletic,
 };
 
 /** Paints the whole jersey texture (torso and sleeves) into a JERSEY_TEX² context. */

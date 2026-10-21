@@ -109,7 +109,8 @@ export type JerseyPattern =
   | 'athletic'
   | 'tonal'
   | 'stamps'
-  | 'base';
+  | 'base'
+  | 'athletic3';
 
 export interface JerseyDesign {
   pattern: JerseyPattern;
@@ -118,6 +119,8 @@ export interface JerseyDesign {
   logo: string;
   /** Brand lettering on the jersey; VELO when absent. */
   mark?: string;
+  /** Long sleeves down to the wrist (the print's sleeve strip then covers the whole arm). */
+  longSleeve?: boolean;
 }
 
 export interface JerseyItem extends BaseItem {
@@ -279,6 +282,8 @@ const naap = (...args: Parameters<typeof jersey>): JerseyItem => {
   return jersey(id, model, cut, cda, price, tier, pattern, colors, logo, helmet, inspiredBy, 'NAAP');
 };
 
+const longSleeve = (item: JerseyItem): JerseyItem => ({ ...item, look: { ...item.look, design: { ...item.look.design, longSleeve: true } } });
+
 export const JERSEYS: JerseyItem[] = [
   jersey('jersey-club-orange', 'Club Orange', 'club', 0.003, 0, 'start', 'block', ['#ff6b1a', '#24262c', '#24262c'], '#ffffff', '#ffffff'),
   jersey('jersey-club-blau', 'Club Blau', 'club', 0.003, 600, 'entry', 'band', ['#1f5fa8', '#f4f4f2', '#1f5fa8'], '#f4f4f2', '#1f5fa8'),
@@ -298,6 +303,9 @@ export const JERSEYS: JerseyItem[] = [
   jersey('jersey-racefit-polka', 'Race-Fit Bergkönig', 'racefit', -0.002, 9_000, 'top', 'polka', ['#ffffff', '#d00000', '#d00000'], '#d00000', '#d00000'),
   naap('jersey-naap-athletic-acid', 'Pro Air Acid', 'racefit', -0.003, 10_500, 'top', 'athletic', ['#14171b', '#c8f46c', '#2d7f89'], '#c8f46c', '#14171b', 'MAAP Pro Air Mental Athletic'),
   naap('jersey-naap-athletic-violett', 'Pro Air Violett', 'racefit', -0.003, 10_500, 'top', 'athletic', ['#17161c', '#d6b9ff', '#4a4f5c'], '#d6b9ff', '#17161c', 'MAAP Pro Air Mental Athletic'),
+  // Pro Air 3.0: base, accent, third colour (yoke, chest band behind the lettering); the mesh tone is derived from the base
+  naap('jersey-naap-proair3-acid', 'Pro Air 3.0 Acid', 'racefit', -0.003, 11_500, 'top', 'athletic3', ['#14181b', '#c4f59c', '#5b2d86'], '#c4f59c', '#14181b', 'MAAP Pro Air Jersey 3.0 Black Acid'),
+  longSleeve(naap('jersey-naap-proair3-violett-ls', 'Pro Air 3.0 LS Violett', 'racefit', -0.003, 12_500, 'top', 'athletic3', ['#141416', '#d9b6f4', '#4b1d4a'], '#d9b6f4', '#141416', 'MAAP Pro Air LS Jersey 3.0 Black Violet')),
   naap('jersey-skinsuit-carbon', 'Fragment Navy', 'skinsuit', -0.004, 12_000, 'top', 'fragment', ['#1b2233', '#3c4a66', '#8fa3c2'], '#e9edf3', '#1b2233', 'MAAP Fragment'),
   jersey('jersey-skinsuit-regenbogen', 'Skinsuit Regenbogen', 'skinsuit', -0.004, 15_000, 'top', 'rainbow', ['#f7f7f7', '#1d1d1d', '#1d1d1d'], '#1d1d1d', '#f7f7f7'),
 ];
