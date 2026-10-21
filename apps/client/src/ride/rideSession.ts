@@ -165,6 +165,8 @@ export class RideSession {
   readonly player?: WorkoutPlayer;
   private segmentTracker: SegmentTracker;
   private teleported = false;
+  /** Metres skipped with the teleport: the recording and the summary count only the distance actually ridden. */
+  private skippedM = 0;
   readonly segmentResults: SegmentOutcome[] = [];
   private lastResult?: SegmentOutcome;
   private workoutKj = 0;
@@ -244,6 +246,7 @@ export class RideSession {
     const target = lapBase + Math.min(Math.max(0, lapDistanceM), this.track.length - 1);
     const delta = target - this.state.distanceM;
     this.teleported = true;
+    this.skippedM += delta;
     this.state = { ...this.state, distanceM: target };
     this.renderDistance = target;
     for (const b of this.bots) {
@@ -354,7 +357,7 @@ export class RideSession {
         this.powerSum += avg;
         this.recorder.record({
           timestamp: Date.now(),
-          distanceM: this.state.distanceM,
+          distanceM: this.state.distanceM - this.skippedM,
           speedMps: this.state.speedMps,
           elevationM: cur.y,
           gradePercent: cur.gradePercent,
