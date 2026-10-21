@@ -212,10 +212,6 @@ export class Cyclist {
       const S = m(pose.shoulder);
       const E = m(pose.elbow);
       const W = m(pose.wrist);
-      // Trapezius and shoulder top: a sloping roll from the base of the neck out over the joint, so
-      // the torso runs into the arm in one rounded line instead of a flat edge with the sleeve beside it.
-      const yoke = [shoulders.add(v(0.03 * sx, 0.012, -0.015)), Vector3.Lerp(shoulders, S, 0.5).add(v(0, 0.006, -0.012)), Vector3.Lerp(shoulders, S, 0.85).add(v(0, 0.0, -0.008))];
-      body.loft(yoke, [0.048, 0.045, 0.038], [0.048, 0.046, 0.04], design ? white : jersey, { hint: back, seg: 14 });
       if (design) body.texAt = sleeveUv(0.25, 0.03);
       body.ellipsoid(S.add(v(-0.004 * sx, 0.002, -0.004)), v(0.048, 0.047, 0.052), design ? white : accent, undefined, 14, 10);
       body.texAt = null;
@@ -241,7 +237,12 @@ export class Cyclist {
         add(p, w, d);
         sh.push(f);
       };
-      add2(S, 0.048, 0.05, 0);
+      // The arm grows out of the torso: the tube starts inside the upper back, runs out along the
+      // sloping shoulder line and bends down into the upper arm, so there is no edge between them.
+      const inner = Vector3.Lerp(shoulders, S, 0.3).add(v(0, 0.008, -0.012));
+      add2(inner, 0.058, 0.058, 0);
+      add2(Vector3.Lerp(shoulders, S, 0.65).add(v(0, 0.008, -0.008)), 0.054, 0.055, 0);
+      add2(S, 0.05, 0.052, 0);
       add2(Vector3.Lerp(S, E, 0.25), 0.045, 0.048, 0);
       add2(Vector3.Lerp(S, E, 0.5), 0.046, 0.05, -0.002);
       add2(Vector3.Lerp(S, E, 0.75), 0.042, 0.044, 0);
@@ -254,12 +255,14 @@ export class Cyclist {
       add2(W, 0.025, 0.02, 0);
       const len = cumulative(pts);
       const total = len[len.length - 1]!;
-      const sleeve = (0.5 * BODY.upperArm) / total;
+      // the sleeve seam sits on the shoulder joint; inwards it is part of the jersey body
+      const seam = len[2]! / total;
+      const sleeve = (len[2]! + 0.5 * BODY.upperArm) / total;
       const cuff = 1 - (0.08 * BODY.forearm) / total;
       const hem = sleeve + 0.03;
       // sleeve print: u around the arm from its seam (mirrored on the left so lettering reads the same
       // way), s shoulder → cuff; u 0.25 / 0.75 (where the sleeve marks sit) face the elbow point and the crook
-      const sleeveMap = (t: number, _a: number, arc: number): [number, number] | null => (t > hem ? null : sleeveUv(sx > 0 ? arc : 1 - arc, t / hem));
+      const sleeveMap = (t: number, _a: number, arc: number): [number, number] | null => (t > hem || t < seam ? null : sleeveUv(sx > 0 ? arc : 1 - arc, (t - seam) / (hem - seam)));
       const hood = m(bike.hood);
       if (sx > 0) {
         const [qU, qF] = armFrames(S, E, W);
@@ -273,7 +276,11 @@ export class Cyclist {
         });
         // weights across the plane bisecting the elbow, like the knee
         const bis = u1.add(u2).normalize();
+        // the part inside the torso stays with the body (root bone) and blends into the upper arm at the joint
+        const outward = S.subtract(inner).normalize();
         armKit.skin = (p) => {
+          const d = Vector3.Dot(p.subtract(S), outward);
+          if (d < -0.012) return [0, 1, smooth(-0.08, -0.012, d)];
           const s = Vector3.Dot(p.subtract(E), bis);
           if (s < -0.004) return [1, 2, smooth(-0.04, -0.004, s)];
           return [2, 3, smooth(0.004, 0.04, s)];
@@ -288,7 +295,7 @@ export class Cyclist {
         pts,
         rw,
         rd,
-        (t) => (t < sleeve ? (design ? white : accent) : t < hem ? (design ? white : shade(accent, 0.75)) : t > cuff ? glove : skin),
+        (t) => (t < seam ? (design ? white : jersey) : t < sleeve ? (design ? white : accent) : t < hem ? (design ? white : shade(accent, 0.75)) : t > cuff ? glove : skin),
         { seg: design ? 24 : 16, hint, shift: sh, step: 0.025, map: design ? sleeveMap : undefined },
       );
       // Hand wrapped around the hood.
