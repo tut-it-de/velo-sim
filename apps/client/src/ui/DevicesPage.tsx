@@ -79,6 +79,7 @@ export function DevicesPage() {
                   )}
                 </div>
                 {s.error && <div className="error-text" style={{ marginTop: 8 }}>{s.error}</div>}
+                {slot === 'hrm' && !connected && !settings.useSimulator && <HeartRateHelp />}
               </div>
             );
           })}
@@ -107,6 +108,22 @@ export function DevicesPage() {
         <KickrChecklist />
       </div>
     </div>
+  );
+}
+
+/** Tips for a strap that does not show up in the Bluetooth chooser. */
+function HeartRateHelp() {
+  return (
+    <details className="small" style={{ marginTop: 10 }}>
+      <summary className="muted">Gurt nicht in der Liste?</summary>
+      <ul className="muted" style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+        <li>Gurt anlegen und die Elektroden anfeuchten – ohne Hautkontakt sendet er nicht.</li>
+        <li>Verbindung zu Handy-Apps, Uhr oder Zwift trennen (Bluetooth am Handy kurz aus): viele Gurte erlauben nur eine Bluetooth-Verbindung.</li>
+        <li>Ältere Gurte, die nur ANT+ können (z. B. Garmin HRM1/HRM3), funktionieren im Browser nicht – sie brauchen Bluetooth.</li>
+        <li>Uhren (Garmin, Polar, Suunto): in der Uhr „Herzfrequenz übertragen“ / „HF senden“ einschalten.</li>
+        <li>Danach erneut auf „Verbinden“ tippen – das Fenster sucht ein paar Sekunden.</li>
+      </ul>
+    </details>
   );
 }
 
