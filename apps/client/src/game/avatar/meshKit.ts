@@ -254,6 +254,27 @@ export class MeshKit {
     }
   }
 
+  /**
+   * Free-form surface patch: `at(u, v)` gives the point and its colour for u, v in 0…1. Rows run along v,
+   * columns along u, wound like `ellipsoid` (rows ≈ latitude, columns ≈ longitude).
+   */
+  grid(cols: number, rows: number, at: (u: number, v: number) => [Vector3, Color3]): void {
+    const start = this.p.length / 3;
+    for (let j = 0; j <= rows; j++) {
+      for (let k = 0; k <= cols; k++) {
+        const [p, col] = at(k / cols, j / rows);
+        this.vertex(p, col);
+      }
+    }
+    for (let j = 0; j < rows; j++) {
+      for (let k = 0; k < cols; k++) {
+        const a = start + j * (cols + 1) + k;
+        const b = a + cols + 1;
+        this.i.push(a, b, a + 1, a + 1, b, b + 1);
+      }
+    }
+  }
+
   /** Axis-aligned box rotated by `rot` around its centre. */
   box(centre: Vector3, size: Vector3, paint: Color3, rot?: Quaternion): void {
     const m = rot ?? Quaternion.Identity();

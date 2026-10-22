@@ -137,8 +137,10 @@ export interface JerseyItem extends BaseItem {
  * - `retro`: 80s leather hairnet, padded strips over a bare head
  * - `mtb`: trail helmet with a peak (visor) over the eyes, deep at the back
  * - `bubble`: smooth, round commuter shell without vents (skate style)
+ * - `space`: futuristic time-trial helmet: oversized sculpted shell with fins, a full-face mirrored visor
+ *   down to the chin like a motorbike helmet (the much-talked-about 2024 pro team prototypes)
  */
-export type HelmetShape = 'road' | 'aero' | 'tt' | 'retro' | 'mtb' | 'bubble';
+export type HelmetShape = 'road' | 'aero' | 'tt' | 'retro' | 'mtb' | 'bubble' | 'space';
 
 export interface HelmetItem extends BaseItem {
   type: 'helmet';
@@ -149,7 +151,7 @@ export interface HelmetItem extends BaseItem {
 
 export type EquipmentItem = BikeItem | WheelsItem | JerseyItem | HelmetItem;
 
-export const HELMET_LABEL: Record<HelmetShape, string> = { road: 'Straßenhelm', aero: 'Aero-Helm', tt: 'Zeitfahrhelm', retro: 'Retro-Haarnetz', mtb: 'Trail-Helm', bubble: 'Stadthelm' };
+export const HELMET_LABEL: Record<HelmetShape, string> = { road: 'Straßenhelm', aero: 'Aero-Helm', tt: 'Zeitfahrhelm', retro: 'Retro-Haarnetz', mtb: 'Trail-Helm', bubble: 'Stadthelm', space: 'Zeitfahr-Prototyp' };
 export const TIER_LABEL: Record<Tier, string> = { start: 'Start', entry: 'Einsteiger', mid: 'Mittelklasse', top: 'Oberklasse' };
 export const CATEGORY_LABEL: Record<BikeCategory, string> = { aero: 'Aero', allround: 'Allround', climber: 'Kletterrad', endurance: 'Endurance', recumbent: 'Liegerad', trike: 'Dreirad', unicycle: 'Einrad' };
 export const CUT_LABEL: Record<JerseyCut, string> = {
@@ -355,6 +357,7 @@ export const HELMETS: HelmetItem[] = [
   helmet('helmet-aero-orange', 'POC', 'Ventral Aero Fluo', 'top', 'aero', -0.004, 0.27, 6_800, '#ff6a13', '#141518', '#141518', 'POC Ventral Air'),
   helmet('helmet-aero-weiss', 'Specialised', 'Evadi 3 Weiß', 'top', 'aero', -0.005, 0.29, 7_500, '#f4f4f2', '#1d1d1f', '#1d1d1f', 'S-Works Evade 3'),
   helmet('helmet-tt-gold', 'Kask', 'Bambino Gold', 'top', 'tt', -0.012, 0.42, 11_000, '#c9a54a', '#141414', '#141414', 'Kask Bambino Pro'),
+  helmet('helmet-space-chrom', 'Lazar', 'Prototyp X-1 Chrom', 'top', 'space', -0.014, 0.5, 15_000, '#d8dde4', '#ff2d6f', '#0b0c10', 'Visma | Lease a Bike TT-Prototyp 2024'),
   helmet('helmet-tt-schwarz', 'Giro', 'Aerohead Schwarz', 'top', 'tt', -0.011, 0.4, 9_500, '#16171a', '#e2e4e8', '#0f0f10', 'Giro Aerohead'),
 ];
 
