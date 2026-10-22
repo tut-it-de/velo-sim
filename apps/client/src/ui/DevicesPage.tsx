@@ -53,23 +53,6 @@ export function DevicesPage() {
           </div>
         )}
 
-        <div className="card row" style={{ justifyContent: 'space-between', flexWrap: 'nowrap', gap: 24 }}>
-          <div>
-            <strong>Simulator statt Bluetooth</strong>
-            <div className="muted small">
-              Ein virtueller KICKR, der echte FTMS-Bytes spricht – zum Testen ohne Hardware. Steuerung mit <kbd>↑</kbd>
-              <kbd>↓</kbd> (Watt), <kbd>←</kbd>
-              <kbd>→</kbd> (Kadenz), <kbd>Leertaste</kbd> (Pause). Mit dem Simulator gibt es später keine Taler.
-            </div>
-          </div>
-          <Toggle
-            checked={settings.useSimulator}
-            onChange={(v) => void deviceManager.setSimulator(v)}
-            disabled={Object.values(slots).some((s) => s.state === 'connecting')}
-            label={settings.useSimulator ? 'aktiv' : 'aus'}
-          />
-        </div>
-
         <div className="grid cols-3">
           {(Object.keys(SLOT_INFO) as DeviceSlot[]).map((slot) => {
             const s = slots[slot];

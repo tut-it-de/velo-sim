@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { settingsStore } from '../state/settings';
-import { accountStore, refreshAccount } from '../net/api';
+import { accountStore, isAdminUser, refreshAccount } from '../net/api';
+import { deviceManager } from '../devices/deviceManager';
 import { refreshStravaStatus } from '../net/strava';
 import { activitiesStore, loadActivities } from '../state/activities';
 import { useStore } from '../state/store';
@@ -54,6 +55,12 @@ export function App() {
       .then(() => refreshStravaStatus());
     void loadActivities();
   }, []);
+
+  // The trainer simulator is for admins only.
+  const admin = isAdminUser(account);
+  useEffect(() => {
+    if (!admin && settings.useSimulator) void deviceManager.setSimulator(false);
+  }, [admin, settings.useSimulator]);
 
   const name = account.user?.name ?? settings.riderName;
   const totalKm = activities.reduce((km, a) => km + a.summary.distanceM / 1000, 0);

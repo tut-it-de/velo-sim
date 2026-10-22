@@ -8,6 +8,8 @@ export interface AccountUser {
   id: string;
   name: string;
   email: string;
+  /** Set by the server (ADMIN_EMAILS): admin mode and the trainer simulator. */
+  admin?: boolean;
 }
 
 interface ServerGarage {
@@ -102,6 +104,18 @@ export async function login(email: string, password: string): Promise<void> {
 export function logout(): void {
   accountStore.set({});
 }
+
+export const isAdminUser = (state: AccountState = accountStore.get()) => !!state.user?.admin;
+
+// Admin mode is admin-only: switch it off as soon as the account is not (or no longer) an admin.
+// (The simulator is switched off by the App through the device manager, which also disconnects it.)
+function enforceAdminOnly(): void {
+  if (isAdminUser()) return;
+  const s = settingsStore.get();
+  if (s.adminMode) settingsStore.set({ ...s, adminMode: false });
+}
+enforceAdminOnly();
+accountStore.subscribe(enforceAdminOnly);
 
 export async function refreshAccount(): Promise<void> {
   if (!isLoggedIn()) return;

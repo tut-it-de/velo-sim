@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import connectWithStrava from '../assets/strava/connect-with-strava.svg';
 import { PoweredByStrava } from './StravaStatusLine';
 import { connectStrava, disconnectStrava, refreshStravaStatus, setStravaAutoUpload, stravaStore } from '../net/strava';
-import { accountStore, fetchOnline, login, logout, refreshAccount, register } from '../net/api';
+import { accountStore, fetchOnline, isAdminUser, login, logout, refreshAccount, register } from '../net/api';
+import { deviceManager } from '../devices/deviceManager';
 import { GRAPHICS_QUALITY_OPTIONS } from '../game/real/quality';
 import { settingsStore, updateSettings, type Settings } from '../state/settings';
 import { useStore } from '../state/store';
@@ -29,6 +30,8 @@ function NumberField({ k, min, max, step = 1 }: { k: keyof Settings; min: number
 
 export function SettingsPage() {
   const s = useStore(settingsStore);
+  const admin = isAdminUser(useStore(accountStore));
+  const slots = useStore(deviceManager.slots);
   return (
     <div className="page">
       <div className="page-inner">
@@ -110,20 +113,35 @@ export function SettingsPage() {
             </div>
           </div>
         </div>
-        <div className="card admin-card">
-          <h2>Admin</h2>
-          <Toggle
-            checked={s.adminMode}
-            onChange={(v) => updateSettings({ adminMode: v })}
-            label="Admin-Modus"
-            hint={
-              <>
-                In der Fahrt erscheint „Teleport“ (Taste <kbd>T</kbd>): Punkt auf Karte oder Höhenprofil anklicken und dorthin springen.
-                Fahrten mit Teleport zählen nicht für Taler und Bestzeiten.
-              </>
-            }
-          />
-        </div>
+        {admin && (
+          <div className="card admin-card">
+            <h2>Admin</h2>
+            <Toggle
+              checked={s.adminMode}
+              onChange={(v) => updateSettings({ adminMode: v })}
+              label="Admin-Modus"
+              hint={
+                <>
+                  In der Fahrt erscheint „Teleport“ (Taste <kbd>T</kbd>): Punkt auf Karte oder Höhenprofil anklicken und dorthin springen.
+                  Fahrten mit Teleport zählen nicht für Taler und Bestzeiten.
+                </>
+              }
+            />
+            <Toggle
+              checked={s.useSimulator}
+              onChange={(v) => void deviceManager.setSimulator(v)}
+              disabled={Object.values(slots).some((x) => x.state === 'connecting')}
+              label="Trainer-Simulator"
+              hint={
+                <>
+                  Ein virtueller KICKR statt Bluetooth, zum Testen ohne Hardware. Danach unter „Geräte“ verbinden; Steuerung mit <kbd>↑</kbd>
+                  <kbd>↓</kbd> (Watt), <kbd>←</kbd>
+                  <kbd>→</kbd> (Kadenz), <kbd>Leertaste</kbd> (Pause). Simulator-Fahrten bringen keine Taler.
+                </>
+              }
+            />
+          </div>
+        )}
       </div>
     </div>
   );

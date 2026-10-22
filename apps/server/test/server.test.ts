@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import type { ServerMessage } from '@velo/protocol';
 import { hashPassword, signToken, verifyPassword, verifyToken } from '../src/auth';
+import { isAdmin } from '../src/http';
 import { wrapGap } from '../src/rooms';
 import { startServer, type VeloServer } from '../src/server';
 import { MemoryStorage } from '../src/storage/memory';
@@ -27,6 +28,16 @@ describe('auth', () => {
     const forged = `${h}.${Buffer.from(JSON.stringify({ sub: 'admin', name: 'x', exp: 9e9 })).toString('base64url')}.${s}`;
     expect(verifyToken(forged, SECRET)).toBeNull();
     expect(verifyToken(signToken({ sub: 'u1', name: 'A' }, SECRET, -10), SECRET)).toBeNull();
+  });
+});
+
+describe('isAdmin', () => {
+  it('only accepts e-mails from the ADMIN_EMAILS list, case-insensitive', () => {
+    expect(isAdmin('Chef@Example.de', ' chef@example.de , zwei@example.de')).toBe(true);
+    expect(isAdmin('zwei@example.de', 'chef@example.de,zwei@example.de')).toBe(true);
+    expect(isAdmin('andere@example.de', 'chef@example.de')).toBe(false);
+    expect(isAdmin('', '')).toBe(false);
+    expect(isAdmin('', 'chef@example.de,')).toBe(false);
   });
 });
 

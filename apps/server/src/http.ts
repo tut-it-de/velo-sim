@@ -53,7 +53,13 @@ function send(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-const publicUser = (u: User) => ({ id: u.id, name: u.name, email: u.email });
+/** Admins come from ADMIN_EMAILS (comma-separated) on the server – the app cannot make itself admin. */
+export const isAdmin = (email: string, list = process.env.ADMIN_EMAILS ?? '') =>
+  list
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .includes(email.trim().toLowerCase()) && !!email.trim();
+const publicUser = (u: User) => ({ id: u.id, name: u.name, email: u.email, admin: isAdmin(u.email) });
 
 /** Small fixed-window limiter for login/register (per IP). */
 const attempts = new Map<string, { count: number; resetAt: number }>();

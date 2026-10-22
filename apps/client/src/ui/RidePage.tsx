@@ -224,11 +224,6 @@ function DeviceBar({
   const settings = useStore(settingsStore);
   const trainer = slots.trainer;
   const connected = trainer.state === 'connected';
-  const useSimulator = async () => {
-    await deviceManager.setSimulator(true);
-    await deviceManager.connect('trainer');
-    await deviceManager.connect('hrm');
-  };
   return (
     <div className="device-bar">
       <div className={`device-trainer${connected ? ' ok' : ''}`}>
@@ -243,10 +238,6 @@ function DeviceBar({
             <span className="device-actions">
               <button className="link" onClick={() => pageStore.set('devices')}>
                 Verbinden
-              </button>
-              <span className="muted">·</span>
-              <button className="link" onClick={useSimulator}>
-                Simulator
               </button>
             </span>
           )}

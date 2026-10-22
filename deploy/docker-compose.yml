@@ -17,6 +17,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:?}
       PUBLIC_URL: https://${VELO_DOMAIN:-velo.tut-it.de}
       TRUST_PROXY: '1'
+      # Komma-getrennte E-Mails mit Admin-Rechten (Admin-Modus, Simulator).
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
       # Optional: Strava-API-App (strava.com/settings/api, Callback-Domain = VELO_DOMAIN) – leer = Strava aus.
       STRAVA_CLIENT_ID: ${STRAVA_CLIENT_ID:-}
       STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET:-}
