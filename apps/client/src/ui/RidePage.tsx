@@ -261,7 +261,7 @@ function RouteSelect({ view, onStart }: { view: 'ride' | 'workouts'; onStart: (r
   const [workout, setWorkout] = useState<Workout | undefined>();
   const [online, setOnline] = useState<Record<string, number> | null>(null);
   const [pending, setPending] = useState<{ routeId: string; workout?: Workout } | null>(null);
-  const hasServer = !!settings.serverUrl.trim();
+  const hasServer = !!serverBase();
 
   useEffect(() => {
     if (!hasServer) return;
@@ -273,7 +273,7 @@ function RouteSelect({ view, onStart }: { view: 'ride' | 'workouts'; onStart: (r
       alive = false;
       clearInterval(id);
     };
-  }, [hasServer, settings.serverUrl]);
+  }, [hasServer]);
 
   const power = Math.round(settings.ftp * 0.75);
   const routes = useMemo<RouteRow[]>(() => {

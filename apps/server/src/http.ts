@@ -128,6 +128,14 @@ export async function handleHttp(ctx: ApiContext, req: IncomingMessage, res: Ser
         return send(res, 200, { user: publicUser(user), garage: await ctx.storage.getGarage(user.id) });
       }
 
+      case 'POST /api/me/name': {
+        const user = await requireUser(ctx, req);
+        const name = String((await readJson(req)).name ?? '').trim().slice(0, 24);
+        if (name.length < 2) throw new HttpError(400, 'Der Name muss mindestens 2 Zeichen haben');
+        await ctx.storage.setUserName(user.id, name);
+        return send(res, 200, { user: publicUser({ ...user, name }) });
+      }
+
       case 'POST /api/garage/buy': {
         const user = await requireUser(ctx, req);
         const b = await readJson(req);

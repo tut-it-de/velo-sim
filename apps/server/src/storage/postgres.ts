@@ -125,6 +125,10 @@ export class PostgresStorage implements Storage {
     return res.rows[0] ? this.mapUser(res.rows[0]) : undefined;
   }
 
+  async setUserName(userId: string, name: string): Promise<void> {
+    await this.pool.query('UPDATE users SET name = $2 WHERE id = $1', [userId, name]);
+  }
+
   async getGarage(userId: string): Promise<Garage> {
     const [owned, loadout, balance, laps, ledger] = await Promise.all([
       this.pool.query('SELECT item_id FROM owned_items WHERE user_id = $1', [userId]),

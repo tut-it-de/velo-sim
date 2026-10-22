@@ -2,7 +2,7 @@ import type { Loadout } from '@velo/equipment';
 import { garageStore, type GarageState } from '../state/garage';
 import { settingsStore } from '../state/settings';
 import { Store, loadJson, saveJson } from '../state/store';
-import { resolveServerBase, sameOriginServer } from './serverUrl';
+import { fixedServer } from './serverUrl';
 
 export interface AccountUser {
   id: string;
@@ -38,18 +38,9 @@ export class ApiError extends Error {
   }
 }
 
-/**
- * Browser deployment (app served by the game server): an empty server address means "this
- * origin". Fill it in so the settings page shows it and allows logging in right away.
- */
-const sameOrigin = sameOriginServer();
-if (sameOrigin && !settingsStore.get().serverUrl.trim()) {
-  settingsStore.set({ ...settingsStore.get(), serverUrl: sameOrigin });
-}
-
-/** Game server base URL ('' = offline). Empty setting → same origin when served by the game server. */
+/** Game server base URL – fixed per build, see fixedServer(). */
 export function serverBase(): string {
-  return resolveServerBase(settingsStore.get().serverUrl);
+  return fixedServer();
 }
 
 export function isLoggedIn(): boolean {
@@ -99,6 +90,15 @@ export async function login(email: string, password: string): Promise<void> {
   const r = await call<{ token: string; user: AccountUser }>('/api/auth/login', { email, password });
   accountStore.set({ token: r.token, user: r.user });
   await refreshAccount();
+}
+
+/** New name on the route: shown at once, saved on the server (other riders see it from the next ride). */
+export async function renameAccount(name: string): Promise<void> {
+  const user = accountStore.get().user;
+  if (user) accountStore.set({ ...accountStore.get(), user: { ...user, name } });
+  if (name.trim().length < 2) return;
+  const r = await call<{ user: AccountUser }>('/api/me/name', { name: name.trim() });
+  accountStore.set({ ...accountStore.get(), user: r.user });
 }
 
 export function logout(): void {

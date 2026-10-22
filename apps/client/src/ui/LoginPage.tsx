@@ -1,15 +1,8 @@
 import { useState, type FormEvent } from 'react';
-import { accountStore, fetchOnline, login, logout, register, serverBase } from '../net/api';
-import { builtInServer } from '../net/serverUrl';
+import { accountStore, login, logout, register } from '../net/api';
 import { settingsStore, updateSettings } from '../state/settings';
 import { useStore } from '../state/store';
 import { pageStore } from '../state/ui';
-
-/**
- * Suggested server address: the one built into the app (VITE_SERVER_URL, set by npm run ios:sync), or where
- * `npm run server` listens when the client runs from the Vite dev server or `vite preview`.
- */
-const devServer = () => builtInServer || (typeof location !== 'undefined' ? `http://${location.hostname}:8080` : '');
 
 /**
  * Sign in or create an account on the game server. With an account the server books the Taler
@@ -22,8 +15,6 @@ export function LoginPage() {
   const [email, setEmail] = useState('');
   const [name, setName] = useState(settings.riderName === 'Fahrer' ? '' : settings.riderName);
   const [password, setPassword] = useState('');
-  const [editServer, setEditServer] = useState(!serverBase());
-  const [server, setServer] = useState(settings.serverUrl || devServer());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,10 +23,6 @@ export function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      if (editServer) {
-        updateSettings({ serverUrl: server.trim() });
-        if (!(await fetchOnline())) throw new Error(`Unter ${server.trim() || 'dieser Adresse'} antwortet kein Server.`);
-      }
       if (mode === 'login') await login(email.trim(), password);
       else await register(email.trim(), name.trim(), password);
       updateSettings({ rideOnline: true });
@@ -53,7 +40,7 @@ export function LoginPage() {
         <div className="page-inner auth">
           <h1>Angemeldet</h1>
           <p>
-            Du bist als <strong>{account.user.name}</strong> ({account.user.email}) auf {serverBase()} angemeldet.
+            Du bist als <strong>{account.user.name}</strong> ({account.user.email}) angemeldet.
           </p>
           <div className="row">
             <button className="primary" onClick={() => pageStore.set('ride')}>
@@ -67,7 +54,7 @@ export function LoginPage() {
   }
 
   const register_ = mode === 'register';
-  const ready = !!email.trim() && password.length >= (register_ ? 8 : 1) && (!register_ || name.trim().length >= 2) && (!editServer || !!server.trim());
+  const ready = !!email.trim() && password.length >= (register_ ? 8 : 1) && (!register_ || name.trim().length >= 2);
 
   return (
     <div className="page">
@@ -96,19 +83,6 @@ export function LoginPage() {
             Passwort{register_ && <span className="muted"> (mindestens 8 Zeichen)</span>}
             <input type="password" autoComplete={register_ ? 'new-password' : 'current-password'} value={password} onChange={(e) => setPassword(e.target.value)} />
           </label>
-          {editServer ? (
-            <label>
-              Server
-              <input value={server} placeholder="https://velo.example.de" onChange={(e) => setServer(e.target.value)} />
-            </label>
-          ) : (
-            <div className="small muted">
-              Server: {serverBase()}{' '}
-              <button type="button" className="link" onClick={() => setEditServer(true)}>
-                ändern
-              </button>
-            </div>
-          )}
           {error && <div className="auth-error">{error}</div>}
           <button className="primary" type="submit" disabled={busy || !ready}>
             {busy ? 'Einen Moment …' : register_ ? 'Konto erstellen' : 'Anmelden'}

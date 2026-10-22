@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import connectWithStrava from '../assets/strava/connect-with-strava.svg';
 import { PoweredByStrava } from './StravaStatusLine';
 import { connectStrava, disconnectStrava, refreshStravaStatus, setStravaAutoUpload, stravaStore } from '../net/strava';
-import { accountStore, fetchOnline, isAdminUser, login, logout, refreshAccount, register } from '../net/api';
+import { accountStore, isAdminUser, logout, refreshAccount, renameAccount } from '../net/api';
 import { deviceManager } from '../devices/deviceManager';
 import { GRAPHICS_QUALITY_OPTIONS } from '../game/real/quality';
 import { settingsStore, updateSettings, type Settings } from '../state/settings';
@@ -44,7 +44,7 @@ export function SettingsPage() {
           <h2>Fahrer</h2>
           <div className="form">
             <label>Name</label>
-            <input value={s.riderName} maxLength={24} onChange={(e) => updateSettings({ riderName: e.target.value })} style={{ maxWidth: 260 }} />
+            <NameInput />
             <label>Land</label>
             <div className="row">
               <select value={s.country} onChange={(e) => updateSettings({ country: e.target.value })} style={{ maxWidth: 260 }}>
@@ -147,22 +147,44 @@ export function SettingsPage() {
   );
 }
 
-function AccountCard() {
+/** The rider's name: changes the name top right at once and is saved on the server when leaving the field. */
+function NameInput() {
   const settings = useStore(settingsStore);
   const account = useStore(accountStore);
-  const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [email, setEmail] = useState('');
-  const [name, setName] = useState(settings.riderName);
-  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const value = account.user?.name ?? settings.riderName;
+  return (
+    <div>
+      <input
+        value={value}
+        maxLength={24}
+        style={{ maxWidth: 260 }}
+        onChange={(e) => {
+          updateSettings({ riderName: e.target.value });
+          const user = accountStore.get().user;
+          if (user) accountStore.set({ ...accountStore.get(), user: { ...user, name: e.target.value } });
+        }}
+        onBlur={(e) => {
+          setError(null);
+          renameAccount(e.target.value).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+        }}
+      />
+      {error && <div className="error-text small">{error}</div>}
+    </div>
+  );
+}
+
+function AccountCard() {
+  const account = useStore(accountStore);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const run = async (fn: () => Promise<unknown>, ok: string) => {
+  const sync = async () => {
     setBusy(true);
     setStatus(null);
     try {
-      await fn();
-      setStatus(ok);
+      await refreshAccount();
+      setStatus('Garage synchronisiert ✓');
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     } finally {
@@ -172,69 +194,16 @@ function AccountCard() {
 
   return (
     <div className="card">
-      <h2>Online & Konto</h2>
-      <div className="form">
-        <label>Server</label>
-        <div className="row">
-          <input
-            value={settings.serverUrl}
-            placeholder="z. B. https://velo.deine-domain.de oder http://localhost:8080"
-            onChange={(e) => updateSettings({ serverUrl: e.target.value.trim() })}
-            style={{ width: 380 }}
-          />
-          <button
-            disabled={!settings.serverUrl}
-            onClick={() => run(async () => {
-              const o = await fetchOnline();
-              if (!o) throw new Error('Server nicht erreichbar');
-            }, 'Server erreichbar ✓')}
-          >
-            Testen
-          </button>
-        </div>
-        {account.user ? (
-          <>
-            <label>Angemeldet</label>
-            <div className="row">
-              <strong>{account.user.name}</strong>
-              <span className="muted small">{account.user.email}</span>
-              <button onClick={() => run(refreshAccount, 'Garage synchronisiert ✓')} disabled={busy}>
-                Synchronisieren
-              </button>
-              <button onClick={() => logout()}>Abmelden</button>
-            </div>
-          </>
-        ) : (
-          <>
-            <label>{mode === 'login' ? 'Anmelden' : 'Registrieren'}</label>
-            <div className="row">
-              <input type="email" placeholder="E-Mail" value={email} onChange={(e) => setEmail(e.target.value)} style={{ width: 200 }} />
-              {mode === 'register' && <input placeholder="Name" value={name} maxLength={24} onChange={(e) => setName(e.target.value)} style={{ width: 140 }} />}
-              <input type="password" placeholder="Passwort (min. 8)" value={password} onChange={(e) => setPassword(e.target.value)} style={{ width: 170 }} />
-              <button
-                className="primary"
-                disabled={busy || !settings.serverUrl || !email || password.length < (mode === 'register' ? 8 : 1)}
-                onClick={() =>
-                  run(
-                    () => (mode === 'login' ? login(email, password) : register(email, name, password)),
-                    mode === 'login' ? 'Angemeldet ✓' : 'Konto erstellt ✓',
-                  )
-                }
-              >
-                {mode === 'login' ? 'Anmelden' : 'Konto erstellen'}
-              </button>
-              <button className="link" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>
-                {mode === 'login' ? 'Neu hier? Registrieren' : 'Schon ein Konto? Anmelden'}
-              </button>
-            </div>
-          </>
-        )}
+      <h2>Konto</h2>
+      <div className="row">
+        <strong>{account.user?.name}</strong>
+        <span className="muted small">{account.user?.email}</span>
+        <button onClick={() => void sync()} disabled={busy}>
+          Synchronisieren
+        </button>
+        <button onClick={() => logout()}>Abmelden</button>
       </div>
       {status && <div className="small" style={{ marginTop: 8 }}>{status}</div>}
-      <p className="muted small" style={{ marginBottom: 0 }}>
-        Ohne Server fährst du offline, Garage und Taler liegen dann nur auf diesem Gerät. Mit Konto bucht der Server die Taler aus deinen Leistungsdaten,
-        und du siehst andere Fahrer auf der Strecke.
-      </p>
     </div>
   );
 }

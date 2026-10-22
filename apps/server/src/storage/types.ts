@@ -58,6 +58,7 @@ export interface Storage {
   createUser(email: string, name: string, passwordHash: string): Promise<User>;
   findUserByEmail(email: string): Promise<User | undefined>;
   getUser(id: string): Promise<User | undefined>;
+  setUserName(userId: string, name: string): Promise<void>;
   getGarage(userId: string): Promise<Garage>;
   /** Adds a ledger entry and returns the new balance. */
   addLedger(userId: string, amount: number, label: string): Promise<number>;

@@ -49,6 +49,10 @@ export class MemoryStorage implements Storage {
     return this.users.get(id)?.user;
   }
 
+  async setUserName(userId: string, name: string): Promise<void> {
+    this.data(userId).user.name = name;
+  }
+
   async getGarage(userId: string): Promise<Garage> {
     const d = this.data(userId);
     return {

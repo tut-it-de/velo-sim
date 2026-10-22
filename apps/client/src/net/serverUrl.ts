@@ -24,6 +24,14 @@ export function resolveServerBase(configured: string | undefined): string {
   return (configured ?? '').trim().replace(/\/+$/, '') || sameOriginServer() || builtInServer;
 }
 
+/**
+ * The one game server the app talks to – not selectable: the page's own origin on the web, the built-in
+ * server in the iPad/desktop app, and `npm run server` on port 8080 next to the Vite dev server.
+ */
+export function fixedServer(): string {
+  return resolveServerBase('') || (typeof location !== 'undefined' && /^https?:$/.test(location.protocol) ? `http://${location.hostname}:8080` : '');
+}
+
 /** ws:// for http://, wss:// for https:// (a page served over HTTPS may only open wss://). */
 export function webSocketUrl(serverBase: string): string {
   const base = resolveServerBase(serverBase);
