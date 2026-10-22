@@ -12,6 +12,7 @@ const port = Number(process.env.PORT ?? 8080);
 const certDir = fileURLToPath(new URL('../certs/', import.meta.url));
 const defaultCert = `${certDir}cert.pem`;
 const defaultKey = `${certDir}key.pem`;
+const caFile = `${certDir}ca.crt`;
 const databaseUrl = process.env.DATABASE_URL;
 let secret = process.env.JWT_SECRET;
 
@@ -57,7 +58,7 @@ const tlsCert = process.env.TLS_CERT ?? (existsSync(defaultCert) ? defaultCert :
 const tlsKey = process.env.TLS_KEY ?? (existsSync(defaultKey) ? defaultKey : undefined);
 const tls =
   tlsCert && tlsKey
-    ? { port: Number(process.env.HTTPS_PORT ?? 8443), cert: readFileSync(tlsCert), key: readFileSync(tlsKey) }
+    ? { port: Number(process.env.HTTPS_PORT ?? 8443), cert: readFileSync(tlsCert), key: readFileSync(tlsKey), ca: existsSync(caFile) ? readFileSync(caFile) : undefined }
     : undefined;
 
 const server = await startServer({ storage, secret, port, strava, clientDir, tls });
@@ -69,6 +70,7 @@ const lan = Object.values(networkInterfaces())
 for (const ip of lan) {
   console.log(`Im Netzwerk: http://${ip}:${port}` + (server.httpsUrl ? `  ·  https://${ip}:${tls!.port} (Bluetooth)` : ''));
 }
+if (tls?.ca && lan[0]) console.log(`Handy-Zertifikat (einmal installieren): http://${lan[0]}:${port}/velo-ca.crt`);
 if (!server.httpsUrl) console.log('HTTPS: aus (npm run cert -w @velo/server erzeugt ein Zertifikat – nötig für Bluetooth auf anderen Geräten)');
 
 const shutdown = async () => {

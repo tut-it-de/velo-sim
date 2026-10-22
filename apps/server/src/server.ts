@@ -21,7 +21,7 @@ export interface VeloServerOptions {
   /** Built web client (apps/client/dist) to serve on / — omitted: API and WebSocket only. */
   clientDir?: string;
   /** Also serve everything over HTTPS on this port, e.g. so phones in the LAN may use Web Bluetooth (secure context only). */
-  tls?: { port: number; cert: string | Buffer; key: string | Buffer };
+  tls?: { port: number; cert: string | Buffer; key: string | Buffer; /** DER root, offered for download on /velo-ca.crt. */ ca?: Buffer };
 }
 
 export interface VeloServer {
@@ -57,6 +57,11 @@ export async function startServer(opts: VeloServerOptions): Promise<VeloServer> 
   const ctx = { storage: opts.storage, secret: opts.secret, game, strava };
   const client = opts.clientDir ? createStaticHandler(opts.clientDir) : undefined;
   const onRequest: RequestListener = (req, res) => {
+    if (opts.tls?.ca && req.url === '/velo-ca.crt') {
+      res.writeHead(200, { 'content-type': 'application/x-x509-ca-cert', 'content-disposition': 'attachment; filename="velo-ca.crt"' });
+      res.end(opts.tls.ca);
+      return;
+    }
     if (client && (req.method === 'GET' || req.method === 'HEAD') && !isApiPath(req.url)) {
       void client.serve(req, res).catch((err) => {
         console.error('[static]', err);

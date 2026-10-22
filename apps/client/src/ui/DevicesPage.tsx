@@ -28,7 +28,20 @@ export function DevicesPage() {
           <span className="muted small">Plattform: {platform.label}</span>
         </div>
 
-        {platform.bluetoothHint && !settings.useSimulator && <div className="notice">{platform.bluetoothHint}</div>}
+        {platform.bluetoothHint && !settings.useSimulator && (
+          <div className="notice">
+            {platform.bluetoothHint.text}
+            {platform.bluetoothHint.links && (
+              <div className="row" style={{ gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
+                {platform.bluetoothHint.links.map((l) => (
+                  <button key={l.href} className="primary" onClick={() => location.assign(l.href)}>
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {settings.useSimulator && (
           <div className="notice row" style={{ justifyContent: 'space-between', gap: 16 }}>
             <span>
