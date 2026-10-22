@@ -67,11 +67,14 @@ const lan = Object.values(networkInterfaces())
   .flat()
   .filter((i) => i && i.family === 'IPv4' && !i.internal)
   .map((i) => i!.address);
-for (const ip of lan) {
-  console.log(`Im Netzwerk: http://${ip}:${port}` + (server.httpsUrl ? `  ·  https://${ip}:${tls!.port} (Bluetooth)` : ''));
+// LAN hints only for local runs; in production a reverse proxy (Caddy) terminates HTTPS.
+if (process.env.NODE_ENV !== 'production') {
+  for (const ip of lan) {
+    console.log(`Im Netzwerk: http://${ip}:${port}` + (server.httpsUrl ? `  ·  https://${ip}:${tls!.port} (Bluetooth)` : ''));
+  }
+  if (tls?.ca && lan[0]) console.log(`Handy-Zertifikat (einmal installieren): http://${lan[0]}:${port}/velo-ca.crt`);
+  if (!server.httpsUrl) console.log('HTTPS: aus (npm run cert -w @velo/server erzeugt ein Zertifikat – nötig für Bluetooth auf anderen Geräten)');
 }
-if (tls?.ca && lan[0]) console.log(`Handy-Zertifikat (einmal installieren): http://${lan[0]}:${port}/velo-ca.crt`);
-if (!server.httpsUrl) console.log('HTTPS: aus (npm run cert -w @velo/server erzeugt ein Zertifikat – nötig für Bluetooth auf anderen Geräten)');
 
 const shutdown = async () => {
   console.log('Fahre herunter …');
