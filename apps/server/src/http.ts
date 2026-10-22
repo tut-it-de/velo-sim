@@ -81,7 +81,9 @@ export async function handleHttp(ctx: ApiContext, req: IncomingMessage, res: Ser
     if (req.method === 'OPTIONS') return send(res, 204, {});
     const url = new URL(req.url ?? '/', 'http://localhost');
     const route = `${req.method} ${url.pathname}`;
-    const ip = req.socket.remoteAddress ?? 'unknown';
+    // Behind Caddy (TRUST_PROXY=1) every request comes from the proxy; Caddy puts the real client IP in X-Forwarded-For.
+    const forwarded = process.env.TRUST_PROXY ? String(req.headers['x-forwarded-for'] ?? '').split(',')[0]?.trim() : '';
+    const ip = forwarded || req.socket.remoteAddress || 'unknown';
 
     if (url.pathname.startsWith('/api/strava/')) return await handleStrava(ctx, req, res, url);
 

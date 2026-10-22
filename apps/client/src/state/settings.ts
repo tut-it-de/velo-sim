@@ -1,4 +1,5 @@
 import type { GraphicsQuality } from '../game/real/quality';
+import { builtInServer } from '../net/serverUrl';
 import { Store, loadJson, saveJson } from './store';
 
 export interface Settings {
@@ -42,7 +43,16 @@ export const DEFAULT_SETTINGS: Settings = {
   adminMode: false,
 };
 
-export const settingsStore = new Store<Settings>(loadJson(KEY, DEFAULT_SETTINGS));
+/**
+ * Builds with a public server (the iPad app → https://velo.tut-it.de) drop an older LAN address like
+ * http://192.168.x.y:8080 from the time the app talked to a Mac at home, so they use the public server.
+ */
+function withoutStaleLanServer(s: Settings): Settings {
+  const lan = /^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|localhost|127\.)/;
+  return builtInServer.startsWith('https://') && lan.test(s.serverUrl) ? { ...s, serverUrl: '' } : s;
+}
+
+export const settingsStore = new Store<Settings>(withoutStaleLanServer(loadJson(KEY, DEFAULT_SETTINGS)));
 settingsStore.subscribe(() => saveJson(KEY, settingsStore.get()));
 
 export function updateSettings(patch: Partial<Settings>): void {

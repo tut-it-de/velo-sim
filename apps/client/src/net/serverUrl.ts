@@ -16,9 +16,12 @@ export function sameOriginServer(): string {
   return location.origin;
 }
 
-/** Configured server address without trailing slashes; empty falls back to the same origin (see above). */
+/** Server built into the app (VITE_SERVER_URL, e.g. https://velo.tut-it.de for the iPad app); empty for the web build. */
+export const builtInServer = ((import.meta.env.VITE_SERVER_URL as string | undefined) ?? '').replace(/\/+$/, '');
+
+/** Configured server address without trailing slashes; empty falls back to the same origin, then the built-in server. */
 export function resolveServerBase(configured: string | undefined): string {
-  return (configured ?? '').trim().replace(/\/+$/, '') || sameOriginServer();
+  return (configured ?? '').trim().replace(/\/+$/, '') || sameOriginServer() || builtInServer;
 }
 
 /** ws:// for http://, wss:// for https:// (a page served over HTTPS may only open wss://). */

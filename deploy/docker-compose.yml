@@ -16,6 +16,7 @@ services:
       DATABASE_URL: postgres://velo:${POSTGRES_PASSWORD:?}@db:5432/velo
       JWT_SECRET: ${JWT_SECRET:?}
       PUBLIC_URL: https://${VELO_DOMAIN:-velo.tut-it.de}
+      TRUST_PROXY: '1'
     depends_on:
       db:
         condition: service_healthy

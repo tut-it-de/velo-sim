@@ -1,16 +1,15 @@
 import { useState, type FormEvent } from 'react';
 import { accountStore, fetchOnline, login, logout, register, serverBase } from '../net/api';
+import { builtInServer } from '../net/serverUrl';
 import { settingsStore, updateSettings } from '../state/settings';
 import { useStore } from '../state/store';
 import { pageStore } from '../state/ui';
 
 /**
- * Suggested server address: the Mac that built the iPad app (VITE_SERVER_URL, set by npm run ios:sync), or where
+ * Suggested server address: the one built into the app (VITE_SERVER_URL, set by npm run ios:sync), or where
  * `npm run server` listens when the client runs from the Vite dev server or `vite preview`.
  */
-const devServer = () =>
-  (import.meta.env.VITE_SERVER_URL as string | undefined) ||
-  (typeof location !== 'undefined' ? `http://${location.hostname}:8080` : '');
+const devServer = () => builtInServer || (typeof location !== 'undefined' ? `http://${location.hostname}:8080` : '');
 
 /**
  * Sign in or create an account on the game server. With an account the server books the Taler
