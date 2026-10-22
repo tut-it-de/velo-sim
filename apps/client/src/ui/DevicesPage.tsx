@@ -9,7 +9,7 @@ import { StatusDot, Tile, Toggle, fmt } from './components';
 const SLOT_INFO: Record<DeviceSlot, { title: string; hint: string }> = {
   trainer: { title: 'Smart-Trainer', hint: 'KICKR Core oder jeder FTMS-Trainer' },
   hrm: { title: 'Herzfrequenz', hint: 'Brustgurt oder Uhr im Broadcast-Modus' },
-  cadence: { title: 'Kadenzsensor (optional)', hint: 'Genauer als die geschätzte Kadenz des KICKR Core v1' },
+  cadence: { title: 'Trittfrequenz', hint: 'Kommt vom Smart-Trainer – ein eigener Kadenzsensor ist optional' },
 };
 
 export function DevicesPage() {
@@ -64,16 +64,23 @@ export function DevicesPage() {
                 <div className="muted small" style={{ marginBottom: 10 }}>
                   {SLOT_INFO[slot].hint}
                 </div>
-                <div className="row" style={{ justifyContent: 'space-between' }}>
-                  <StatusDot state={s.state} label={s.name ? `${s.name}${s.simulated ? ' (Simulator)' : ''}` : undefined} />
-                  {connected ? (
-                    <button onClick={() => deviceManager.disconnect(slot)}>Trennen</button>
-                  ) : (
-                    <button className="primary" disabled={busy || (slot === 'cadence' && settings.useSimulator)} onClick={() => deviceManager.connect(slot)}>
-                      {busy ? 'Verbinde …' : settings.useSimulator ? 'Simulator verbinden' : 'Verbinden'}
-                    </button>
-                  )}
-                </div>
+                {slot === 'cadence' && !connected && trainerConnected ? (
+                  <div className="row" style={{ justifyContent: 'space-between' }}>
+                    <StatusDot state="connected" label={`vom ${slots.trainer.name ?? 'Trainer'}`} />
+                    <strong>{fmt(metrics.cadence)} rpm</strong>
+                  </div>
+                ) : (
+                  <div className="row" style={{ justifyContent: 'space-between' }}>
+                    <StatusDot state={s.state} label={s.name ? `${s.name}${s.simulated ? ' (Simulator)' : ''}` : undefined} />
+                    {connected ? (
+                      <button onClick={() => deviceManager.disconnect(slot)}>Trennen</button>
+                    ) : (
+                      <button className="primary" disabled={busy || (slot === 'cadence' && settings.useSimulator)} onClick={() => deviceManager.connect(slot)}>
+                        {busy ? 'Verbinde …' : settings.useSimulator ? 'Simulator verbinden' : 'Verbinden'}
+                      </button>
+                    )}
+                  </div>
+                )}
                 {s.error && <div className="error-text" style={{ marginTop: 8 }}>{s.error}</div>}
                 {slot === 'hrm' && !connected && !settings.useSimulator && <HeartRateHelp />}
               </div>
@@ -87,7 +94,7 @@ export function DevicesPage() {
             label="Kadenz"
             value={fmt(metrics.cadence)}
             unit="rpm"
-            sub={metrics.cadenceSource === 'sensor' ? 'vom Kadenzsensor' : metrics.cadenceSource === 'trainer' ? 'vom Trainer (geschätzt)' : 'keine Quelle'}
+            sub={metrics.cadenceSource === 'sensor' ? 'vom Kadenzsensor' : metrics.cadenceSource === 'trainer' ? 'vom Trainer' : 'keine Quelle'}
           />
           <Tile
             label="Herzfrequenz"

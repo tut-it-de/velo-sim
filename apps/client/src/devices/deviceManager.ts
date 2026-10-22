@@ -142,6 +142,7 @@ class DeviceManager {
         t.on('connection', (state) => this.patchSlot('trainer', { state }));
         this.patchSlot('trainer', { state: 'connected', name: t.name });
         this.remember('trainer', t.device.id, simulated);
+        this.recompute({}); // cadence is "from the trainer" right away, before the first pedal stroke
         log('info', t.describe().replace(/\n/g, ' · '));
       } else if (slot === 'hrm') {
         await this.hrm?.disconnect();
@@ -215,7 +216,10 @@ class DeviceManager {
   async disconnect(slot: DeviceSlot): Promise<void> {
     const device = slot === 'trainer' ? this.trainer : slot === 'hrm' ? this.hrm : this.cadenceSensor;
     await device?.disconnect();
-    if (slot === 'trainer') this.trainer = undefined;
+    if (slot === 'trainer') {
+      this.trainer = undefined;
+      this.recompute({ trainerCadence: undefined, trainerHr: undefined, trainerSpeed: undefined });
+    }
     if (slot === 'hrm') {
       this.hrm = undefined;
       this.hrmValue = undefined;
@@ -307,7 +311,8 @@ class DeviceManager {
       heartRate,
       trainerSpeedKmh: stale ? undefined : this.trainerSpeed,
       stale,
-      cadenceSource: useSensor ? 'sensor' : this.trainerCadence !== undefined ? 'trainer' : null,
+      // A connected trainer always counts as the cadence source – most trainers measure it, so no extra sensor is needed.
+      cadenceSource: useSensor ? 'sensor' : this.trainerCadence !== undefined || this.trainer ? 'trainer' : null,
       heartRateSource: hrmFresh ? 'hrm' : this.trainerHr !== undefined ? 'trainer' : null,
     });
   }

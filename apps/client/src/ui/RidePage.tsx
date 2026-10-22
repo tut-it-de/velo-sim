@@ -171,7 +171,9 @@ function DeviceBar({ children }: { children: ReactNode }) {
       <div className="device-metric">
         <Icon name="cadence" size={18} />
         <span>
-          <span className="muted small">Trittfrequenz</span>
+          <span className="muted small">
+            Trittfrequenz{m.cadenceSource === 'trainer' ? ' · Trainer' : m.cadenceSource === 'sensor' ? ' · Sensor' : ''}
+          </span>
           <strong>
             {m.cadenceSource ? Math.round(m.cadence) : '–'} <small>rpm</small>
           </strong>
@@ -198,6 +200,7 @@ function DeviceBar({ children }: { children: ReactNode }) {
 function StartDevicesDialog({ onReady, onClose }: { onReady: () => void; onClose: () => void }) {
   const slots = useStore(deviceManager.slots);
   const settings = useStore(settingsStore);
+  const metrics = useStore(deviceManager.metrics);
   const trainerOk = slots.trainer.state === 'connected';
   const hrmOk = slots.hrm.state === 'connected';
   const ready = useRef(onReady);
@@ -240,6 +243,18 @@ function StartDevicesDialog({ onReady, onClose }: { onReady: () => void; onClose
         <h2>Geräte verbinden</h2>
         <p className="muted small">Vor dem Start brauchst du deinen Trainer. Mit Pulsgurt siehst du auch deine Herzfrequenz.</p>
         {row('trainer', 'Smart-Trainer', 'Pflicht – z. B. Wahoo KICKR')}
+        <div className={`start-device${trainerOk ? ' ok' : ''}`}>
+          <span className="device-icon">
+            <Icon name="cadence" size={22} />
+          </span>
+          <span className="start-device-text">
+            <strong>Trittfrequenz</strong>
+            <span className="muted small">
+              {slots.cadence.state === 'connected' ? `● ${slots.cadence.name ?? 'Kadenzsensor'}` : trainerOk ? `● vom ${slots.trainer.name ?? 'Trainer'}` : 'Kommt automatisch vom Trainer'}
+            </span>
+          </span>
+          {trainerOk && <span className="ok-text">{Math.round(metrics.cadence)} rpm</span>}
+        </div>
         {row('hrm', 'Pulsgurt', 'Optional – Brustgurt oder Uhr')}
         <div className="row start-devices-actions">
           <button onClick={onClose}>Abbrechen</button>
