@@ -119,7 +119,8 @@ export const SPECIES: Partial<Record<SpeciesId, SpeciesParams>> = {
     leafSize: 1.4,
     leavesPerTip: 5,
     barkCell: 2,
-    leafColor: [1, 1, 1],
+    // the spruce cell of the leaf atlas is about half as bright as the broadleaf ones
+    leafColor: [1.55, 1.45, 1.45],
     barkColor: [0.85, 0.7, 0.6],
     sides: [7, 3],
   },
@@ -159,7 +160,8 @@ export const SPECIES: Partial<Record<SpeciesId, SpeciesParams>> = {
     leafSize: 1.1,
     leavesPerTip: 6,
     barkCell: 2,
-    leafColor: [1, 1, 1],
+    // darkest cell of the leaf atlas but one, lifted so the crowns do not read as black
+    leafColor: [1.3, 1.3, 1.2],
     barkColor: [0.75, 0.6, 0.5],
     sides: [6, 3],
   },

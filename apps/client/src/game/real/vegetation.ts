@@ -422,7 +422,7 @@ export async function buildVegetation(
   mat.specularColor = Color3.Black();
   mat.diffuseColor = new Color3(0.95, 0.95, 0.95);
   // same light through the leaves as the 3D trees (nearTrees.ts), so the billboards match them
-  mat.emissiveColor = new Color3(0.27, 0.29, 0.24);
+  mat.emissiveColor = new Color3(0.38, 0.4, 0.33);
   const plugin = new BillboardPlugin(mat, atlas.normal);
   if (quality.level !== 'niedrig') {
     new WindPlugin(mat, { card: true, weight: 'colorAlpha', strength: 0.25 });
