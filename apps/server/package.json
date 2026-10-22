@@ -9,7 +9,8 @@
     "bots": "tsx scripts/bots.ts",
     "test": "vitest run",
     "type-check": "tsc -p tsconfig.json",
-    "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/server.mjs --external:pg-native --external:bufferutil --external:utf-8-validate --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\""
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/server.mjs --external:pg-native --external:bufferutil --external:utf-8-validate --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "cert": "tsx scripts/cert.ts"
   },
   "dependencies": {
     "@velo/equipment": "*",

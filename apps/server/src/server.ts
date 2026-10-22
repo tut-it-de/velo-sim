@@ -1,4 +1,6 @@
-import { createServer, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type RequestListener, type Server } from 'node:http';
+import { createServer as createHttpsServer } from 'node:https';
+import type { Duplex } from 'node:stream';
 import type { AddressInfo } from 'node:net';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { PROTOCOL_VERSION, parseClientMessage, type ServerMessage } from '@velo/protocol';
@@ -18,12 +20,16 @@ export interface VeloServerOptions {
   strava?: StravaConfig & { pollIntervalMs?: number; pollAttempts?: number };
   /** Built web client (apps/client/dist) to serve on / — omitted: API and WebSocket only. */
   clientDir?: string;
+  /** Also serve everything over HTTPS on this port, e.g. so phones in the LAN may use Web Bluetooth (secure context only). */
+  tls?: { port: number; cert: string | Buffer; key: string | Buffer };
 }
 
 export interface VeloServer {
   http: Server;
+  https?: Server;
   game: Game;
   url: string;
+  httpsUrl?: string;
   close(): Promise<void>;
 }
 
@@ -50,7 +56,7 @@ export async function startServer(opts: VeloServerOptions): Promise<VeloServer> 
   const strava = opts.strava ? new StravaService(opts.strava, opts.storage, opts.secret) : undefined;
   const ctx = { storage: opts.storage, secret: opts.secret, game, strava };
   const client = opts.clientDir ? createStaticHandler(opts.clientDir) : undefined;
-  const http = createServer((req, res) => {
+  const onRequest: RequestListener = (req, res) => {
     if (client && (req.method === 'GET' || req.method === 'HEAD') && !isApiPath(req.url)) {
       void client.serve(req, res).catch((err) => {
         console.error('[static]', err);
@@ -60,8 +66,16 @@ export async function startServer(opts: VeloServerOptions): Promise<VeloServer> 
       return;
     }
     void handleHttp(ctx, req, res);
-  });
-  const wss = new WebSocketServer({ server: http, path: '/ws', maxPayload: 8 * 1024 });
+  };
+  const http = createServer(onRequest);
+  const https = opts.tls ? createHttpsServer({ cert: opts.tls.cert, key: opts.tls.key }, onRequest) : undefined;
+  const wss = new WebSocketServer({ noServer: true, path: '/ws', maxPayload: 8 * 1024 });
+  const onUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+    if (!wss.shouldHandle(req)) return void socket.destroy();
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+  };
+  http.on('upgrade', onUpgrade);
+  https?.on('upgrade', onUpgrade);
 
   wss.on('connection', (ws) => {
     const conn = wsConnection(ws);
@@ -119,17 +133,27 @@ export async function startServer(opts: VeloServerOptions): Promise<VeloServer> 
   game.start();
   await new Promise<void>((resolve) => http.listen(opts.port ?? 8080, opts.host ?? '0.0.0.0', resolve));
   const addr = http.address() as AddressInfo;
-  const url = `http://${addr.address === '0.0.0.0' || addr.address === '::' ? 'localhost' : addr.address}:${addr.port}`;
+  const hostName = (a: AddressInfo) => (a.address === '0.0.0.0' || a.address === '::' ? 'localhost' : a.address);
+  const url = `http://${hostName(addr)}:${addr.port}`;
+  let httpsUrl: string | undefined;
+  if (https && opts.tls) {
+    await new Promise<void>((resolve) => https.listen(opts.tls!.port, opts.host ?? '0.0.0.0', resolve));
+    const a = https.address() as AddressInfo;
+    httpsUrl = `https://${hostName(a)}:${a.port}`;
+  }
 
   return {
     http,
+    https,
     game,
     url,
+    httpsUrl,
     async close() {
       game.stop();
       for (const client of wss.clients) client.terminate();
       await new Promise<void>((resolve) => wss.close(() => resolve()));
       await new Promise<void>((resolve) => http.close(() => resolve()));
+      if (https) await new Promise<void>((resolve) => https.close(() => resolve()));
     },
   };
 }
