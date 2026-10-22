@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "type-check": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
-    "ios:sync": "vite build && cap sync ios",
+    "ios:sync": "VITE_SERVER_URL=http://$(ipconfig getifaddr en0 || echo localhost):8080 vite build && cap sync ios",
     "ios:open": "cap open ios"
   },
   "dependencies": {
