@@ -2073,7 +2073,7 @@ button.rideon {
 
 /* ---------- Strava ---------- */
 .strava-mark {
-  color: #fc4c02;
+  color: #fc5200;
   font-weight: 800;
 }
 button.strava-button {
@@ -2097,8 +2097,31 @@ button.strava-button.small {
   border-color: var(--err);
 }
 button.strava-link {
-  color: #fc4c02;
+  color: #fc5200;
   font-weight: 700;
+}
+/* Official "Connect with Strava" asset: 48 px high, shown as-is. */
+button.strava-connect,
+button.strava-connect:hover:not(:disabled) {
+  padding: 0;
+  border: 0;
+  background: none;
+  line-height: 0;
+  border-radius: 6px;
+}
+button.strava-connect img {
+  display: block;
+  height: 48px;
+  width: auto;
+}
+button.strava-connect:disabled {
+  opacity: 0.6;
+}
+.powered-by-strava {
+  display: block;
+  height: 15px;
+  width: auto;
+  margin-top: 10px;
 }
 
 /* ---------- Admin: teleport ---------- */

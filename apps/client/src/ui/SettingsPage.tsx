@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import connectWithStrava from '../assets/strava/connect-with-strava.svg';
+import { PoweredByStrava } from './StravaStatusLine';
 import { connectStrava, disconnectStrava, refreshStravaStatus, setStravaAutoUpload, stravaStore } from '../net/strava';
 import { accountStore, fetchOnline, login, logout, refreshAccount, register } from '../net/api';
 import { GRAPHICS_QUALITY_OPTIONS } from '../game/real/quality';
@@ -270,7 +272,8 @@ function StravaCard() {
       ) : (
         <div className="row">
           <button
-            className="strava-button"
+            className="strava-connect"
+            aria-label="Connect with Strava"
             disabled={busy}
             onClick={() =>
               run(async () => {
@@ -280,12 +283,13 @@ function StravaCard() {
               })
             }
           >
-            Mit Strava verbinden
+            <img src={connectWithStrava} width={237} height={48} alt="Connect with Strava" />
           </button>
           <span className="muted small">Fahrten landen als „Virtual Ride“ mit Leistung, Kadenz und Herzfrequenz in deinem Strava-Profil.</span>
         </div>
       )}
       {message && <div className="small" style={{ marginTop: 8 }}>{message}</div>}
+      <PoweredByStrava />
     </div>
   );
 }
