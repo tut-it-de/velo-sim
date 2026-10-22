@@ -55,13 +55,16 @@ const UPDATE_DIFFUSE = /* glsl */ `
     float cx = veloNoise(q + vec2(0.3, 0.0)) * 0.65 + veloNoise((q + vec2(0.3, 0.0)) * 2.7 + 7.1) * 0.35;
     float cz = veloNoise(q + vec2(0.0, 0.3)) * 0.65 + veloNoise((q + vec2(0.0, 0.3)) * 2.7 + 7.1) * 0.35;
     normalW = normalize(normalW + vec3(c0 - cx, 0.0, c0 - cz) * 2.4 * veloFc);
-    veloCol *= mix(1.0, 0.62 + 0.72 * c0, veloFc);
+    veloCol *= mix(1.0, 0.8 + 0.4 * c0, veloFc);
   }
-  // close up, the ground under the trees is shaded leaf litter, not meadow (from afar the map reads as canopy)
+  // close up, the ground under the trees is sunlit leaf litter with moss patches, not meadow nor black soil
   float veloLitter = veloForest * (1.0 - smoothstep(40.0, 240.0, veloDist));
   if (veloLitter > 0.01) {
-    vec3 veloFloor = vec3(0.2, 0.165, 0.105) * (0.75 + 0.5 * veloNoise(veloP * 0.45));
-    veloCol = mix(veloCol, veloFloor, veloLitter * 0.6);
+    vec3 veloFloor = vec3(0.36, 0.3, 0.19) * (0.85 + 0.3 * veloNoise(veloP * 0.45));
+    float veloMossN = veloNoise(veloP * 0.09 + 4.2);
+    vec3 veloMoss = vec3(0.24, 0.32, 0.14) * (0.8 + 0.4 * veloNoise(veloP * 0.6 + 2.9));
+    veloFloor = mix(veloFloor, veloMoss, smoothstep(0.45, 0.7, veloMossN));
+    veloCol = mix(veloCol, veloFloor, veloLitter * 0.5);
   }
 #else
   veloCol *= mix(1.0, 0.92, veloForest);
@@ -121,6 +124,8 @@ const UPDATE_DIFFUSE = /* glsl */ `
       + vec3((veloLeafN.a - 0.5) * 2.0, 0.0, (veloLeafN.g - 0.5) * 2.0) * 0.6 * veloLitterW);
   }
 #endif
+  // forest floor under the canopy would otherwise read near-black (no ambient light in the scene): lift the albedo
+  veloCol *= mix(1.0, 1.2, veloForest);
   veloCol *= 1.0 - 0.32 * (1.0 - smoothstep(veloMap.w - 0.6, veloMap.w + 0.35, vPositionW.y));
   baseColor.rgb = veloCol;
 }

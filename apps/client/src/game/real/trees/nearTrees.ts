@@ -183,7 +183,7 @@ export class NearTrees {
         wood.diffuseColor = new Color3(p.barkColor[0], p.barkColor[1], p.barkColor[2]);
         wood.diffuseTexture = bark;
         // light scattered under the canopy: shaded bark stays readable instead of turning black
-        wood.emissiveColor = new Color3(0.12, 0.12, 0.12);
+        wood.emissiveColor = new Color3(0.26 * p.barkColor[0], 0.26 * p.barkColor[1], 0.26 * p.barkColor[2]);
         const leaves = new StandardMaterial(`near-${species}-leaves`, scene);
         leaves.specularColor = Color3.Black();
         leaves.backFaceCulling = false;
@@ -194,7 +194,7 @@ export class NearTrees {
         leaves.diffuseColor = new Color3(p.leafColor[0], p.leafColor[1], p.leafColor[2]);
         leaves.diffuseTexture = leafTex;
         // leaves let light through: the shaded and inner side of the crown glows green instead of going black
-        leaves.emissiveColor = new Color3(0.3 * p.leafColor[0], 0.32 * p.leafColor[1], 0.26 * p.leafColor[2]);
+        leaves.emissiveColor = new Color3(0.36 * p.leafColor[0], 0.38 * p.leafColor[1], 0.31 * p.leafColor[2]);
         // trees: amplitude 0.15 m at the tips, the stem foot stays fixed (weight from uv2.x)
         new WindPlugin(wood, { strength: 0.15 });
         new WindPlugin(leaves, { strength: 0.15 });

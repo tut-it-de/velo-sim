@@ -25,6 +25,11 @@ import type { Architecture } from './worldData';
 const CHUNK_ROWS = 96;
 const VERGE_COLS = 12;
 const STONE_REPEAT = 2.5;
+/** Strips per half of the asphalt (vertices per road row = 2 * ROAD_SPLITS + 3). */
+const ROAD_SPLITS = 4;
+/** Samples (2 m) on each side over which the cross direction of a ribbon row is averaged. */
+const FRAME_SMOOTH = 4;
+const ROAD_COLS = 2 * ROAD_SPLITS + 3;
 /** Asphalt detail tiles across the road: the U range spans roughly 9 m of road and shoulder, one tile per 1.5 m. */
 const ROAD_DETAIL_ACROSS = 6;
 const PARAPET_H = 0.85;
@@ -147,9 +152,21 @@ export function buildRouteRibbon(
   const texRepeat = roadTextureRepeat(markings);
   const t = c.track;
   const field = c.field;
+  const n = t.count;
   const frame = (r: number): Frame => {
     const i = c.sampleOf(r);
-    const h = t.headings[i]!;
+    // Cross direction from the heading averaged over ±FRAME_SMOOTH samples (tent weights): on a constant bend it
+    // equals the local heading, but where the map line kinks (a turn-off at a junction) the cross sections fan
+    // out over a few metres instead of folding the inner edge over itself (overlapping triangles flicker).
+    let sx = 0;
+    let sz = 0;
+    for (let k = -FRAME_SMOOTH; k <= FRAME_SMOOTH; k++) {
+      const h = t.headings[(((i + k) % n) + n) % n]!;
+      const wgt = FRAME_SMOOTH + 1 - Math.abs(k);
+      sx += Math.sin(h) * wgt;
+      sz += Math.cos(h) * wgt;
+    }
+    const h = Math.atan2(sx, sz);
     return { x: t.xs[i]!, y: t.ys[i]!, z: t.zs[i]!, rx: Math.cos(h), rz: -Math.sin(h) };
   };
 
@@ -208,11 +225,17 @@ export function buildRouteRibbon(
         const r = rows[k]!.r;
         const hl = c.hw[0][r]!;
         const hr = c.hw[1][r]!;
-        const offs = [-(hl + SHOULDER), -hl, 0, hr, hr + SHOULDER];
-        const dy = [-0.05, 0, 0.035, 0, -0.05];
-        const us = [0, 0.06, 0.5, 0.94, 1];
+        // shoulder, ROAD_SPLITS strips per half of the asphalt, shoulder: in bends the quads turn into trapezoids,
+        // and wide ones shear the lane markings along their diagonal; narrow strips keep the lines straight
         const base = md.vertexCount;
-        for (let q = 0; q < 5; q++) md.vertex(f.x + f.rx * offs[q]!, f.y + dy[q]!, f.z + f.rz * offs[q]!, 0, 1, 0, us[q]!, rows[k]!.d / texRepeat);
+        const put = (o: number, dy: number, u: number) => md.vertex(f.x + f.rx * o, f.y + dy, f.z + f.rz * o, 0, 1, 0, u, rows[k]!.d / texRepeat);
+        put(-(hl + SHOULDER), -0.05, 0);
+        for (let q = 0; q <= 2 * ROAD_SPLITS; q++) {
+          const t = q / ROAD_SPLITS - 1; // -1 left edge … 1 right edge
+          // rounded crown, 3.5 cm at the centre line
+          put(t < 0 ? t * hl : t * hr, 0.035 * (1 - t * t), 0.5 + t * 0.44);
+        }
+        put(hr + SHOULDER, -0.05, 1);
         return base;
       };
       for (let k = 0; k < rows.length - 1; k++) {
@@ -223,7 +246,7 @@ export function buildRouteRibbon(
         if (a === undefined) map.set(k, (a = roadRow(md, k)));
         let b = map.get(k + 1);
         if (b === undefined) map.set(k + 1, (b = roadRow(md, k + 1)));
-        for (let q = 0; q < 4; q++) md.stripQuad(a + q, a + q + 1, b + q, b + q + 1);
+        for (let q = 0; q < ROAD_COLS - 1; q++) md.stripQuad(a + q, a + q + 1, b + q, b + q + 1);
       }
       for (const [md, mat, name] of [
         [open, openMat, 'road'],
