@@ -1,6 +1,7 @@
 import { SERVICE } from '../uuids';
 import type { BleDevice, BleTransport, DeviceRequest } from '../transport/types';
 import { HeartRateMonitor, CadenceSensor } from './sensors';
+import { ZWIFT_SHIFTER_REQUEST, ZwiftShifter } from './zwiftShifter';
 import { SmartTrainer, type SmartTrainerOptions } from './smartTrainer';
 import type { ManagedDeviceOptions } from './managedDevice';
 
@@ -47,4 +48,11 @@ export async function requestCadenceSensor(transport: BleTransport, options: Man
   const sensor = new CadenceSensor(device, options);
   await sensor.start();
   return sensor;
+}
+
+/** Zwift Click, Play or Ride as a virtual shifter. */
+export async function requestZwiftShifter(transport: BleTransport, options: ManagedDeviceOptions = {}, found?: BleDevice): Promise<ZwiftShifter> {
+  const shifter = new ZwiftShifter(found ?? (await transport.requestDevice(ZWIFT_SHIFTER_REQUEST)), options);
+  await shifter.start();
+  return shifter;
 }

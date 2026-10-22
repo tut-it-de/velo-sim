@@ -25,7 +25,11 @@ export interface Settings {
   /** Admin tools in the ride (teleport along the route). Rides with a teleport earn nothing. */
   adminMode: boolean;
   /** Last trainer and heart rate strap, found again automatically in the iPad app. */
-  knownDevices: { trainer?: string; hrm?: string };
+  knownDevices: { trainer?: string; hrm?: string; shifter?: string };
+  /** Virtual shifting with the mouse while riding: left click heavier, right click lighter. */
+  shiftMouse: boolean;
+  /** Virtual shifting with the keys − and +. */
+  shiftKeys: boolean;
 }
 
 const KEY = 'velo.settings.v1';
@@ -44,6 +48,8 @@ export const DEFAULT_SETTINGS: Settings = {
   graphicsQuality: 'auto',
   adminMode: false,
   knownDevices: {},
+  shiftMouse: false,
+  shiftKeys: true,
 };
 
 /**

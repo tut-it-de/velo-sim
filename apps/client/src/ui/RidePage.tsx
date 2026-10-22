@@ -388,6 +388,7 @@ function RideView({
   onCancel: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const viewRef = useRef<HTMLDivElement>(null);
   const [session, setSession] = useState<RideSession | null>(null);
   const [world, setWorld] = useState<GameWorld | null>(null);
   const [progress, setProgress] = useState('Strecke wird geladen …');
@@ -471,9 +472,9 @@ function RideView({
       } else if (e.key === 'v' || e.key === 'V') {
         world.vape();
         session.net?.sendEmote('vape');
-      } else if (e.key === '-' || e.key === '_') {
+      } else if ((e.key === '-' || e.key === '_') && settingsStore.get().shiftKeys) {
         session.shift(-1);
-      } else if (e.key === '+' || e.key === '=') {
+      } else if ((e.key === '+' || e.key === '=') && settingsStore.get().shiftKeys) {
         session.shift(1);
       } else if (e.key === 'p' || e.key === 'P') {
         const st = session.snapshot.get().state;
@@ -485,8 +486,30 @@ function RideView({
     return () => window.removeEventListener('keydown', onKey);
   }, [world, session]);
 
+  // Virtual shifting from the Zwift remote and, if chosen, the mouse (left heavier, right lighter).
+  useEffect(() => {
+    if (!session) return;
+    const off = deviceManager.onShift((d) => session.shift(d));
+    const view = viewRef.current;
+    const onMouse = (e: MouseEvent) => {
+      if (!settingsStore.get().shiftMouse || (e.button !== 0 && e.button !== 2)) return;
+      if ((e.target as Element).closest('button, input, select, textarea, a, label, .hud-controls')) return;
+      session.shift(e.button === 0 ? 1 : -1);
+    };
+    const onMenu = (e: MouseEvent) => {
+      if (settingsStore.get().shiftMouse) e.preventDefault();
+    };
+    view?.addEventListener('mousedown', onMouse);
+    view?.addEventListener('contextmenu', onMenu);
+    return () => {
+      off();
+      view?.removeEventListener('mousedown', onMouse);
+      view?.removeEventListener('contextmenu', onMenu);
+    };
+  }, [session]);
+
   return (
-    <div className="ride-view">
+    <div className="ride-view" ref={viewRef}>
       <canvas ref={canvasRef} className="ride-canvas" />
       {!session && (
         <div className="ride-loading">

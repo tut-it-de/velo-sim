@@ -2,6 +2,9 @@ import {
   HEART_RATE_REQUEST,
   SimulatedTransport,
   TRAINER_REQUEST,
+  ZWIFT_SHIFTER_REQUEST,
+  requestZwiftShifter,
+  type ZwiftShifter,
   dumpGattTable,
   errorMessage,
   requestCadenceSensor,
@@ -66,6 +69,10 @@ class DeviceManager {
   readonly slots = new Store<Record<DeviceSlot, SlotState>>({ trainer: disconnected, hrm: disconnected, cadence: disconnected });
   readonly metrics = new Store<LiveMetrics>(EMPTY_METRICS);
   readonly simTransport = new SimulatedTransport();
+  /** Zwift Click / Play / Ride for virtual shifting (always real Bluetooth, also in simulator mode). */
+  readonly shifterSlot = new Store<SlotState>(disconnected);
+  private shifter?: ZwiftShifter;
+  private shiftListeners = new Set<(delta: 1 | -1) => void>();
 
   trainer?: SmartTrainer;
   hrm?: HeartRateMonitor;
@@ -98,6 +105,12 @@ class DeviceManager {
       const transport = this.transport();
       if (!transport.scan || transport.id === 'simulated' || !(await transport.isAvailable())) return;
       const known = settingsStore.get().knownDevices;
+      if (known.shifter && this.shifterSlot.get().state === 'disconnected') {
+        const found = await getBluetoothTransport()
+          .scan?.(ZWIFT_SHIFTER_REQUEST, { preferIds: [known.shifter], timeoutMs: 3000 })
+          .catch(() => null);
+        if (found?.id === known.shifter) await this.connectShifter(found);
+      }
       for (const slot of ['trainer', 'hrm'] as const) {
         if (this.slots.get()[slot].state !== 'disconnected') continue;
         this.patchSlot(slot, { state: 'connecting', error: undefined });
@@ -160,7 +173,41 @@ class DeviceManager {
     }
   }
 
-  private remember(slot: 'trainer' | 'hrm', id: string, simulated: boolean): void {
+  /** Called with +1 (heavier) or −1 (lighter) for every shift, from the remote, mouse or keyboard. */
+  onShift(listener: (delta: 1 | -1) => void): () => void {
+    this.shiftListeners.add(listener);
+    return () => this.shiftListeners.delete(listener);
+  }
+
+  shift(delta: 1 | -1): void {
+    for (const l of this.shiftListeners) l(delta);
+  }
+
+  async connectShifter(found?: BleDevice): Promise<void> {
+    this.shifterSlot.set({ state: 'connecting' });
+    try {
+      await this.shifter?.disconnect();
+      const s = await requestZwiftShifter(getBluetoothTransport(), { log }, found);
+      this.shifter = s;
+      s.on('data', (d) => this.shift(d.shift));
+      s.on('connection', (state) => this.shifterSlot.set((x) => ({ ...x, state })));
+      this.shifterSlot.set({ state: 'connected', name: s.name });
+      this.remember('shifter', s.device.id, false);
+    } catch (err) {
+      const msg = errorMessage(err);
+      const cancelled = /cancel|abgebrochen|User cancelled|chooser/i.test(msg);
+      this.shifterSlot.set({ state: 'disconnected', error: cancelled ? undefined : msg });
+      if (!cancelled) log('error', `Schalter verbinden fehlgeschlagen: ${msg}`);
+    }
+  }
+
+  async disconnectShifter(): Promise<void> {
+    await this.shifter?.disconnect();
+    this.shifter = undefined;
+    this.shifterSlot.set(disconnected);
+  }
+
+  private remember(slot: 'trainer' | 'hrm' | 'shifter', id: string, simulated: boolean): void {
     if (simulated) return;
     updateSettings({ knownDevices: { ...settingsStore.get().knownDevices, [slot]: id } });
   }

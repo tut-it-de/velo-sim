@@ -17,4 +17,5 @@ export * from './devices/managedDevice';
 export * from './devices/smartTrainer';
 export * from './devices/sensors';
 export * from './devices/request';
+export * from './devices/zwiftShifter';
 export * from './simulated/simulatedTransport';

@@ -16,6 +16,7 @@ import { balance, garageStore } from '../state/garage';
 import { formatCoins } from '@velo/equipment';
 import { RidePage } from './RidePage';
 import { SettingsPage } from './SettingsPage';
+import { ShiftingPage } from './ShiftingPage';
 import { useSimulatorKeys } from './useSimulatorKeys';
 
 const PAGES: Array<{ id: Exclude<Page, 'login'>; label: string; icon: IconName }> = [
@@ -24,6 +25,7 @@ const PAGES: Array<{ id: Exclude<Page, 'login'>; label: string; icon: IconName }
   { id: 'activities', label: 'Aktivitäten', icon: 'activities' },
   { id: 'garage', label: 'Garage', icon: 'garage' },
   { id: 'devices', label: 'Geräte', icon: 'devices' },
+  { id: 'shifting', label: 'Virtuelle Schaltung', icon: 'shift' },
   { id: 'settings', label: 'Einstellungen', icon: 'settings' },
 ];
 
@@ -118,6 +120,7 @@ export function App() {
         {page === 'garage' && <GaragePage />}
         {page === 'activities' && <ActivitiesPage />}
         {page === 'devices' && <DevicesPage />}
+        {page === 'shifting' && <ShiftingPage />}
         {page === 'settings' && <SettingsPage />}
         {page === 'login' && <LoginPage />}
       </div>
