@@ -4,7 +4,7 @@ import { powerZone } from '@velo/metrics';
 import { MAX_DRAFT_REDUCTION } from '@velo/physics';
 import type { MinimapData } from '../game/real/realWorld';
 import { CAMERA_MODES, type CameraMode } from '../game/world';
-import type { RideSession, RideSnapshot } from '../ride/rideSession';
+import { GEARS, type RideSession, type RideSnapshot } from '../ride/rideSession';
 import { accountStore } from '../net/api';
 import { settingsStore } from '../state/settings';
 import { useStore } from '../state/store';
@@ -93,6 +93,18 @@ export function Hud({
         </div>
 
         <div className="hud-controls">
+          <div className={`shifter${session.mode === 'erg' ? ' off' : ''}`} title={session.mode === 'erg' ? 'Im ERG-Modus hält der Trainer die Watt – Schalten wirkt erst wieder in der freien Fahrt' : 'Virtuell schalten: Taste − / +'}>
+            <button onClick={() => session.shift(-1)} disabled={s.gear <= 1} aria-label="Leichter schalten">
+              −
+            </button>
+            <span className="shifter-gear">
+              <small>Gang</small>
+              {s.gear}
+            </span>
+            <button onClick={() => session.shift(1)} disabled={s.gear >= GEARS.length} aria-label="Schwerer schalten">
+              +
+            </button>
+          </div>
           <select value={camera} onChange={(e) => onCamera(e.target.value as CameraMode)} aria-label="Kamera">
             {CAMERA_MODES.map((m) => (
               <option key={m.id} value={m.id}>

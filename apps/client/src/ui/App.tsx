@@ -2,10 +2,10 @@ import { useEffect } from 'react';
 import { settingsStore } from '../state/settings';
 import { accountStore, isAdminUser, refreshAccount } from '../net/api';
 import { deviceManager } from '../devices/deviceManager';
-import { refreshStravaStatus } from '../net/strava';
+import { refreshStravaStatus, syncPendingStrava } from '../net/strava';
 import { activitiesStore, loadActivities } from '../state/activities';
 import { useStore } from '../state/store';
-import { pageStore, searchStore, uiStore, type Page } from '../state/ui';
+import { pageStore, uiStore, type Page } from '../state/ui';
 import { ActivitiesPage } from './ActivitiesPage';
 import { BluetoothChooser } from './BluetoothChooser';
 import { DevicesPage } from './DevicesPage';
@@ -19,8 +19,7 @@ import { SettingsPage } from './SettingsPage';
 import { useSimulatorKeys } from './useSimulatorKeys';
 
 const PAGES: Array<{ id: Exclude<Page, 'login'>; label: string; icon: IconName }> = [
-  { id: 'ride', label: 'Fahren', icon: 'ride' },
-  { id: 'routes', label: 'Strecken', icon: 'routes' },
+  { id: 'ride', label: 'Fahren', icon: 'routes' },
   { id: 'workouts', label: 'Workouts', icon: 'workouts' },
   { id: 'activities', label: 'Aktivitäten', icon: 'activities' },
   { id: 'garage', label: 'Garage', icon: 'garage' },
@@ -44,16 +43,16 @@ export function App() {
   const { immersive } = useStore(uiStore);
   const garage = useStore(garageStore);
   const settings = useStore(settingsStore);
-  const search = useStore(searchStore);
   const activities = useStore(activitiesStore);
   useSimulatorKeys();
 
   useEffect(() => {
     // Sync wallet/garage and Strava link from the server when logged in.
-    void refreshAccount()
-      .catch(() => undefined)
-      .then(() => refreshStravaStatus());
-    void loadActivities();
+    void Promise.all([refreshAccount().catch(() => undefined), loadActivities()])
+      .then(() => refreshStravaStatus())
+      .then(() => syncPendingStrava());
+    // iPad app: find the trainer and the strap without a chooser.
+    void deviceManager.autoConnect();
   }, []);
 
   // The trainer simulator is for admins only.
@@ -65,7 +64,16 @@ export function App() {
   const name = account.user?.name ?? settings.riderName;
   const totalKm = activities.reduce((km, a) => km + a.summary.distanceM / 1000, 0);
   const lvl = riderLevel(totalKm);
-  const ridePage = page === 'ride' || page === 'routes' || page === 'workouts';
+  const ridePage = page === 'ride' || page === 'workouts';
+
+  // An account is required. Once signed in, the app stays signed in and also works offline.
+  if (!account.user) {
+    return (
+      <div className="app auth-gate">
+        <LoginPage />
+      </div>
+    );
+  }
 
   return (
     <div className={`app${immersive ? ' immersive' : ''}`}>
@@ -83,31 +91,20 @@ export function App() {
             </button>
           ))}
         </nav>
-        <button className="side-wallet" onClick={() => setPage('garage')} title="Watt-Taler – zur Garage">
-          <span className="muted small">Watt-Taler</span>
-          <strong>{settings.adminMode ? '∞' : formatCoins(balance(garage))}</strong>
-        </button>
       </aside>
 
       <div className="main">
         <header className="topbar" hidden={immersive}>
-          <label className="search">
-            <Icon name="search" size={18} />
-            <input
-              type="search"
-              placeholder="Strecken, Orte oder Regionen suchen …"
-              value={search}
-              onChange={(e) => {
-                searchStore.set(e.target.value);
-                if (page !== 'routes') setPage('routes');
-              }}
-            />
-          </label>
           <div className="spacer" />
-          <button className={`profile-chip${page === 'login' ? ' active' : ''}`} onClick={() => setPage(account.user ? 'settings' : 'login')} title={account.user ? 'Profil' : 'Anmelden'}>
+          <button className="wallet-chip" onClick={() => setPage('garage')} title="Watt-Taler – zur Garage">
+            <span className="coin" aria-hidden>W</span>
+            <strong>{settings.adminMode ? '∞' : formatCoins(balance(garage))}</strong>
+            <span className="muted small">Watt-Taler</span>
+          </button>
+          <button className={`profile-chip${page === 'settings' ? ' active' : ''}`} onClick={() => setPage('settings')} title="Profil">
             <span className="avatar">{name.trim().charAt(0).toUpperCase() || '?'}</span>
             <span className="profile-text">
-              <strong>{account.user ? name : 'Anmelden'}</strong>
+              <strong>{name}</strong>
               <span className="level">
                 Level {lvl.level}
                 <span className="level-bar" title={`${Math.round(totalKm)} von ${lvl.nextKm} km bis Level ${lvl.level + 1}`}>

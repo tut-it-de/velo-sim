@@ -1,10 +1,13 @@
 import {
+  HEART_RATE_REQUEST,
   SimulatedTransport,
+  TRAINER_REQUEST,
   dumpGattTable,
   errorMessage,
   requestCadenceSensor,
   requestHeartRateMonitor,
   requestTrainer,
+  type BleDevice,
   type BleTransport,
   type CadenceSensor,
   type ConnectionState,
@@ -85,14 +88,38 @@ class DeviceManager {
     this.slots.set((s) => ({ ...s, [slot]: { ...s[slot], ...patch } }));
   }
 
-  async connect(slot: DeviceSlot): Promise<void> {
+  /**
+   * Finds trainer and heart rate strap without a chooser (iPad app): remembered devices first, otherwise the
+   * nearest one. Returns quietly when nothing is found or the platform cannot scan.
+   */
+  async autoConnect(): Promise<void> {
+    if (this.autoConnecting) return this.autoConnecting;
+    this.autoConnecting = (async () => {
+      const transport = this.transport();
+      if (!transport.scan || transport.id === 'simulated' || !(await transport.isAvailable())) return;
+      const known = settingsStore.get().knownDevices;
+      for (const slot of ['trainer', 'hrm'] as const) {
+        if (this.slots.get()[slot].state !== 'disconnected') continue;
+        this.patchSlot(slot, { state: 'connecting', error: undefined });
+        const found = await transport
+          .scan(slot === 'trainer' ? TRAINER_REQUEST : HEART_RATE_REQUEST, { preferIds: known[slot] ? [known[slot]] : [], timeoutMs: 4000 })
+          .catch(() => null);
+        if (found) await this.connect(slot, found);
+        else this.patchSlot(slot, { state: 'disconnected' });
+      }
+    })().finally(() => (this.autoConnecting = undefined));
+    return this.autoConnecting;
+  }
+  private autoConnecting?: Promise<void>;
+
+  async connect(slot: DeviceSlot, found?: BleDevice): Promise<void> {
     const transport = this.transport();
     const simulated = transport.id === 'simulated';
     this.patchSlot(slot, { state: 'connecting', error: undefined, simulated });
     try {
       if (slot === 'trainer') {
         await this.trainer?.disconnect();
-        const t = await requestTrainer(transport, { log });
+        const t = await requestTrainer(transport, { log }, found);
         this.trainer = t;
         t.on('data', (d) => {
           this.lastTrainerData = Date.now();
@@ -101,10 +128,11 @@ class DeviceManager {
         });
         t.on('connection', (state) => this.patchSlot('trainer', { state }));
         this.patchSlot('trainer', { state: 'connected', name: t.name });
+        this.remember('trainer', t.device.id, simulated);
         log('info', t.describe().replace(/\n/g, ' · '));
       } else if (slot === 'hrm') {
         await this.hrm?.disconnect();
-        const h = await requestHeartRateMonitor(transport, { log });
+        const h = await requestHeartRateMonitor(transport, { log }, found);
         this.hrm = h;
         h.on('data', (d) => {
           this.hrmValue = { value: d.heartRate, t: Date.now() };
@@ -112,6 +140,7 @@ class DeviceManager {
         });
         h.on('connection', (state) => this.patchSlot('hrm', { state }));
         this.patchSlot('hrm', { state: 'connected', name: h.name });
+        this.remember('hrm', h.device.id, simulated);
       } else {
         await this.cadenceSensor?.disconnect();
         const c = await requestCadenceSensor(transport, { log });
@@ -129,6 +158,11 @@ class DeviceManager {
       this.patchSlot(slot, { state: 'disconnected', error: cancelled ? undefined : msg });
       if (!cancelled) log('error', `Verbinden fehlgeschlagen: ${msg}`);
     }
+  }
+
+  private remember(slot: 'trainer' | 'hrm', id: string, simulated: boolean): void {
+    if (simulated) return;
+    updateSettings({ knownDevices: { ...settingsStore.get().knownDevices, [slot]: id } });
   }
 
   async disconnect(slot: DeviceSlot): Promise<void> {

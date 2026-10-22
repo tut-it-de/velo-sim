@@ -1,6 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { activitiesStore, updateActivity, type StoredActivity } from '../state/activities';
-import { Store } from '../state/store';
+import { Store, loadJson, saveJson } from '../state/store';
 import { accountStore, isLoggedIn, serverBase } from './api';
 
 export interface StravaStatus {
@@ -11,14 +11,19 @@ export interface StravaStatus {
 }
 
 export interface StravaUpload {
-  status: 'uploading' | 'processing' | 'ready' | 'duplicate' | 'error' | 'skipped';
+  /** pending: waiting for the internet, uploaded on the next start or when the connection is back. */
+  status: 'pending' | 'uploading' | 'processing' | 'ready' | 'duplicate' | 'error' | 'skipped';
   uploadId?: number;
   activityId?: number;
   url?: string;
   error?: string;
 }
 
-export const stravaStore = new Store<StravaStatus>({ configured: false, connected: false });
+// Kept on the device, so a ride offline still knows that it should go to Strava later.
+export const stravaStore = new Store<StravaStatus>(loadJson('velo.strava.v1', { configured: false, connected: false }));
+stravaStore.subscribe(() => saveJson('velo.strava.v1', stravaStore.get()));
+
+const OFFLINE = 'Server nicht erreichbar';
 
 async function call<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${serverBase()}${path}`, {
@@ -26,7 +31,7 @@ async function call<T>(path: string, body?: unknown): Promise<T> {
     headers: { 'content-type': 'application/json', authorization: `Bearer ${accountStore.get().token ?? ''}` },
     body: body === undefined ? undefined : JSON.stringify(body),
   }).catch(() => {
-    throw new Error('Server nicht erreichbar');
+    throw new Error(OFFLINE);
   });
   const json = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (!res.ok) throw new Error(json.error ?? `Fehler ${res.status}`);
@@ -118,7 +123,8 @@ export async function uploadToStrava(a: StoredActivity): Promise<StravaUpload> {
       result = await call<StravaUpload>(`/api/strava/upload/${result.uploadId}`);
     }
   } catch (err) {
-    result = { status: 'error', error: err instanceof Error ? err.message : String(err) };
+    const msg = err instanceof Error ? err.message : String(err);
+    result = msg === OFFLINE ? { status: 'pending' } : { status: 'error', error: msg };
   }
   await updateActivity(a.id, { strava: result });
   return result;
@@ -132,4 +138,25 @@ export async function maybeAutoUpload(activityId: string): Promise<void> {
   const a = activitiesStore.get().find((x) => x.id === activityId);
   if (!a || a.summary.durationS < 60) return;
   await uploadToStrava(a);
+}
+
+let syncing = false;
+/** Uploads the rides that waited for the internet (app start, back online, app back in front). */
+export async function syncPendingStrava(): Promise<void> {
+  if (syncing || !isLoggedIn() || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
+  syncing = true;
+  try {
+    const pending = activitiesStore.get().filter((a) => a.strava?.status === 'pending' || a.strava?.status === 'uploading');
+    if (!pending.length) return;
+    const status = await refreshStravaStatus();
+    if (!status.connected) return;
+    for (const a of pending) if ((await uploadToStrava(a)).status === 'pending') break;
+  } finally {
+    syncing = false;
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => void syncPendingStrava());
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && void syncPendingStrava());
 }

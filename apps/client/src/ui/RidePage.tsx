@@ -12,10 +12,9 @@ import { RideSession, type RideResult } from '../ride/rideSession';
 import { saveActivity, type StoredActivity } from '../state/activities';
 import { creditRide, garageStore } from '../state/garage';
 import { lookFromLoadout } from '../game/look';
-import { settingsStore, updateSettings } from '../state/settings';
+import { settingsStore } from '../state/settings';
 import { useStore } from '../state/store';
-import { pageStore, searchStore, uiStore } from '../state/ui';
-import { ElevationProfile } from './ElevationProfile';
+import { pageStore, uiStore } from '../state/ui';
 import { Hud } from './Hud';
 import { RideSummary } from './RideSummary';
 import { WorkoutSelect } from './WorkoutSelect';
@@ -31,7 +30,7 @@ type Phase =
 const DEV = new URLSearchParams(location.search);
 const DEV_RIDE = ROUTES.some((r) => r.id === DEV.get('ride')) ? DEV.get('ride')! : null;
 
-export function RidePage({ view }: { view: 'ride' | 'routes' | 'workouts' }) {
+export function RidePage({ view }: { view: 'ride' | 'workouts' }) {
   const [phase, setPhase] = useState<Phase>(DEV_RIDE ? { kind: 'ride', routeId: DEV_RIDE, bots: false } : { kind: 'select' });
 
   useEffect(() => {
@@ -62,7 +61,7 @@ export function RidePage({ view }: { view: 'ride' | 'routes' | 'workouts' }) {
   }
   return (
     <>
-      <RouteSelect view={view} onStart={(routeId, bots, workout) => setPhase({ kind: 'ride', routeId, bots, workout })} />
+      <RouteSelect view={view} onStart={(routeId, workout) => setPhase({ kind: 'ride', routeId, bots: true, workout })} />
       {phase.kind === 'summary' && <RideSummary result={phase.result} activity={phase.activity} onClose={() => setPhase({ kind: 'select' })} />}
     </>
   );
@@ -100,73 +99,6 @@ function DifficultyPips({ value }: { value: number }) {
   );
 }
 
-/** The lap seen from above, as a line drawing with the start/finish marked. */
-function RouteShape({ track, size = 120, stroke = 3, label }: { track: Track; size?: number; stroke?: number; label?: string }) {
-  const { d, start } = useMemo(() => {
-    const { minX, maxX, minZ, maxZ } = track.bounds;
-    const pad = stroke * 2;
-    const k = (size - 2 * pad) / Math.max(1, maxX - minX, maxZ - minZ);
-    const ox = (size - (maxX - minX) * k) / 2;
-    const oy = (size - (maxZ - minZ) * k) / 2;
-    const at = (j: number) => [ox + (track.xs[j]! - minX) * k, size - oy - (track.zs[j]! - minZ) * k] as const;
-    const every = Math.max(1, Math.floor(track.count / 300));
-    let p = '';
-    for (let i = 0; i <= track.count; i += every) {
-      const [x, y] = at(i % track.count);
-      p += `${p ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`;
-    }
-    return { d: `${p}Z`, start: at(0) };
-  }, [track, size, stroke]);
-  return (
-    <svg className="route-shape" viewBox={`0 0 ${size} ${size}`} aria-hidden>
-      <path d={d} className="route-shape-glow" strokeWidth={stroke * 3} />
-      <path d={d} className="route-shape-line" strokeWidth={stroke} />
-      <circle cx={start[0]} cy={start[1]} r={stroke * 1.6} className="route-shape-start" />
-      {label && (
-        <text x={start[0]} y={start[1] - stroke * 4} className="route-shape-label" textAnchor={start[0] > size * 0.7 ? 'end' : start[0] < size * 0.3 ? 'start' : 'middle'}>
-          {label}
-        </text>
-      )}
-    </svg>
-  );
-}
-
-function StatTile({ label, value, unit }: { label: string; value: ReactNode; unit?: string }) {
-  return (
-    <div className="stat">
-      <span className="stat-label">{label}</span>
-      <span className="stat-value">
-        {value}
-        {unit && <small>{unit}</small>}
-      </span>
-    </div>
-  );
-}
-
-/** Elevation profile with a kilometre axis below it. */
-function ProfileWithAxis({ track, height }: { track: Track; height: number }) {
-  const km = track.length / 1000;
-  const step = km > 40 ? 10 : km > 16 ? 5 : km > 6 ? 2 : 1;
-  const ticks: number[] = [];
-  // Leave room for the total at the right end.
-  for (let k = 0; k <= km - Math.max(step * 0.5, km * 0.15); k += step) ticks.push(k);
-  return (
-    <div className="profile-axis">
-      <ElevationProfile track={track} height={height} showSegments={false} />
-      <div className="axis">
-        {ticks.map((k) => (
-          <span key={k} style={{ left: `${(k / km) * 100}%` }}>
-            {k}
-          </span>
-        ))}
-        <span className="end" style={{ left: '100%' }}>
-          {km.toFixed(1)} km
-        </span>
-      </div>
-    </div>
-  );
-}
-
 interface RouteRow {
   r: (typeof ROUTES)[number];
   t: Track;
@@ -181,6 +113,7 @@ function RouteImageCard({ row, selected, online, onClick }: { row: RouteRow; sel
       <div className="route-card-img" style={{ backgroundImage: `url(${routeShot(r.id)})` }}>
         <span className="tag">{r.fantasy ? 'Fantasy' : r.world ? 'Echte Straßen' : STYLE_LABEL[r.style]}</span>
         {online !== null && <span className="tag live">● {online}</span>}
+        {selected && <span className="route-card-check">✓ Ausgewählt</span>}
       </div>
       <div className="route-card-body">
         <span className="route-title">{r.name}</span>
@@ -201,27 +134,10 @@ function RouteImageCard({ row, selected, online, onClick }: { row: RouteRow; sel
   );
 }
 
-/** Trainer status, live power/cadence/heart rate and the start button – fixed at the bottom. */
-function DeviceBar({
-  startLabel,
-  startDisabled,
-  onStart,
-  bots,
-  setBots,
-  hasServer,
-  online,
-}: {
-  startLabel: string;
-  startDisabled: boolean;
-  onStart: () => void;
-  bots: boolean;
-  setBots: (v: boolean) => void;
-  hasServer: boolean;
-  online: Record<string, number> | null;
-}) {
+/** Trainer status, live power/cadence/heart rate and the start buttons – fixed at the bottom. */
+function DeviceBar({ children }: { children: ReactNode }) {
   const slots = useStore(deviceManager.slots);
   const m = useStore(deviceManager.metrics);
-  const settings = useStore(settingsStore);
   const trainer = slots.trainer;
   const connected = trainer.state === 'connected';
   return (
@@ -270,46 +186,82 @@ function DeviceBar({
           </strong>
         </span>
       </div>
-      <div className="device-options">
-        <button className={`chip${bots ? ' active' : ''}`} onClick={() => setBots(!bots)} aria-pressed={bots} title="Pacer-Bots mit 2,0 · 2,8 · 3,5 W/kg">
-          Pacer-Bots
-        </button>
-        {hasServer && (
-          <button
-            className={`chip${settings.rideOnline ? ' active' : ''}`}
-            onClick={() => updateSettings({ rideOnline: !settings.rideOnline })}
-            aria-pressed={settings.rideOnline}
-            title={online ? 'Mit anderen auf der Strecke' : 'Server nicht erreichbar'}
-          >
-            Online
-          </button>
-        )}
-      </div>
-      <button className="primary cta start-training" disabled={startDisabled} onClick={onStart}>
-        <Icon name="play" size={16} />
-        {startLabel}
-      </button>
+      <div className="device-start">{children}</div>
     </div>
   );
 }
 
-type View = 'ride' | 'routes' | 'workouts';
+/**
+ * Opens before a ride when the trainer or the heart rate strap is missing.
+ * The trainer is required; a ride without a strap is possible.
+ */
+function StartDevicesDialog({ onReady, onClose }: { onReady: () => void; onClose: () => void }) {
+  const slots = useStore(deviceManager.slots);
+  const settings = useStore(settingsStore);
+  const trainerOk = slots.trainer.state === 'connected';
+  const hrmOk = slots.hrm.state === 'connected';
+  const ready = useRef(onReady);
+  ready.current = onReady;
+  useEffect(() => {
+    if (trainerOk && hrmOk) ready.current();
+  }, [trainerOk, hrmOk]);
+  useEffect(() => {
+    void deviceManager.autoConnect();
+  }, []);
 
-function RouteSelect({ view, onStart }: { view: View; onStart: (routeId: string, bots: boolean, workout?: Workout) => void }) {
+  const row = (slot: 'trainer' | 'hrm', title: string, hint: string) => {
+    const s = slots[slot];
+    const ok = s.state === 'connected';
+    const busy = s.state === 'connecting' || s.state === 'reconnecting';
+    return (
+      <div className={`start-device${ok ? ' ok' : ''}`}>
+        <span className="device-icon">
+          <Icon name={slot === 'trainer' ? 'ride' : 'heart'} size={22} />
+        </span>
+        <span className="start-device-text">
+          <strong>{title}</strong>
+          <span className="muted small">{ok ? `● ${s.name ?? 'Verbunden'}` : busy ? 'Suche …' : hint}</span>
+          {s.error && <span className="error-text small">{s.error}</span>}
+        </span>
+        {ok ? (
+          <span className="ok-text">Verbunden</span>
+        ) : (
+          <button className="primary" disabled={busy} onClick={() => void deviceManager.connect(slot)}>
+            {busy ? 'Verbinde …' : settings.useSimulator ? 'Simulator verbinden' : 'Verbinden'}
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal start-devices" role="dialog" aria-label="Geräte verbinden">
+        <h2>Geräte verbinden</h2>
+        <p className="muted small">Vor dem Start brauchst du deinen Trainer. Mit Pulsgurt siehst du auch deine Herzfrequenz.</p>
+        {row('trainer', 'Smart-Trainer', 'Pflicht – z. B. Wahoo KICKR')}
+        {row('hrm', 'Pulsgurt', 'Optional – Brustgurt oder Uhr')}
+        <div className="row start-devices-actions">
+          <button onClick={onClose}>Abbrechen</button>
+          <button className="primary" disabled={!trainerOk} onClick={onReady}>
+            {hrmOk ? 'Los geht’s' : 'Ohne Pulsgurt starten'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RouteSelect({ view, onStart }: { view: 'ride' | 'workouts'; onStart: (routeId: string, workout?: Workout) => void }) {
   const settings = useStore(settingsStore);
   const garage = useStore(garageStore);
-  const search = useStore(searchStore);
-  const [routeId, setRouteId] = useState(ROUTES[0]!.id);
-  const [bots, setBots] = useState(true);
-  const [details, setDetails] = useState(false);
+  const slots = useStore(deviceManager.slots);
+  const [routeId, setRouteId] = useState<string | null>(null);
   const [filter, setFilter] = useState<RouteFilter>('all');
   const [workout, setWorkout] = useState<Workout | undefined>();
   const [online, setOnline] = useState<Record<string, number> | null>(null);
+  const [pending, setPending] = useState<{ routeId: string; workout?: Workout } | null>(null);
   const hasServer = !!settings.serverUrl.trim();
-  const account = useStore(accountStore);
-  // Where a pick on the route list goes back to: the start page or the workout list.
-  const pickReturn = useRef<'ride' | 'workouts'>('ride');
-  if (view !== 'routes') pickReturn.current = view;
 
   useEffect(() => {
     if (!hasServer) return;
@@ -331,132 +283,27 @@ function RouteSelect({ view, onStart }: { view: View; onStart: (routeId: string,
       return { r, t, diff: difficulty(t), timeS: estimateTime(t, setup, power) };
     });
   }, [settings, garage.loadout, power]);
-  const sel = routes.find((x) => x.r.id === routeId) ?? routes[0]!;
+  const sel = routes.find((x) => x.r.id === routeId);
   const onlineOf = (id: string) => (online ? (online[id] ?? 0) : null);
-  const mostRidden = online ? routes.reduce((a, b) => ((online[b.r.id] ?? 0) > (online[a.r.id] ?? 0) ? b : a)) : null;
-  const popular = !!mostRidden && mostRidden.r.id === sel.r.id && (online?.[sel.r.id] ?? 0) > 0;
+  const shown = routes.filter(({ r, diff }) => (filter === 'all' ? true : filter === 'real' ? !!r.world : filter === 'fantasy' ? !!r.fantasy : filter === 'flat' ? diff <= 2 : diff >= 3));
 
-  const q = search.trim().toLowerCase();
-  const shown = routes.filter(
-    ({ r, diff }) =>
-      (filter === 'all' ? true : filter === 'real' ? !!r.world : filter === 'fantasy' ? !!r.fantasy : filter === 'flat' ? diff <= 2 : diff >= 3) &&
-      (!q || [r.name, r.region ?? '', r.description, STYLE_LABEL[r.style]].some((s) => s.toLowerCase().includes(q))),
-  );
-
-  const isWorkout = view === 'workouts';
-  const start = () => onStart(routeId, bots, isWorkout ? workout : undefined);
-  const pick = (id: string) => {
-    setRouteId(id);
-    setDetails(false);
-    if (view === 'routes') pageStore.set(pickReturn.current);
+  // Without trainer or strap, the device dialog comes first.
+  const start = (w?: Workout) => {
+    if (!routeId) return;
+    if (slots.trainer.state === 'connected' && slots.hrm.state === 'connected') onStart(routeId, w);
+    else setPending({ routeId, workout: w });
   };
 
   return (
     <div className="page ride-home">
       <div className="page-inner">
-        {!account.user && (
-          <div className="callout neutral">
-            <span className="callout-text">
-              <strong>Du fährst allein.</strong> Mit einem Konto siehst du andere Fahrer auf der Strecke, und deine Taler liegen sicher auf dem Server.
-            </span>
-            <button onClick={() => pageStore.set('login')}>Anmelden</button>
-          </div>
-        )}
-
         {view === 'ride' && (
           <>
-            <div className="home-top">
-              <section className="hero" style={{ ['--hue' as string]: STYLE_HUE[sel.r.style], backgroundImage: `url(${routeShot(sel.r.id)})` }}>
-                <div className="hero-content">
-                  <span className="hero-badge">{popular ? 'Beliebte Strecke' : sel.r.fantasy ? 'Fantasy-Welt' : sel.r.world ? 'Echte Straßen' : STYLE_LABEL[sel.r.style]}</span>
-                  <h1 className="hero-title">{sel.r.name}</h1>
-                  <span className="hero-place">
-                    <Icon name="pin" size={15} /> {sel.r.region ?? STYLE_LABEL[sel.r.style]}
-                  </span>
-                  <p className="hero-desc">{sel.r.description}</p>
-                  <div className="stat-row">
-                    <StatTile label="Distanz" value={(sel.t.length / 1000).toFixed(1)} unit="km" />
-                    <StatTile label="Höhenmeter" value={String(Math.round(sel.t.elevationGain))} unit="hm" />
-                    <StatTile label="Dauer" value={formatDuration(sel.timeS)} />
-                    <StatTile label="Schwierigkeit" value={DIFFICULTY_LABEL[sel.diff - 1]} />
-                    <StatTile label="Online" value={online ? String(online[sel.r.id] ?? 0) : '–'} />
-                  </div>
-                  <div className="hero-actions">
-                    <button className="primary cta" onClick={() => onStart(routeId, bots)}>
-                      Jetzt fahren <Icon name="arrow" size={18} />
-                    </button>
-                    <button className="ghost cta" onClick={() => setDetails(!details)} aria-expanded={details}>
-                      Strecken-Details
-                    </button>
-                  </div>
-                </div>
-              </section>
-
-              <aside className="map-panel" style={{ ['--hue' as string]: STYLE_HUE[sel.r.style] }}>
-                <div className="map-head">
-                  <span className="eyebrow">Streckenverlauf</span>
-                  <DifficultyPips value={sel.diff} />
-                </div>
-                <div className="map-shape">
-                  <RouteShape track={sel.t} size={260} stroke={3} label="Start · Ziel" />
-                </div>
-                <div className="map-profile">
-                  <span className="eyebrow">Höhenprofil</span>
-                  <ProfileWithAxis track={sel.t} height={70} />
-                </div>
-              </aside>
-            </div>
-
-            {details && (
-              <section className="route-details">
-                <div className="route-details-stats">
-                  <StatTile label="Max. Steigung" value={sel.t.maxGrade.toFixed(0)} unit="%" />
-                  <StatTile label="Segmente" value={String(sel.t.segments.length)} />
-                  <StatTile label={`Zeit bei ${power} W`} value={formatDuration(sel.timeS)} />
-                  <StatTile label="Welt" value={sel.r.fantasy ? 'Fantasy' : sel.r.world ? 'Echt' : STYLE_LABEL[sel.r.style]} />
-                </div>
-                <ElevationProfile track={sel.t} height={96} />
-                <div className="legend">
-                  <span className="lg climb">Anstieg</span>
-                  <span className="lg sprint">Sprint</span>
-                  <span className="lg descent">Abfahrt</span>
-                </div>
-                {sel.t.segments.length > 0 && (
-                  <ul className="segment-list">
-                    {sel.t.segments.map((s) => (
-                      <li key={s.id}>
-                        <span className={`lg ${s.type}`}>{s.name}</span>
-                        <span className="muted small">
-                          km {(s.startM / 1000).toFixed(1)}–{(s.endM / 1000).toFixed(1)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            )}
-
-            <div className="section-head">
-              <h2>Weitere Strecken entdecken</h2>
-              <button className="link" onClick={() => pageStore.set('routes')}>
-                Alle Strecken anzeigen <Icon name="arrow" size={15} />
-              </button>
-            </div>
-            <div className="route-row">
-              {routes
-                .filter((x) => x.r.id !== sel.r.id)
-                .slice(0, 4)
-                .map((row) => (
-                  <RouteImageCard key={row.r.id} row={row} selected={false} online={onlineOf(row.r.id)} onClick={() => pick(row.r.id)} />
-                ))}
-            </div>
-          </>
-        )}
-
-        {view === 'routes' && (
-          <>
             <header className="page-head">
-              <h1>Strecken</h1>
+              <div>
+                <h1>Fahren</h1>
+                <span className="muted">{sel ? `${sel.r.name} – unten rechts frei fahren oder ein Workout wählen.` : 'Wähle eine Strecke.'}</span>
+              </div>
               <div className="chips">
                 {FILTERS.map((f) => (
                   <button key={f.id} className={filter === f.id ? 'chip active' : 'chip'} onClick={() => setFilter(f.id)}>
@@ -465,17 +312,9 @@ function RouteSelect({ view, onStart }: { view: View; onStart: (routeId: string,
                 ))}
               </div>
             </header>
-            {q && (
-              <div className="muted">
-                {shown.length} Treffer für „{search.trim()}“{' '}
-                <button className="link" onClick={() => searchStore.set('')}>
-                  Suche löschen
-                </button>
-              </div>
-            )}
             <div className="route-grid">
               {shown.map((row) => (
-                <RouteImageCard key={row.r.id} row={row} selected={row.r.id === routeId} online={onlineOf(row.r.id)} onClick={() => pick(row.r.id)} />
+                <RouteImageCard key={row.r.id} row={row} selected={row.r.id === routeId} online={onlineOf(row.r.id)} onClick={() => setRouteId(row.r.id)} />
               ))}
             </div>
           </>
@@ -485,13 +324,13 @@ function RouteSelect({ view, onStart }: { view: View; onStart: (routeId: string,
           <>
             <header className="page-head">
               <h1>Workouts</h1>
-              <button className="route-pick" onClick={() => pageStore.set('routes')}>
-                <span className="route-pick-img" style={{ backgroundImage: `url(${routeShot(sel.r.id)})` }} />
+              <button className="route-pick" onClick={() => pageStore.set('ride')}>
+                {sel && <span className="route-pick-img" style={{ backgroundImage: `url(${routeShot(sel.r.id)})` }} />}
                 <span>
                   <span className="muted small">Strecke</span>
-                  <strong>{sel.r.name}</strong>
+                  <strong>{sel ? sel.r.name : 'Noch keine gewählt'}</strong>
                 </span>
-                <span className="link">ändern</span>
+                <span className="link">{sel ? 'ändern' : 'wählen'}</span>
               </button>
             </header>
             <WorkoutSelect selectedId={workout?.id} onSelect={setWorkout} />
@@ -499,15 +338,38 @@ function RouteSelect({ view, onStart }: { view: View; onStart: (routeId: string,
         )}
       </div>
 
-      <DeviceBar
-        startLabel={isWorkout ? (workout ? 'Workout starten' : 'Workout wählen') : 'Training starten'}
-        startDisabled={isWorkout && !workout}
-        onStart={start}
-        bots={bots}
-        setBots={setBots}
-        hasServer={hasServer}
-        online={online}
-      />
+      <DeviceBar>
+        {view === 'ride' ? (
+          <>
+            <button className="ghost cta" disabled={!sel} onClick={() => pageStore.set('workouts')}>
+              <Icon name="workouts" size={16} />
+              Workout auswählen
+            </button>
+            <button className="primary cta start-training" disabled={!sel} onClick={() => start()}>
+              <Icon name="play" size={16} />
+              Freie Fahrt
+            </button>
+          </>
+        ) : !sel ? (
+          <button className="primary cta start-training" onClick={() => pageStore.set('ride')}>
+            Strecke wählen <Icon name="arrow" size={16} />
+          </button>
+        ) : (
+          <button className="primary cta start-training" disabled={!workout} onClick={() => start(workout)}>
+            <Icon name="play" size={16} />
+            {workout ? 'Workout starten' : 'Workout wählen'}
+          </button>
+        )}
+      </DeviceBar>
+      {pending && (
+        <StartDevicesDialog
+          onClose={() => setPending(null)}
+          onReady={() => {
+            setPending(null);
+            onStart(pending.routeId, pending.workout);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -535,10 +397,11 @@ function RideView({
   useEffect(() => {
     let cancelled = false;
     let w: GameWorld | null = null;
+    let botTimer: ReturnType<typeof setInterval> | undefined;
     const garage = garageStore.get();
     const st = settingsStore.get();
     const net =
-      st.rideOnline && serverBase() && !DEV_RIDE
+      serverBase() && !DEV_RIDE
         ? new MultiplayerClient(serverBase(), {
             name: accountStore.get().user?.name ?? st.riderName,
             country: st.country,
@@ -557,7 +420,18 @@ function RideView({
           return;
         }
         w = created;
-        for (const b of s.bots) created.ensureRider(b.id, b.look);
+        const drawn = new Set<string>();
+        const syncBots = () => {
+          const next = s.botsToDraw(drawn);
+          for (const b of s.bots) {
+            if (next.has(b.id) && !drawn.has(b.id)) created.ensureRider(b.id, b.look);
+            else if (!next.has(b.id) && drawn.has(b.id)) created.removeRider(b.id);
+          }
+          drawn.clear();
+          for (const id of next) drawn.add(id);
+        };
+        syncBots();
+        botTimer = setInterval(syncBots, 1000);
         if (net) {
           net.on('joined', (info) => created.ensureRider(info.id, lookFromLoadout(info.loadout)));
           net.on('left', (id) => created.removeRider(id));
@@ -577,6 +451,7 @@ function RideView({
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
     return () => {
       cancelled = true;
+      clearInterval(botTimer);
       net?.close();
       s.dispose();
       w?.dispose();
@@ -596,6 +471,10 @@ function RideView({
       } else if (e.key === 'v' || e.key === 'V') {
         world.vape();
         session.net?.sendEmote('vape');
+      } else if (e.key === '-' || e.key === '_') {
+        session.shift(-1);
+      } else if (e.key === '+' || e.key === '=') {
+        session.shift(1);
       } else if (e.key === 'p' || e.key === 'P') {
         const st = session.snapshot.get().state;
         if (st === 'riding') session.pause();

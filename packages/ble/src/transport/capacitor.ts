@@ -141,4 +141,29 @@ export class CapacitorBleTransport implements BleTransport {
     });
     return new CapacitorDevice(client, device.deviceId, device.name ?? 'Unbekanntes Gerät');
   }
+
+  async scan(request: DeviceRequest, { preferIds, timeoutMs }: { preferIds: string[]; timeoutMs: number }): Promise<BleDevice | null> {
+    const client = await getClient();
+    const services = request.services.map(normalizeUuid);
+    const prefixes = request.namePrefixes ?? [];
+    let best: { id: string; name: string; rssi: number } | undefined;
+    let done: () => void = () => {};
+    const finished = new Promise<void>((resolve) => (done = resolve));
+    // No service filter: some straps only show their heart-rate service after connecting.
+    await client.requestLEScan({}, (r) => {
+      const name = r.localName ?? r.device.name ?? '';
+      const matches = preferIds.includes(r.device.deviceId) || (r.uuids ?? []).some((u) => services.includes(normalizeUuid(u))) || prefixes.some((p) => name.startsWith(p));
+      if (!matches) return;
+      const rssi = r.rssi ?? -127;
+      if (preferIds.includes(r.device.deviceId)) {
+        best = { id: r.device.deviceId, name: name || 'Unbekanntes Gerät', rssi: Infinity };
+        done();
+      } else if (!best || rssi > best.rssi) best = { id: r.device.deviceId, name: name || 'Unbekanntes Gerät', rssi };
+    });
+    const timer = setTimeout(done, timeoutMs);
+    await finished;
+    clearTimeout(timer);
+    await client.stopLEScan().catch(() => undefined);
+    return best ? new CapacitorDevice(client, best.id, best.name) : null;
+  }
 }

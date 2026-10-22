@@ -24,6 +24,8 @@ export interface Settings {
   graphicsQuality: GraphicsQuality;
   /** Admin tools in the ride (teleport along the route). Rides with a teleport earn nothing. */
   adminMode: boolean;
+  /** Last trainer and heart rate strap, found again automatically in the iPad app. */
+  knownDevices: { trainer?: string; hrm?: string };
 }
 
 const KEY = 'velo.settings.v1';
@@ -41,6 +43,7 @@ export const DEFAULT_SETTINGS: Settings = {
   rideOnline: true,
   graphicsQuality: 'auto',
   adminMode: false,
+  knownDevices: {},
 };
 
 /**

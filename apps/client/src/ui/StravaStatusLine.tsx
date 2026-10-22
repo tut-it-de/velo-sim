@@ -17,6 +17,7 @@ export function StravaStatusLine({ activity, compact = false }: { activity: Stor
     </button>
   );
   const text: Record<NonNullable<StoredActivity['strava']>['status'], string> = {
+    pending: 'Wartet auf Internet – wird automatisch zu Strava hochgeladen',
     uploading: 'Lade zu Strava hoch …',
     processing: 'Strava verarbeitet die Fahrt …',
     ready: 'Auf Strava hochgeladen ✓',

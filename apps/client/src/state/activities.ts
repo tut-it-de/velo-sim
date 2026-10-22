@@ -13,7 +13,7 @@ export interface StoredActivity {
   fit: Uint8Array;
   segments?: Array<{ id: string; name: string; type: string; timeS: number; isPb: boolean }>;
   strava?: {
-    status: 'uploading' | 'processing' | 'ready' | 'duplicate' | 'error' | 'skipped';
+    status: 'pending' | 'uploading' | 'processing' | 'ready' | 'duplicate' | 'error' | 'skipped';
     uploadId?: number;
     activityId?: number;
     url?: string;

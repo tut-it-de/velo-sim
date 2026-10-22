@@ -1,29 +1,11 @@
 import { useMemo, useState } from 'react';
-import {
-  CATALOG,
-  CATEGORY_LABEL,
-  CUT_LABEL,
-  HELMET_LABEL,
-  TIER_LABEL,
-  aeroStars,
-  compareLoadouts,
-  estimateTime,
-  formatCoins,
-  itemName,
-  resolveLoadout,
-  setupFor,
-  weightStars,
-  type EquipmentItem,
-  type ItemType,
-} from '@velo/equipment';
-import { totalMass } from '@velo/physics';
-import { ROUTES, getTrack } from '@velo/routes';
+import { CATALOG, CATEGORY_LABEL, CUT_LABEL, HELMET_LABEL, TIER_LABEL, formatCoins, itemName, resolveLoadout, type EquipmentItem, type ItemType } from '@velo/equipment';
 import { balance, buy, equip, garageStore } from '../state/garage';
-import { accountStore, isLoggedIn, serverBuy, serverEquip } from '../net/api';
+import { isLoggedIn, serverBuy, serverEquip } from '../net/api';
 import { settingsStore } from '../state/settings';
 import { useStore } from '../state/store';
-import { formatDuration } from './components';
 import { AvatarPreview } from './AvatarPreview';
+import { useItemThumb } from './itemThumbs';
 import { lookFromLoadout } from '../game/look';
 
 const TABS: Array<{ id: ItemType; label: string }> = [
@@ -32,22 +14,6 @@ const TABS: Array<{ id: ItemType; label: string }> = [
   { id: 'jersey', label: 'Trikots' },
   { id: 'helmet', label: 'Helme' },
 ];
-
-function Rating({ label, value }: { label: string; value?: number }) {
-  if (value === undefined) return null;
-  return (
-    <div className="rating">
-      <span>{label}</span>
-      <div className="rating-bar">
-        {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="rating-seg">
-            <div style={{ width: `${Math.min(1, Math.max(0, value - (i - 1))) * 100}%` }} />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function Swatch({ item }: { item: EquipmentItem }) {
   const colors =
@@ -67,34 +33,26 @@ function Swatch({ item }: { item: EquipmentItem }) {
   );
 }
 
-function signedTime(s: number): string {
-  if (Math.abs(s) < 0.5) return '±0:00';
-  return `${s < 0 ? '−' : '+'}${formatDuration(Math.abs(s))}`;
+/** The rendered item, the colours until the picture is ready. */
+function ItemImage({ item }: { item: EquipmentItem }) {
+  const url = useItemThumb(item);
+  return (
+    <div className="item-img">
+      {url ? <img src={url} alt="" /> : <Swatch item={item} />}
+      <span className={`badge tier-${item.tier}`}>{TIER_LABEL[item.tier]}</span>
+    </div>
+  );
 }
 
 export function GaragePage() {
   const garage = useStore(garageStore);
-  const account = useStore(accountStore);
   const settings = useStore(settingsStore);
   const [tab, setTab] = useState<ItemType>('bike');
   const [selected, setSelected] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const coins = balance(garage);
-  const power = Math.round(settings.ftp * 0.75);
-  const tracks = useMemo(() => ROUTES.map((r) => getTrack(r.id)), []);
   const current = resolveLoadout(garage.loadout);
-  const setup = setupFor(settings, garage.loadout);
-
-  const lapTimes = useMemo(
-    () => tracks.map((t) => ({ id: t.id, name: t.name, s: estimateTime(t, setupFor(settings, garage.loadout), power) })),
-    [tracks, settings, garage.loadout, power],
-  );
-
   const selectedItem = selected ? CATALOG.find((i) => i.id === selected) : undefined;
-  const comparison = useMemo(() => {
-    if (!selectedItem || garage.loadout[selectedItem.type] === selectedItem.id) return null;
-    return compareLoadouts(tracks, settings, garage.loadout, { ...garage.loadout, [selectedItem.type]: selectedItem.id }, power);
-  }, [selectedItem, garage.loadout, tracks, settings, power]);
 
   const items = CATALOG.filter((i) => i.type === tab).sort((a, b) => a.price - b.price);
   // The preview shows the selected item on the current setup.
@@ -110,10 +68,6 @@ export function GaragePage() {
           <div>
             <h1>Garage</h1>
           </div>
-          <div className="row">
-            <span className="muted small">{account.user ? `Konto: ${account.user.name} (Server)` : 'lokal – unter Profil mit einem Server verbinden'}</span>
-            <div className="wallet-chip wallet-big">{settings.adminMode ? 'Unbegrenzt' : formatCoins(coins)} Watt-Taler</div>
-          </div>
         </div>
 
         <div className="card garage-current">
@@ -125,20 +79,6 @@ export function GaragePage() {
               <span>{itemName(current.wheels)}</span>
               <span>{itemName(current.jersey)}</span>
               <span>{itemName(current.helmet)}</span>
-            </div>
-            <div className="muted small">
-              CdA {setup.cda.toFixed(3)} m² · Rad + Laufräder {(setup.bikeMassKg + setup.wheelsMassKg).toFixed(1)} kg · Gesamt {totalMass(setup).toFixed(1)} kg
-            </div>
-          </div>
-          <div className="garage-times">
-            {lapTimes.map((t) => (
-              <div key={t.id} className="stat">
-                <span className="stat-label">{t.name}</span>
-                <span className="stat-value">{formatDuration(t.s)}</span>
-              </div>
-            ))}
-            <div className="muted small garage-times-note">
-              geschätzte Rundenzeit bei {power} W (75 % FTP)
             </div>
           </div>
         </div>
@@ -154,17 +94,6 @@ export function GaragePage() {
           {message && <span className="small">{message}</span>}
         </div>
 
-        {comparison && selectedItem && (
-          <div className="card comparison">
-            <strong>{itemName(selectedItem)}</strong> statt {itemName(current[selectedItem.type])}:
-            {comparison.map((c) => (
-              <span key={c.trackId} className={c.deltaS < -0.5 ? 'faster' : c.deltaS > 0.5 ? 'slower' : ''}>
-                {c.trackName} {signedTime(c.deltaS)}
-              </span>
-            ))}
-          </div>
-        )}
-
         <div className="item-grid">
           {items.map((item) => {
             const owned = item.price === 0 || garage.owned.includes(item.id);
@@ -172,11 +101,11 @@ export function GaragePage() {
             const affordable = coins >= item.price;
             const sub =
               item.type === 'bike'
-                ? `${CATEGORY_LABEL[item.category]} · ${item.weightKg.toFixed(1)} kg`
+                ? CATEGORY_LABEL[item.category]
                 : item.type === 'wheels'
-                  ? `${item.rimDepthMm} mm Felge · ${item.weightKg.toFixed(2)} kg`
+                  ? `${item.rimDepthMm} mm Felge`
                   : item.type === 'helmet'
-                    ? `${HELMET_LABEL[item.look.shape]} · ${Math.round(item.weightKg * 1000)} g`
+                    ? HELMET_LABEL[item.look.shape]
                     : CUT_LABEL[item.cut];
             return (
               <div
@@ -185,17 +114,10 @@ export function GaragePage() {
                 onClick={() => setSelected(item.id)}
                 role="button"
               >
-                <div className="row" style={{ justifyContent: 'space-between' }}>
-                  <Swatch item={item} />
-                  <span className={`badge tier-${item.tier}`}>{TIER_LABEL[item.tier]}</span>
-                </div>
+                <ItemImage item={item} />
                 <strong>{itemName(item)}</strong>
-                <div className="muted small">{sub}</div>
-                <Rating label="Aero" value={aeroStars(item)} />
-                <Rating label="Gewicht" value={weightStars(item)} />
                 <div className="muted small">
-                  ΔCdA {item.cdaDelta > 0 ? '+' : item.cdaDelta < 0 ? '−' : '±'}
-                  {Math.abs(item.cdaDelta).toFixed(3).replace('.', ',')} m²
+                  {sub}
                   {item.inspiredBy && <> · angelehnt an {item.inspiredBy}</>}
                 </div>
                 <div className="item-action" onClick={(e) => e.stopPropagation()}>

@@ -308,21 +308,6 @@ input[type='checkbox'] {
   color: var(--info);
   font-weight: 700;
 }
-.side-wallet {
-  margin-top: auto;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 12px 14px;
-  border-radius: var(--radius) !important;
-  border: 1px solid var(--border) !important;
-  background: var(--surface) !important;
-  font-variant-numeric: tabular-nums;
-}
-.side-wallet strong {
-  font-size: 20px;
-}
 
 .main {
   flex: 1;
@@ -346,31 +331,30 @@ input[type='checkbox'] {
 .topbar .spacer {
   flex: 1;
 }
-.search {
+/* Watt-Taler, top right next to the profile */
+.wallet-chip {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex: 0 1 460px;
-  min-width: 0;
-  padding: 0 14px;
+  gap: 8px;
+  padding: 6px 14px 6px 6px;
   border-radius: 999px;
   border: 1px solid var(--border-strong);
   background: var(--surface);
-  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
 }
-.search:focus-within {
-  border-color: var(--accent);
+.wallet-chip strong {
+  font-size: 16px;
 }
-.search input {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  background: none;
-  padding: 10px 0;
-  outline: none;
-}
-.search input:focus-visible {
-  outline: none;
+.wallet-chip .coin {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ffd65a, #e0a314);
+  color: #3a2600;
+  font-weight: 900;
+  font-size: 13px;
 }
 .profile-chip {
   display: flex;
@@ -424,19 +408,6 @@ input[type='checkbox'] {
   height: 100%;
   background: var(--accent);
 }
-.wallet-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 0;
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-}
-.wallet-chip .muted {
-  color: var(--text-dim);
-  font-weight: 500;
-}
 
 @media (max-width: 1100px) {
   .sidebar {
@@ -449,8 +420,7 @@ input[type='checkbox'] {
     padding: 4px 0 6px;
   }
   .brand-name,
-  .side-nav button span,
-  .side-wallet .muted {
+  .side-nav button span {
     display: none;
   }
   .side-nav button {
@@ -459,13 +429,6 @@ input[type='checkbox'] {
   }
   .side-nav button.active::before {
     left: -10px;
-  }
-  .side-wallet {
-    align-items: center;
-    padding: 10px 4px;
-  }
-  .side-wallet strong {
-    font-size: 13px;
   }
 }
 /* phones: tab bar at the bottom, only the main destinations */
@@ -480,8 +443,10 @@ input[type='checkbox'] {
     border-right: none;
     border-top: 1px solid var(--border);
   }
-  .sidebar .brand,
-  .side-wallet {
+  .sidebar .brand {
+    display: none;
+  }
+  .wallet-chip .muted {
     display: none;
   }
   .side-nav {
@@ -1216,6 +1181,56 @@ button.ghost {
 }
 .route-card.selected {
   border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.route-card-check {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #04121f;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+/* Before the start: connect trainer and heart rate strap */
+.modal.start-devices {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.modal.start-devices h2 {
+  margin: 0;
+}
+.start-device {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.start-device.ok {
+  border-color: rgba(61, 220, 132, 0.45);
+}
+.start-device.ok .device-icon {
+  color: var(--ok);
+  background: rgba(61, 220, 132, 0.12);
+}
+.start-device-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.start-devices-actions {
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
 }
 .route-card-img {
   position: relative;
@@ -1383,9 +1398,9 @@ button.ghost {
   font-size: 12px;
   color: var(--text-dim);
 }
-.device-options {
+.device-start {
   display: flex;
-  gap: 6px;
+  gap: 10px;
   margin-left: auto;
 }
 button.cta {
@@ -1494,9 +1509,9 @@ button.cta {
   .device-metric {
     display: none;
   }
-  .device-bar .start-training {
-    margin-left: auto;
-    padding: 12px 16px;
+  .device-bar .cta {
+    padding: 12px 14px;
+    font-size: 15px;
   }
 }
 
@@ -1663,6 +1678,42 @@ button.cta {
 .hud-controls button,
 .hud-controls select {
   background: rgba(13, 17, 23, 0.78);
+}
+/* virtual shifting: − gear + */
+.shifter {
+  display: flex;
+  align-items: stretch;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: rgba(13, 17, 23, 0.78);
+  overflow: hidden;
+}
+.shifter button {
+  border: none;
+  border-radius: 0;
+  background: none;
+  padding: 6px 14px;
+  font-size: 20px;
+  line-height: 1;
+}
+.shifter-gear {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 46px;
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.shifter-gear small {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.shifter.off {
+  opacity: 0.5;
 }
 .hud-left {
   position: absolute;
@@ -2316,25 +2367,6 @@ button.icon {
   font-weight: 700;
   margin: 4px 0;
 }
-.garage-times {
-  display: flex;
-  gap: 22px;
-  flex-wrap: wrap;
-}
-.comparison {
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.comparison .faster {
-  color: var(--ok);
-  font-weight: 700;
-}
-.comparison .slower {
-  color: var(--warn);
-  font-weight: 700;
-}
 .item-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
@@ -2363,6 +2395,26 @@ button.icon {
 .item-card.equipped {
   border-color: rgba(255, 107, 26, 0.8);
   box-shadow: 0 0 0 3px rgba(255, 107, 26, 0.16), var(--shadow);
+}
+.item-img {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 360 / 220;
+  margin: -6px -6px 2px;
+  border-radius: var(--radius-md);
+  background: radial-gradient(ellipse at 50% 60%, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02) 70%);
+  overflow: hidden;
+}
+.item-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.item-img .badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
 }
 .swatch {
   display: flex;
@@ -2952,27 +3004,11 @@ button.strava-connect:disabled {
     justify-content: flex-start;
   }
 }
-.wallet-big {
-  font-size: 16px;
-  font-weight: 800;
-  padding: 8px 16px 8px 10px;
-  border: 1px solid rgba(255, 196, 0, 0.25);
-}
 .card.garage-current {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
   align-items: center;
   gap: 18px 28px;
-}
-.garage-times {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
-}
-.garage-times-note {
-  grid-column: 1 / -1;
-  text-align: center;
 }
 .garage-loadout span {
   padding: 6px 12px;
@@ -3091,4 +3127,24 @@ button.strava-connect:disabled {
 .badge.level {
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-dim);
+}
+
+/* Sign-in before anything else */
+.app.auth-gate {
+  display: block;
+  overflow: auto;
+  padding-top: env(safe-area-inset-top);
+}
+.app.auth-gate .page-inner.auth {
+  margin-top: 8vh;
+}
+.auth-brand .brand-name {
+  display: inline;
+}
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  font-weight: 800;
 }

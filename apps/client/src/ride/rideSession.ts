@@ -15,6 +15,7 @@ import type { MultiplayerClient } from '../net/multiplayer';
 import type { RideSummaryDTO } from '@velo/protocol';
 import type { RiderLook } from '../game/rider';
 import type { RiderFrame } from '../game/world';
+import { botPosition, planBots, type BotPlan } from './bots';
 import { getBest, submitResult } from '../state/records';
 import type { Settings } from '../state/settings';
 import { Store } from '../state/store';
@@ -50,8 +51,10 @@ export interface RideSnapshot {
   normalizedPower: number;
   kilojoules: number;
   draft: number;
-  /** Grade last sent to the trainer (after difficulty scaling). */
+  /** Grade last sent to the trainer (after difficulty scaling and the virtual gear). */
   trainerGrade?: number;
+  /** Virtual gear, 1 (easiest) … GEARS.length. */
+  gear: number;
   noTrainerData: boolean;
   /** Pacer bots and other online riders, with the gap to me along the loop (+ = ahead). */
   others: Array<{ id: string; name: string; country?: string; wkg?: number; gapM: number; speedMps: number; remote: boolean; power?: number }>;
@@ -91,6 +94,17 @@ export interface RideResult {
 }
 
 const TICK_MS = 100;
+
+/**
+ * Virtual shifting (as in Zwift): 24 gear ratios from 0.75 to 5.0. The trainer feels the gear as an
+ * offset on the grade – a heavier gear means more resistance at the same cadence, so the same
+ * cadence takes more watts and the rider goes faster. No effect in ERG mode.
+ */
+export const GEARS = Array.from({ length: 24 }, (_, i) => 0.75 * (5 / 0.75) ** (i / 23));
+/** The gear that matches the plain route grade (ratio ≈ 2.3, like 50×22). */
+export const NEUTRAL_GEAR = GEARS.reduce((best, r, i) => (Math.abs(Math.log(r / 2.3)) < Math.abs(Math.log(GEARS[best - 1]! / 2.3)) ? i + 1 : best), 1);
+/** Grade offset in % for a gear: about −7 % in the easiest, +4.7 % in the heaviest. */
+export const gearGradeOffset = (gear: number) => 6 * Math.log(GEARS[gear - 1]! / GEARS[NEUTRAL_GEAR - 1]!);
 const BIKE_LENGTH = 1.8;
 const RIDER_LATERAL = 1.4;
 
@@ -117,19 +131,13 @@ function lateralFor(id: string): number {
 }
 
 interface Bot extends BotInfo {
+  plan: BotPlan;
   state: RiderState;
   renderDistance: number;
   lateral: number;
   power: number;
   cadence: number;
-  phase: number;
 }
-
-const BOT_PRESETS: Array<Omit<BotInfo, 'id'>> = [
-  { name: 'Pacer Lena', country: 'AT', wkg: 2.0, look: { jersey: '#2e7dd7', frame: '#e8e8e8', helmet: '#2e7dd7' } },
-  { name: 'Pacer Jonas', country: 'DE', wkg: 2.8, look: { jersey: '#2fa84f', frame: '#1d1d1d', helmet: '#ffffff' } },
-  { name: 'Pacer Mia', country: 'IT', wkg: 3.5, look: { jersey: '#d63a3a', frame: '#c9a227', helmet: '#d63a3a' } },
-];
 
 /**
  * Free ride on a route: integrates physics at 10 Hz from live trainer power,
@@ -160,6 +168,7 @@ export class RideSession {
   private np = 0;
   private lastErgTarget?: number;
   private lastErgSent = 0;
+  private gear = NEUTRAL_GEAR;
   /** Actual power per recorded second against workout time, for the chart overlay. */
   readonly workoutTrace: Array<[number, number]> = [];
   readonly player?: WorkoutPlayer;
@@ -187,18 +196,11 @@ export class RideSession {
     if (options.workout) this.player = new WorkoutPlayer(options.workout, settings.ftp);
     this.segmentTracker = new SegmentTracker(this.track.segments, this.track.length);
     if (options.bots) {
-      BOT_PRESETS.forEach((b, i) => {
-        this.bots.push({
-          ...b,
-          id: `bot-${i}`,
-          state: { speedMps: 8, distanceM: 30 + i * 70 },
-          renderDistance: 30 + i * 70,
-          lateral: 0.6 + (i % 3) * 0.9 + (i === 1 ? 1.3 : 0),
-          power: b.wkg * 75,
-          cadence: 86 + i * 3,
-          phase: i * 1.7,
-        });
-      });
+      for (const plan of planBots(this.track, this.setup)) {
+        this.bots.push({ ...plan, plan, state: { speedMps: 0, distanceM: 0 }, renderDistance: 0, power: plan.wkg * 75 });
+      }
+      this.stepBots();
+      for (const b of this.bots) b.renderDistance = b.state.distanceM;
     }
     this.snapshot = new Store<RideSnapshot>(this.buildSnapshot(0, 0, 0, undefined, false));
   }
@@ -212,6 +214,16 @@ export class RideSession {
   skipSegment(): void {
     this.player?.skip();
     this.lastErgTarget = undefined;
+  }
+
+  /** Virtual shifting: +1 heavier, −1 easier. The trainer gets the new resistance at once. */
+  shift(delta: number): void {
+    const next = Math.min(GEARS.length, Math.max(1, this.gear + delta));
+    if (next === this.gear) return;
+    this.gear = next;
+    this.lastTrainerUpdate = 0;
+    this.lastTrainerGrade = undefined;
+    this.snapshot.set({ ...this.snapshot.get(), gear: next });
   }
 
   setIntensity(value: number): void {
@@ -249,10 +261,8 @@ export class RideSession {
     this.skippedM += delta;
     this.state = { ...this.state, distanceM: target };
     this.renderDistance = target;
-    for (const b of this.bots) {
-      b.state = { ...b.state, distanceM: Math.max(0, b.state.distanceM + delta) };
-      b.renderDistance = b.state.distanceM;
-    }
+    this.stepBots();
+    for (const b of this.bots) b.renderDistance = b.state.distanceM;
     this.lastElevation = this.track.sample(target).y;
     this.segmentTracker = new SegmentTracker(this.track.segments, this.track.length, target, this.movingMs / 1000);
     this.lastTrainerGrade = undefined;
@@ -320,7 +330,7 @@ export class RideSession {
     // Drafting: nearest rider ahead of me.
     this.draft = draftReduction(this.gapAhead(this.state.distanceM) - BIKE_LENGTH);
     this.state = step(this.state, power, this.setup, { gradePercent: sample.gradePercent, draftReduction: this.draft }, dt);
-    this.stepBots(dt);
+    this.stepBots();
     this.net?.sendState(this.state.distanceM, this.state.speedMps, power, cadence, RIDER_LATERAL);
 
     const moving = this.state.speedMps > 0.3 || power > 0;
@@ -429,20 +439,27 @@ export class RideSession {
     return best;
   }
 
-  private stepBots(dt: number): void {
+  /**
+   * Bots close enough to draw: up to `max` within `nearM`, keeping those already drawn up to `keepM`
+   * (50 full avatars would be too much for a tablet).
+   */
+  botsToDraw(drawn: ReadonlySet<string>, nearM = 280, keepM = 380, max = 14): Set<string> {
+    const near = this.bots
+      .map((b) => ({ id: b.id, gap: Math.abs(b.state.distanceM - this.state.distanceM) }))
+      .filter((b) => b.gap < (drawn.has(b.id) ? keepM : nearM))
+      .sort((a, b) => a.gap - b.gap)
+      .slice(0, max);
+    return new Set(near.map((b) => b.id));
+  }
+
+  /** Bots ride on the shared clock (see bots.ts); placed on the lap copy nearest to me. */
+  private stepBots(): void {
+    const clockS = Date.now() / 1000;
+    const len = this.track.length;
+    const myLap = ((this.state.distanceM % len) + len) % len;
     for (const b of this.bots) {
-      b.phase += dt;
-      // Small natural power fluctuations; push a bit harder uphill like a real pacer.
-      const g = this.track.sample(b.state.distanceM).gradePercent;
-      b.power = b.wkg * 75 * (1 + 0.04 * Math.sin(b.phase * 0.7) + Math.max(-0.1, Math.min(0.15, g * 0.02)));
-      let gap = Infinity;
-      if (this.state.distanceM > b.state.distanceM) gap = this.state.distanceM - b.state.distanceM;
-      for (const o of this.bots) {
-        const d = o.state.distanceM - b.state.distanceM;
-        if (d > 0 && d < gap) gap = d;
-      }
-      const setup = { ...this.setup, riderMassKg: 75 };
-      b.state = step(b.state, b.power, setup, { gradePercent: g, draftReduction: draftReduction(gap - BIKE_LENGTH) }, dt);
+      const { lapM, speedMps } = botPosition(b.plan, clockS, len);
+      b.state = { speedMps, distanceM: this.state.distanceM + wrapGap(lapM - myLap, len) };
     }
   }
 
@@ -461,7 +478,8 @@ export class RideSession {
   private updateTrainer(gradePercent: number, now: number): void {
     if (!deviceManager.canSim) return;
     this.lastErgTarget = undefined;
-    const scaled = Math.round(gradePercent * this.settings.trainerDifficulty * 10) / 10;
+    const withGear = gradePercent * this.settings.trainerDifficulty + gearGradeOffset(this.gear);
+    const scaled = Math.round(Math.min(20, Math.max(-10, withGear)) * 10) / 10;
     const changed = this.lastTrainerGrade === undefined || Math.abs(scaled - this.lastTrainerGrade) >= 0.2;
     if (now - this.lastTrainerUpdate < 1000 || (!changed && now - this.lastTrainerUpdate < 5000)) return;
     this.lastTrainerUpdate = now;
@@ -498,6 +516,7 @@ export class RideSession {
       kilojoules: this.powerSum / 1000,
       draft: this.draft,
       trainerGrade: this.lastTrainerGrade,
+      gear: this.gear,
       noTrainerData: stale,
       others: [
         ...this.bots.map((b) => ({

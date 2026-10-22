@@ -56,6 +56,11 @@ export interface BleTransport {
   isAvailable(): Promise<boolean>;
   /** Shows the platform's device chooser. Rejects if the user cancels. */
   requestDevice(request: DeviceRequest): Promise<BleDevice>;
+  /**
+   * Looks for a matching device without a chooser (native apps only). A device from `preferIds` wins at once;
+   * otherwise the strongest match after `timeoutMs`, or null.
+   */
+  scan?(request: DeviceRequest, options: { preferIds: string[]; timeoutMs: number }): Promise<BleDevice | null>;
 }
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';

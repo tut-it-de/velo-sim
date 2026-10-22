@@ -72,10 +72,14 @@ export function LoginPage() {
   return (
     <div className="page">
       <div className="page-inner auth">
+        <div className="auth-brand">
+          <span className="brand-mark">V</span>
+          <span className="brand-name">Velo Sim</span>
+        </div>
         <h1>{register_ ? 'Konto erstellen' : 'Anmelden'}</h1>
         <p className="muted">
-          Mit Konto fährst du mit anderen auf derselben Strecke, siehst ihre Namen und sie deinen. Taler und Garage liegen dann auf dem Server und
-          gehen nicht verloren.
+          Zum Fahren brauchst du ein Konto. Einmal angemeldet, fährst du auch ohne Internet – Strava-Uploads holt die App nach, sobald du wieder
+          online bist.
         </p>
         <form className="auth-form" onSubmit={submit}>
           <label>

@@ -1,17 +1,18 @@
 import { SERVICE } from '../uuids';
-import type { BleTransport } from '../transport/types';
+import type { BleDevice, BleTransport, DeviceRequest } from '../transport/types';
 import { HeartRateMonitor, CadenceSensor } from './sensors';
 import { SmartTrainer, type SmartTrainerOptions } from './smartTrainer';
 import type { ManagedDeviceOptions } from './managedDevice';
 
 /** Opens the chooser for smart trainers (FTMS or Cycling Power, plus anything named KICKR/Wahoo). */
-export async function requestTrainer(transport: BleTransport, options: SmartTrainerOptions = {}): Promise<SmartTrainer> {
-  const device = await transport.requestDevice({
-    services: [SERVICE.fitnessMachine, SERVICE.cyclingPower],
-    namePrefixes: ['KICKR', 'Wahoo'],
-    optionalServices: [SERVICE.deviceInformation, SERVICE.fitnessMachine, SERVICE.cyclingPower, SERVICE.cyclingSpeedCadence],
-  });
-  const trainer = new SmartTrainer(device, options);
+export const TRAINER_REQUEST: DeviceRequest = {
+  services: [SERVICE.fitnessMachine, SERVICE.cyclingPower],
+  namePrefixes: ['KICKR', 'Wahoo'],
+  optionalServices: [SERVICE.deviceInformation, SERVICE.fitnessMachine, SERVICE.cyclingPower, SERVICE.cyclingSpeedCadence],
+};
+
+export async function requestTrainer(transport: BleTransport, options: SmartTrainerOptions = {}, found?: BleDevice): Promise<SmartTrainer> {
+  const trainer = new SmartTrainer(found ?? (await transport.requestDevice(TRAINER_REQUEST)), options);
   await trainer.start();
   return trainer;
 }
@@ -26,13 +27,14 @@ export const HEART_RATE_NAME_PREFIXES = [
   'Sigma', 'SIGMA', 'Bryton', 'Geonaute', 'H10', 'H9', 'Verity', 'OH1', 'Heart', 'HR',
 ];
 
-export async function requestHeartRateMonitor(transport: BleTransport, options: ManagedDeviceOptions = {}): Promise<HeartRateMonitor> {
-  const device = await transport.requestDevice({
-    services: [SERVICE.heartRate],
-    namePrefixes: HEART_RATE_NAME_PREFIXES,
-    optionalServices: [SERVICE.deviceInformation],
-  });
-  const hrm = new HeartRateMonitor(device, options);
+export const HEART_RATE_REQUEST: DeviceRequest = {
+  services: [SERVICE.heartRate],
+  namePrefixes: HEART_RATE_NAME_PREFIXES,
+  optionalServices: [SERVICE.deviceInformation],
+};
+
+export async function requestHeartRateMonitor(transport: BleTransport, options: ManagedDeviceOptions = {}, found?: BleDevice): Promise<HeartRateMonitor> {
+  const hrm = new HeartRateMonitor(found ?? (await transport.requestDevice(HEART_RATE_REQUEST)), options);
   await hrm.start();
   return hrm;
 }
