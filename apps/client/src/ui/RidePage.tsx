@@ -317,7 +317,7 @@ function RouteSelect({ onStart }: { onStart: (routeId: string, bots: boolean, wo
             <strong>{sel.r.name}</strong>
             <span className="muted small">
               {mode === 'workout' && workout
-                ? `${workout.name} · ${formatDuration(workoutStats(workout).durationS)} · FTP ${settings.ftp} W`
+                ? `${workout.name} · ${formatDuration(workoutStats(workout, settings.ftp).durationS)} · FTP ${settings.ftp} W`
                 : `Trainer-Schwierigkeit ${Math.round(settings.trainerDifficulty * 100)} %`}
             </span>
           </div>

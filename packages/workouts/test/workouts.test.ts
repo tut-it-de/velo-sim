@@ -4,7 +4,11 @@ import {
   WorkoutPlayer,
   ZwoError,
   buildTimeline,
+  evaluateTest,
+  ftpFactorForDuration,
   ftpFromRampTest,
+  resolveWorkout,
+  zoneWatts,
   parseZwo,
   serializeZwo,
   totalDurationS,
@@ -101,6 +105,7 @@ describe('timeline', () => {
       expect(stats.durationS).toBeGreaterThan(600);
       expect(stats.tss).toBeGreaterThan(5);
       expect(new Set(WORKOUT_LIBRARY.map((x) => x.id)).size).toBe(WORKOUT_LIBRARY.length);
+      if (w.powerUnit === 'watts') continue;
       expect(parseZwo(serializeZwo(w)).steps).toEqual(w.steps.map((s) => ('label' in s ? (({ label: _l, ...rest }) => rest)(s) : s)));
     }
   });
@@ -183,5 +188,93 @@ describe('WorkoutPlayer', () => {
     for (let i = 0; i < 6; i++) p.advance(1, { power: 100, cadence: 30 });
     expect(p.state.segment?.kind).toBe('cooldown');
     expect(ftpFromRampTest(380)).toBe(285);
+  });
+});
+
+describe('FTP tests', () => {
+  const byId = (id: string) => WORKOUT_LIBRARY.find((w) => w.id === id)!;
+
+  it('Zwift ramp: 100 W, +20 W per minute up to 600 W, independent of FTP', () => {
+    const p = new WorkoutPlayer(byId('ramp-test-zwift'), 180);
+    p.advance(300 + 10, { power: 100, cadence: 90 });
+    expect(p.state.segment?.label).toBe('Stufe 1');
+    expect(p.state.targetWatts).toBe(100);
+    p.advance(60 * 4, { power: 180, cadence: 90 });
+    expect(p.state.targetWatts).toBe(180);
+    const steps = buildTimeline(byId('ramp-test-zwift'), 250).filter((s) => s.label.startsWith('Stufe'));
+    expect(steps).toHaveLength(26);
+    expect(Math.round(steps.at(-1)!.powerEnd * 250)).toBe(600);
+  });
+
+  it('Ramp Lite: 50 W, +10 W per minute up to 400 W', () => {
+    const steps = buildTimeline(byId('ramp-test-lite'), 150).filter((s) => s.label.startsWith('Stufe'));
+    expect(Math.round(steps[0]!.powerStart * 150)).toBe(50);
+    expect(Math.round(steps[1]!.powerStart * 150)).toBe(60);
+    expect(Math.round(steps.at(-1)!.powerEnd * 150)).toBe(400);
+    expect(resolveWorkout(byId('ramp-test-lite'), 150).powerUnit).toBeUndefined();
+  });
+
+  it('evaluates an aborted ramp from the best minute', () => {
+    const w = byId('ramp-test-zwift');
+    const p = new WorkoutPlayer(w, 200);
+    p.advance(300 + 12 * 60 + 20, { power: 300, cadence: 90 });
+    for (let i = 0; i < 6; i++) p.advance(1, { power: 80, cadence: 30 });
+    expect(p.state.segment?.kind).toBe('cooldown');
+    const r = evaluateTest(w, p.testProgress, 330)!;
+    expect(r.ftp).toBe(248);
+    expect(r.confidence).toBe('mittel');
+    expect(p.testProgress.rampTopReached).toBe(false);
+  });
+
+  it('flags a ramp that was too easy and refuses one that was too short', () => {
+    const w = byId('ramp-test-lite');
+    const p = new WorkoutPlayer(w, 200);
+    p.advance(300 + 36 * 60 + 5, { power: 400, cadence: 90 });
+    expect(p.testProgress.rampTopReached).toBe(true);
+    const r = evaluateTest(w, p.testProgress, 400)!;
+    expect(r.confidence).toBe('schätzung');
+    expect(r.notes[0]).toContain('400 W');
+
+    const early = new WorkoutPlayer(w, 200);
+    early.advance(300 + 90, { power: 70, cadence: 90 });
+    expect(evaluateTest(w, early.testProgress, 70)!.ftp).toBeUndefined();
+  });
+
+  it('20-minute test: 95 % of the block average, scaled when stopped after 12 min, nothing below', () => {
+    const w = byId('ftp-test-20');
+    const blockStart = buildTimeline(w).find((s) => s.label.startsWith('Testblock'))!.startS;
+    const full = new WorkoutPlayer(w, 250);
+    full.advance(blockStart, { power: 150, cadence: 90 });
+    for (let i = 0; i < 1200; i++) full.advance(1, { power: 260, cadence: 92 });
+    expect(full.testProgress.blockAvgPower).toBeCloseTo(260, 5);
+    expect(evaluateTest(w, full.testProgress, 300)).toMatchObject({ ftp: 247, confidence: 'hoch' });
+
+    const stopped = new WorkoutPlayer(w, 250);
+    stopped.advance(blockStart, { power: 150, cadence: 90 });
+    for (let i = 0; i < 14 * 60; i++) stopped.advance(1, { power: 270, cadence: 92 });
+    const r = evaluateTest(w, stopped.testProgress, 300)!;
+    expect(r.confidence).toBe('schätzung');
+    expect(r.ftp).toBe(Math.round(270 * ftpFactorForDuration(14 * 60)));
+    expect(r.ftp!).toBeLessThan(270 * 0.95);
+
+    const short = new WorkoutPlayer(w, 250);
+    short.advance(blockStart + 300, { power: 280, cadence: 92 });
+    expect(evaluateTest(w, short.testProgress, 300)!.ftp).toBeUndefined();
+  });
+
+  it('duration factor: 90 % at 8 min, 95 % at 20 min', () => {
+    expect(ftpFactorForDuration(480)).toBeCloseTo(0.9, 5);
+    expect(ftpFactorForDuration(1200)).toBeCloseTo(0.95, 5);
+    expect(ftpFactorForDuration(720)).toBeGreaterThan(0.91);
+  });
+});
+
+describe('zoneWatts', () => {
+  it('splits FTP into seven contiguous zones', () => {
+    const z = zoneWatts(250);
+    expect(z).toHaveLength(7);
+    expect(z[1]).toMatchObject({ from: 139, to: 188 });
+    expect(z[3]).toMatchObject({ from: 226, to: 263 });
+    expect(z[6]!.to).toBeUndefined();
   });
 });

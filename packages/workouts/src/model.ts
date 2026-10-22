@@ -14,8 +14,8 @@ export type WorkoutStep =
   | { type: 'warmup' | 'cooldown' | 'ramp'; durationS: number; powerStart: number; powerEnd: number; cadence?: CadenceTarget; label?: string }
   | { type: 'steady'; durationS: number; power: number; cadence?: CadenceTarget; label?: string }
   | { type: 'intervals'; repeat: number; on: IntervalPart; off: IntervalPart }
-  | { type: 'freeride'; durationS: number; cadence?: CadenceTarget }
-  | { type: 'maxeffort'; durationS: number };
+  | { type: 'freeride'; durationS: number; cadence?: CadenceTarget; label?: string }
+  | { type: 'maxeffort'; durationS: number; label?: string };
 
 export interface TextEvent {
   /** Seconds from the start of the workout. */
@@ -32,18 +32,39 @@ export interface Workout {
   category?: WorkoutCategory;
   steps: WorkoutStep[];
   textEvents?: TextEvent[];
-  /** Special handling at the end (FTP estimate). */
-  test?: 'ramp';
+  /** Special handling at the end (FTP estimate): step ramp or 20-minute test. */
+  test?: 'ramp' | 'ftp20';
+  /** 'watts' = step powers are absolute watts (e.g. Zwift-style ramp tests); default fraction of FTP. */
+  powerUnit?: 'ftp' | 'watts';
+  level?: WorkoutLevel;
 }
 
-export type WorkoutCategory = 'test' | 'endurance' | 'sweetspot' | 'threshold' | 'vo2max' | 'sprint' | 'cadence' | 'recovery' | 'custom';
+export type WorkoutCategory =
+  | 'test'
+  | 'endurance'
+  | 'tempo'
+  | 'sweetspot'
+  | 'threshold'
+  | 'vo2max'
+  | 'anaerobic'
+  | 'sprint'
+  | 'cadence'
+  | 'recovery'
+  | 'custom';
+
+/** 1 = Einsteiger, 2 = Fortgeschritten, 3 = Profi. */
+export type WorkoutLevel = 1 | 2 | 3;
+
+export const LEVEL_LABEL: Record<WorkoutLevel, string> = { 1: 'Einsteiger', 2: 'Fortgeschritten', 3: 'Profi' };
 
 export const CATEGORY_LABEL: Record<WorkoutCategory, string> = {
   test: 'Test',
   endurance: 'Grundlage',
+  tempo: 'Tempo',
   sweetspot: 'Sweet Spot',
   threshold: 'Schwelle',
   vo2max: 'VO2max',
+  anaerobic: 'Anaerob',
   sprint: 'Sprint',
   cadence: 'Kadenz',
   recovery: 'Erholung',
@@ -74,8 +95,33 @@ const STEP_LABEL: Record<WorkoutStep['type'], string> = {
   maxeffort: 'Vollgas',
 };
 
-/** Flattens steps (expanding intervals) into a timeline. */
-export function buildTimeline(workout: Workout): TimelineSegment[] {
+const scalePower = <T extends { power: number }>(p: T, ftp: number): T => ({ ...p, power: p.power / ftp });
+
+/** Converts a workout with absolute watts into the usual FTP fractions for a rider; other workouts pass through. */
+export function resolveWorkout(workout: Workout, ftp = 200): Workout {
+  if (workout.powerUnit !== 'watts') return workout;
+  const f = Math.max(1, ftp);
+  const steps = workout.steps.map((s): WorkoutStep => {
+    switch (s.type) {
+      case 'warmup':
+      case 'cooldown':
+      case 'ramp':
+        return { ...s, powerStart: s.powerStart / f, powerEnd: s.powerEnd / f };
+      case 'steady':
+        return scalePower(s, f);
+      case 'intervals':
+        return { ...s, on: scalePower(s.on, f), off: scalePower(s.off, f) };
+      default:
+        return s;
+    }
+  });
+  const { powerUnit: _unit, ...rest } = workout;
+  return { ...rest, steps };
+}
+
+/** Flattens steps (expanding intervals) into a timeline. `ftp` only matters for workouts in absolute watts. */
+export function buildTimeline(input: Workout, ftp?: number): TimelineSegment[] {
+  const workout = resolveWorkout(input, ftp);
   const out: TimelineSegment[] = [];
   let t = 0;
   const push = (seg: Omit<TimelineSegment, 'index' | 'startS'>) => {
@@ -132,10 +178,10 @@ export function buildTimeline(workout: Workout): TimelineSegment[] {
         }
         break;
       case 'freeride':
-        push({ durationS: step.durationS, mode: 'free', powerStart: 0, powerEnd: 0, cadence: step.cadence, kind: 'freeride', label: STEP_LABEL.freeride });
+        push({ durationS: step.durationS, mode: 'free', powerStart: 0, powerEnd: 0, cadence: step.cadence, kind: 'freeride', label: step.label ?? STEP_LABEL.freeride });
         break;
       case 'maxeffort':
-        push({ durationS: step.durationS, mode: 'free', powerStart: 2, powerEnd: 2, kind: 'maxeffort', label: STEP_LABEL.maxeffort });
+        push({ durationS: step.durationS, mode: 'free', powerStart: 2, powerEnd: 2, kind: 'maxeffort', label: step.label ?? STEP_LABEL.maxeffort });
         break;
     }
   }
@@ -165,8 +211,8 @@ export interface WorkoutStats {
   avgPower: number;
 }
 
-export function workoutStats(workout: Workout): WorkoutStats {
-  const tl = buildTimeline(workout);
+export function workoutStats(workout: Workout, ftp?: number): WorkoutStats {
+  const tl = buildTimeline(workout, ftp);
   const series: number[] = [];
   for (const seg of tl) {
     for (let s = 0; s < seg.durationS; s++) {

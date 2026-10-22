@@ -17,7 +17,7 @@ interface Props {
 
 /** Workout profile: one block per timeline segment, coloured by power zone. */
 export function WorkoutChart({ workout, height = 80, elapsedS, trace, ftp = 200 }: Props) {
-  const timeline = useMemo(() => buildTimeline(workout), [workout]);
+  const timeline = useMemo(() => buildTimeline(workout, ftp), [workout, ftp]);
   const total = timeline.reduce((a, s) => a + s.durationS, 0) || 1;
   const x = (t: number) => (t / total) * W;
   const y = (f: number) => height - (Math.min(MAX_FRACTION, f) / MAX_FRACTION) * (height - 4);

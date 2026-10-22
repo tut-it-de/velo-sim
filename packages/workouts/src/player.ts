@@ -1,4 +1,5 @@
 import { buildTimeline, findSegment, segmentPowerAt, type CadenceTarget, type TimelineSegment, type Workout } from './model';
+import { isRampStep, isTestBlock, type TestProgress } from './test';
 
 export interface PlayerInput {
   power: number;
@@ -26,6 +27,8 @@ export interface PlayerState {
   compliance: number;
   segmentCompliance: number;
   activeText?: string;
+  /** Live numbers of the 20-minute test block (only while riding it). */
+  testBlock?: { elapsedS: number; avgPower: number };
 }
 
 export interface PlayerStep {
@@ -60,6 +63,10 @@ export class WorkoutPlayer {
   private segTime = 0;
   private currentIndex = -1;
   private rampFailS = 0;
+  private rampS = 0;
+  private rampAborted = false;
+  private blockS = 0;
+  private blockJ = 0;
   private last: PlayerState;
 
   constructor(
@@ -67,7 +74,7 @@ export class WorkoutPlayer {
     readonly ftp: number,
     opts: { intensity?: number } = {},
   ) {
-    this.timeline = buildTimeline(workout);
+    this.timeline = buildTimeline(workout, ftp);
     this.totalS = this.timeline.reduce((a, s) => a + s.durationS, 0);
     this.intensity = opts.intensity ?? 1;
     this.last = this.compute();
@@ -91,7 +98,19 @@ export class WorkoutPlayer {
 
   advance(dtS: number, input: PlayerInput): PlayerStep {
     if (this.last.finished) return { state: this.last, segmentChanged: false };
+    const from = this.elapsed;
     this.elapsed = Math.min(this.totalS, this.elapsed + dtS);
+    // Test bookkeeping: time spent in ramp steps / the test block during this tick.
+    for (const s of this.timeline) {
+      if (!isRampStep(s) && !isTestBlock(s)) continue;
+      const overlap = Math.min(this.elapsed, s.startS + s.durationS) - Math.max(from, s.startS);
+      if (overlap <= 0) continue;
+      if (isRampStep(s)) this.rampS += overlap;
+      else {
+        this.blockS += overlap;
+        this.blockJ += input.power * overlap;
+      }
+    }
     const seg = findSegment(this.timeline, this.elapsed);
 
     // Low-cadence relief in ERG mode.
@@ -115,13 +134,14 @@ export class WorkoutPlayer {
     }
 
     // Ramp test: when the rider can no longer turn the pedals, jump to the cooldown.
-    if (this.workout.test === 'ramp' && seg && seg.label.startsWith('Stufe')) {
+    if (this.workout.test === 'ramp' && seg && isRampStep(seg)) {
       this.rampFailS = input.cadence < RAMP_FAIL_CADENCE ? this.rampFailS + dtS : 0;
       if (this.rampFailS >= RAMP_FAIL_AFTER_S) {
         const cooldown = this.timeline.find((s) => s.kind === 'cooldown');
         if (cooldown) this.elapsed = cooldown.startS;
         this.rampFailS = 0;
         this.relief = false;
+        this.rampAborted = true;
       }
     }
 
@@ -146,6 +166,20 @@ export class WorkoutPlayer {
     }
     this.last = { ...state, compliance: this.ergTime ? this.inTarget / this.ergTime : 1, segmentCompliance: this.segTime ? this.segIn / this.segTime : 1 };
     return { state: this.last, segmentChanged: changed };
+  }
+
+  /** What the rider has done of the test so far — the input for evaluateTest(). */
+  get testProgress(): TestProgress {
+    const steps = this.timeline.filter(isRampStep);
+    const last = steps.at(-1);
+    return {
+      rampS: this.rampS,
+      rampTopReached: !!last && !this.rampAborted && this.elapsed >= last.startS + last.durationS,
+      topStepWatts: last ? Math.round(last.powerEnd * this.ftp) : undefined,
+      blockS: this.blockS,
+      blockAvgPower: this.blockS > 0 ? this.blockJ / this.blockS : 0,
+      blockPlannedS: this.timeline.find(isTestBlock)?.durationS ?? 0,
+    };
   }
 
   private compute(): PlayerState {
@@ -178,11 +212,7 @@ export class WorkoutPlayer {
       compliance: this.last?.compliance ?? 1,
       segmentCompliance: this.last?.segmentCompliance ?? 1,
       activeText: text?.message,
+      testBlock: seg && isTestBlock(seg) ? { elapsedS: this.elapsed - seg.startS, avgPower: this.blockS > 0 ? this.blockJ / this.blockS : 0 } : undefined,
     };
   }
-}
-
-/** FTP estimate from a ramp test: 75 % of the best one-minute power. */
-export function ftpFromRampTest(best1minPower: number): number {
-  return Math.round(best1minPower * 0.75);
 }

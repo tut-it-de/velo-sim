@@ -53,6 +53,16 @@ describe('step (integration)', () => {
     expect(s.distanceM).toBeGreaterThan(500);
   });
 
+  it('crawls up a steep climb at low power instead of stalling', () => {
+    // 112 W on 14 %: slow (~3 km/h), but the rider must keep moving — also when starting from standstill.
+    for (const v0 of [0, 3]) {
+      let s = { speedMps: v0, distanceM: 0 };
+      for (let i = 0; i < 600; i++) s = step(s, 112, start, { gradePercent: 14 }, 0.1);
+      expect(s.speedMps).toBeCloseTo(steadySpeed(112, start, { gradePercent: 14 }), 1);
+      expect(msToKmh(s.speedMps)).toBeGreaterThan(2.5);
+    }
+  });
+
   it('a big step equals many small steps', () => {
     const a = step({ speedMps: 8, distanceM: 0 }, 200, start, { gradePercent: 2 }, 1);
     let b = { speedMps: 8, distanceM: 0 };

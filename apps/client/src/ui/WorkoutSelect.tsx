@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { CATEGORY_LABEL, parseZwo, serializeZwo, workoutStats, type Workout, type WorkoutCategory } from '@velo/workouts';
+import { CATEGORY_LABEL, LEVEL_LABEL, parseZwo, serializeZwo, workoutStats, type Workout, type WorkoutCategory, type WorkoutLevel } from '@velo/workouts';
 import { exportFile } from '../devices/files';
 import { settingsStore } from '../state/settings';
 import { useStore } from '../state/store';
@@ -12,12 +12,18 @@ export function WorkoutSelect({ selectedId, onSelect }: { selectedId?: string; o
   useStore(customWorkoutsStore);
   const settings = useStore(settingsStore);
   const [filter, setFilter] = useState<WorkoutCategory | 'all'>('all');
+  const [level, setLevel] = useState<WorkoutLevel | 'all'>('all');
   const [editing, setEditing] = useState<Workout | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const workouts = allWorkouts();
-  const categories = [...new Set(workouts.map((w) => w.category ?? 'custom'))];
-  const shown = workouts.filter((w) => filter === 'all' || (w.category ?? 'custom') === filter);
+  // Library order: by category (as in CATEGORY_LABEL), then level.
+  const order = Object.keys(CATEGORY_LABEL) as WorkoutCategory[];
+  const rank = (w: Workout) => order.indexOf(w.category ?? 'custom') * 10 + (w.level ?? 0);
+  const categories = order.filter((c) => workouts.some((w) => (w.category ?? 'custom') === c));
+  const shown = workouts
+    .filter((w) => (filter === 'all' || (w.category ?? 'custom') === filter) && (level === 'all' || !w.level || w.level === level))
+    .sort((a, b) => rank(a) - rank(b));
 
   const importFiles = async (files: FileList | null) => {
     setError(null);
@@ -68,27 +74,42 @@ export function WorkoutSelect({ selectedId, onSelect }: { selectedId?: string; o
           </button>
         </div>
       </div>
+      <div className="row chips" style={{ marginBottom: 10 }}>
+        <button className={level === 'all' ? 'chip active' : 'chip'} onClick={() => setLevel('all')}>
+          Alle Stufen
+        </button>
+        {([1, 2, 3] as const).map((l) => (
+          <button key={l} className={level === l ? 'chip active' : 'chip'} onClick={() => setLevel(l)}>
+            {LEVEL_LABEL[l]}
+          </button>
+        ))}
+      </div>
       {error && <div className="error-text" style={{ marginBottom: 8 }}>{error}</div>}
       <div className="workout-list">
         {shown.map((w) => {
-          const st = workoutStats(w);
+          const st = workoutStats(w, settings.ftp);
           const custom = isCustom(w.id);
           return (
             <div key={w.id} className={`workout-card ${selectedId === w.id ? 'selected' : ''}`} onClick={() => onSelect(w)} role="button" aria-pressed={selectedId === w.id}>
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <strong>{w.name}</strong>
-                <span className="badge">{CATEGORY_LABEL[w.category ?? 'custom']}</span>
+                <span>
+                  {w.level && <span className="badge level">{LEVEL_LABEL[w.level]}</span>}
+                  <span className="badge">{CATEGORY_LABEL[w.category ?? 'custom']}</span>
+                </span>
               </div>
               <WorkoutChart workout={w} height={46} ftp={settings.ftp} />
               <div className="muted small">
-                {formatDuration(st.durationS)} · TSS {Math.round(st.tss)} · IF {st.intensityFactor.toFixed(2)}
+                {w.test
+                  ? `${w.test === 'ramp' ? `bis zur Erschöpfung · max. ${formatDuration(st.durationS)}` : formatDuration(st.durationS)} · Ergebnis: neue FTP`
+                  : `${formatDuration(st.durationS)} · TSS ${Math.round(st.tss)} · IF ${st.intensityFactor.toFixed(2)}`}
               </div>
               <div className="muted small workout-desc">{w.description}</div>
               <div className="row workout-actions" onClick={(e) => e.stopPropagation()}>
                 <button className="link" onClick={() => setEditing(custom ? w : { ...w, id: newWorkoutId(), name: `${w.name} (Kopie)`, category: 'custom' })}>
                   {custom ? 'Bearbeiten' : 'Kopie bearbeiten'}
                 </button>
-                <button className="link" onClick={() => exportFile(`${w.name.replace(/[^\w\- äöüÄÖÜß]/g, '_')}.zwo`, new TextEncoder().encode(serializeZwo(w)), 'application/xml')}>
+                <button className="link" onClick={() => exportFile(`${w.name.replace(/[^\w\- äöüÄÖÜß]/g, '_')}.zwo`, new TextEncoder().encode(serializeZwo(w, settings.ftp)), 'application/xml')}>
                   Export .zwo
                 </button>
                 {custom && (

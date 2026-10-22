@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { workoutStats, type CadenceTarget, type Workout, type WorkoutStep } from '@velo/workouts';
+import { resolveWorkout, workoutStats, type CadenceTarget, type Workout, type WorkoutStep } from '@velo/workouts';
 import { settingsStore } from '../state/settings';
 import { useStore } from '../state/store';
 import { formatDuration } from './components';
@@ -106,7 +106,8 @@ function CadenceField(props: { value: CadenceTarget | undefined; onChange: (c: C
 /** Block-based workout builder with live preview. */
 export function WorkoutEditor({ initial, onSave, onCancel }: { initial: Workout; onSave: (w: Workout) => void; onCancel: () => void }) {
   const { ftp } = useStore(settingsStore);
-  const [w, setW] = useState<Workout>(initial);
+  // Workouts in absolute watts (ramp tests) are edited as FTP fractions.
+  const [w, setW] = useState<Workout>(() => resolveWorkout(initial, ftp));
   const stats = workoutStats(w);
 
   const update = (i: number, step: WorkoutStep) => setW({ ...w, steps: w.steps.map((s, j) => (j === i ? step : s)) });

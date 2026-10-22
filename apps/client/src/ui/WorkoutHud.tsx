@@ -11,6 +11,24 @@ function cadenceStatus(cadence: number, target: ReturnType<typeof cadenceRange>)
   return 'ok';
 }
 
+/** 20-minute test: no ERG target — show the rider's average against a sensible band around the current FTP. */
+function TestBlockTarget({ ftp, avg, elapsedS }: { ftp: number; avg: number; elapsedS: number }) {
+  const low = Math.round(ftp * 1.0);
+  const high = Math.round(ftp * 1.05);
+  const hint = elapsedS < 20 ? 'gleichmäßig starten' : avg > high * 1.05 && elapsedS < 600 ? 'zu schnell – Kräfte sparen' : avg < low * 0.95 ? 'etwas mehr Druck' : 'gutes Tempo';
+  return (
+    <>
+      <span className="big">{elapsedS >= 5 ? Math.round(avg) : '–'}</span>
+      <span className="unit">W Ø</span>
+      <span className="small muted" style={{ marginLeft: 8 }}>
+        Ziel ca. {low}–{high} W · {hint}
+        <br />
+        FTP jetzt ≈ {Math.round(avg * 0.95)} W
+      </span>
+    </>
+  );
+}
+
 export function WorkoutHud({ session, snapshot, ftp }: { session: RideSession; snapshot: RideSnapshot; ftp: number }) {
   const w = snapshot.workout;
   const player = session.player;
@@ -58,6 +76,8 @@ export function WorkoutHud({ session, snapshot, ftp }: { session: RideSession; s
                 {onTarget ? '✓' : `${delta > 0 ? '+' : ''}${Math.round(delta)}`}
               </span>
             </>
+          ) : w.testBlock ? (
+            <TestBlockTarget ftp={ftp} avg={w.testBlock.avgPower} elapsedS={w.testBlock.elapsedS} />
           ) : (
             <span className="big">{seg?.kind === 'maxeffort' ? 'VOLLGAS' : 'FREI'}</span>
           )}

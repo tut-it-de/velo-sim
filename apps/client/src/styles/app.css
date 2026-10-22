@@ -2508,3 +2508,89 @@ button.strava-link {
   line-height: 14px;
   height: 14px;
 }
+
+/* ---------- FTP test result ---------- */
+.test-result {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  display: grid;
+  gap: 10px;
+}
+.test-ftp {
+  font-size: 15px;
+  font-weight: 600;
+}
+.test-ftp .big {
+  font-family: var(--font-cond);
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1;
+}
+.test-diff {
+  margin-left: 10px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.test-diff.up {
+  color: var(--ok);
+}
+.test-diff.down {
+  color: var(--warn);
+}
+.badge.test-conf {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.badge.test-conf.ok {
+  background: rgba(61, 220, 132, 0.16);
+  color: var(--ok);
+}
+.test-bests {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.zone-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.zone-table td {
+  padding: 3px 4px;
+  border-top: 1px solid var(--border);
+}
+.zone-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.zone-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  background: var(--z1);
+}
+.zone-dot.z2 { background: var(--z2); }
+.zone-dot.z3 { background: var(--z3); }
+.zone-dot.z4 { background: var(--z4); }
+.zone-dot.z5 { background: var(--z5); }
+.zone-dot.z6 { background: var(--z6); }
+.zone-dot.z7 { background: #a855f7; }
+.test-notes {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.test-notes li + li {
+  margin-top: 4px;
+}
+.badge.level {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-dim);
+}

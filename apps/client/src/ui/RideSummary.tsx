@@ -1,6 +1,4 @@
-import { useState } from 'react';
 import { exportFile } from '../devices/files';
-import { settingsStore, updateSettings } from '../state/settings';
 import type { RideResult } from '../ride/rideSession';
 import { fitFileName, type StoredActivity } from '../state/activities';
 import { fmt, formatDuration } from './components';
@@ -8,13 +6,12 @@ import { formatCoins, total } from '@velo/equipment';
 import { balance, garageStore } from '../state/garage';
 import { activitiesStore } from '../state/activities';
 import { StravaStatusLine } from './StravaStatusLine';
+import { TestResultCard } from './TestResultCard';
 import { isLoggedIn } from '../net/api';
 import { useStore } from '../state/store';
 
 export function RideSummary({ result, activity, onClose }: { result: RideResult; activity: StoredActivity; onClose: () => void }) {
   const s = result.summary;
-  const [ftpApplied, setFtpApplied] = useState(false);
-  const newFtp = result.workout?.rampTestFtp;
   const garage = useStore(garageStore);
   const live = useStore(activitiesStore).find((a) => a.id === activity.id) ?? activity;
   const earned = total(result.earnings);
@@ -89,23 +86,7 @@ export function RideSummary({ result, activity, onClose }: { result: RideResult;
             {Math.round(result.workout.compliance * 100)} % der ERG-Zeit im Zielbereich
           </div>
         )}
-        {newFtp !== undefined && (
-          <div className="notice row" style={{ marginTop: 12, justifyContent: 'space-between' }}>
-            <span>
-              Rampentest: beste Minute {Math.round(s.best1min)} W → <strong>neue FTP {newFtp} W</strong> (bisher {settingsStore.get().ftp} W)
-            </span>
-            <button
-              className="primary"
-              disabled={ftpApplied}
-              onClick={() => {
-                updateSettings({ ftp: newFtp });
-                setFtpApplied(true);
-              }}
-            >
-              {ftpApplied ? 'Übernommen ✓' : 'FTP übernehmen'}
-            </button>
-          </div>
-        )}
+        {result.workout?.test && <TestResultCard test={result.workout.test} summary={s} />}
         {result.segments.length > 0 && (
           <div style={{ marginTop: 12 }}>
             <div className="muted small" style={{ marginBottom: 4 }}>

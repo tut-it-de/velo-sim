@@ -9,7 +9,7 @@ import {
   type RiderState,
 } from '@velo/physics';
 import { SegmentTracker, getTrack, type ActiveSegment, type RouteSegment, type Track } from '@velo/routes';
-import { WorkoutPlayer, ftpFromRampTest, type PlayerState, type Workout } from '@velo/workouts';
+import { WorkoutPlayer, evaluateTest, type PlayerState, type TestResult, type Workout } from '@velo/workouts';
 import { deviceManager } from '../devices/deviceManager';
 import type { MultiplayerClient } from '../net/multiplayer';
 import type { RideSummaryDTO } from '@velo/protocol';
@@ -81,7 +81,7 @@ export interface RideResult {
   routeName: string;
   summary: ActivitySummary;
   samples: ActivitySample[];
-  workout?: { id: string; name: string; compliance: number; completed: boolean; rampTestFtp?: number };
+  workout?: { id: string; name: string; compliance: number; completed: boolean; test?: TestResult };
   segments: SegmentOutcome[];
   earnings: EarningLine[];
   simulated: boolean;
@@ -297,7 +297,7 @@ export class RideSession {
         name: p.workout.name,
         compliance: p.state.compliance,
         completed: p.state.finished,
-        rampTestFtp: p.workout.test === 'ramp' && summary.best1min > 0 ? ftpFromRampTest(summary.best1min) : undefined,
+        test: evaluateTest(p.workout, p.testProgress, summary.best1min),
       },
     };
   }

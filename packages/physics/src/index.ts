@@ -91,7 +91,8 @@ export function powerForSpeed(speedMps: number, setup: RiderSetup, env: Environm
   return Math.max(0, (resistanceForces(speedMps, setup, env).total * speedMps) / DRIVETRAIN_EFFICIENCY);
 }
 
-const MIN_DRIVE_SPEED = 1.0;
+/** Caps the drive force near standstill. Must stay well below crawling speed on steep climbs (~1 m/s), or weak riders stall. */
+const MIN_DRIVE_SPEED = 0.25;
 const MAX_DRIVE_FORCE = 450;
 const MAX_SUBSTEP = 0.02;
 

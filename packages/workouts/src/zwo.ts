@@ -1,4 +1,5 @@
 import type { CadenceTarget, TextEvent, Workout, WorkoutStep } from './model';
+import { resolveWorkout } from './model';
 
 /**
  * Import/export of Zwift's .zwo workout format (XML). Uses a tiny tokenizer
@@ -177,7 +178,9 @@ function cadenceAttrs(c: CadenceTarget | undefined, prefix = ''): string {
   return ` ${prefix}CadenceLow="${Math.round(c[0])}" ${prefix}CadenceHigh="${Math.round(c[1])}"`;
 }
 
-export function serializeZwo(w: Workout): string {
+/** `ftp` converts workouts in absolute watts (Zwift files only know FTP fractions). */
+export function serializeZwo(workout: Workout, ftp?: number): string {
+  const w = resolveWorkout(workout, ftp);
   const lines: string[] = [];
   lines.push('<workout_file>');
   if (w.author) lines.push(`  <author>${encodeEntities(w.author)}</author>`);
