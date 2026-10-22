@@ -1,7 +1,7 @@
 # Velo Sim auf dem netcup-VPS, neben salon-flow, einkaufsliste & Co.
 # Caddy (salonflow-prod-caddy-1) proxyt velo.tut-it.de → velo:8080 über das Netz salonflow-prod_default
 # und holt das Zertifikat selbst, sobald der DNS-Eintrag auf den Server zeigt.
-# Geheimnisse (POSTGRES_PASSWORD, JWT_SECRET) nur in /opt/velo-sim/.env (chmod 600), nie im Repo.
+# Geheimnisse (POSTGRES_PASSWORD, JWT_SECRET, STRAVA_CLIENT_SECRET) nur in /opt/velo-sim/.env (chmod 600), nie im Repo.
 # Ausrollen: deploy/deploy.sh
 name: velo-sim
 services:
@@ -17,6 +17,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:?}
       PUBLIC_URL: https://${VELO_DOMAIN:-velo.tut-it.de}
       TRUST_PROXY: '1'
+      # Optional: Strava-API-App (strava.com/settings/api, Callback-Domain = VELO_DOMAIN) – leer = Strava aus.
+      STRAVA_CLIENT_ID: ${STRAVA_CLIENT_ID:-}
+      STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET:-}
     depends_on:
       db:
         condition: service_healthy
