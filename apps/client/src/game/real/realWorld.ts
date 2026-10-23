@@ -26,6 +26,7 @@ import { buildRoadsideFlora, type RoadsideFlora } from './roadsideFlora';
 import { buildLandscapeScatter } from './landscapeScatter';
 import { buildRoadsideProps } from './roadsideProps';
 import { buildParking } from './parking';
+import { planJunctions } from './junctions';
 import { buildSideRoads } from './sideRoads';
 import { SkyDome } from './sky';
 import { RealTerrain } from './terrain';
@@ -98,6 +99,8 @@ export class RealWorld {
     const field = new HeightField(data);
     const buildingIndex = new BuildingIndex(data.buildings, data.parking);
     const corridor = new RouteCorridor(track, field, buildingIndex);
+    // junction mouths open walls and guardrails: before the terrain and the ribbon take the edges
+    const junctions = planJunctions(data.roads, corridor);
 
     const fog = Color3.FromHexString(SKY.fog);
     scene.clearColor = new Color4(fog.r, fog.g, fog.b, 1);
@@ -131,7 +134,7 @@ export class RealWorld {
     const vegetation = await buildVegetation(scene, data, corridor, buildingIndex, quality);
 
     await step('Dorfstraßen und Feldwege …');
-    buildSideRoads(scene, data, corridor, quality);
+    buildSideRoads(scene, data, corridor, quality, junctions, data.look.architecture);
     buildParking(scene, data, corridor, quality);
 
     await step('Gras und Blumen am Straßenrand …');

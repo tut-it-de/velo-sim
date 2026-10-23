@@ -1,53 +1,107 @@
-import { Color3, StandardMaterial, type Mesh, type Scene } from '@babylonjs/core';
+import { Color3, StandardMaterial, Texture, type Mesh, type Scene } from '@babylonjs/core';
 import { createRng, smoothstep } from '../noise';
-import { SHOULDER, VERGE_OUT, type RouteCorridor, type RouteHit } from './corridor';
+import { SHOULDER, type RouteCorridor, type RouteHit } from './corridor';
 import { gridContains, triSample } from './heightField';
+import { GIVE_WAY_WIDTH, SIDE_LIFT as LIFT, mouthMesh, mouthPoint, nodeMesh, polylineLength, sideRoadGround, type JunctionPlan } from './junctions';
 import { MeshData } from './meshData';
 import type { QualityProfile } from './quality';
-import type { WorldData } from './worldData';
+import type { Vec2 } from './roadGeometry';
+import { asphaltTexture, gravelTexture, roadTexture } from './textures';
+import type { Architecture, WorldData } from './worldData';
 
 const TILE = 768;
 const MAX_STEP = 6;
-const LIFT = 0.12;
 /** Lanes stop this far outside the ride's road (asphalt + shoulder). */
 const JOIN_GAP = 0.15;
+/** Length of one repeat of the side road textures along the road, m. */
+const TEX_ALONG = 8;
+/** Size of one repeat of the plain asphalt on junction areas, m. */
+const PATCH_TILE = 6;
 const REACH: Record<QualityProfile['level'], number> = { ultra: 1100, hoch: 900, mittel: 600, niedrig: 300 };
+
+/** Part of a polyline between `a` and `b` metres from its start. */
+function slicePolyline(pts: Float32Array, a: number, b: number): Float32Array {
+  const out: number[] = [];
+  let d = 0;
+  const n = pts.length / 2;
+  for (let k = 0; k < n - 1; k++) {
+    const ax = pts[2 * k]!;
+    const az = pts[2 * k + 1]!;
+    const bx = pts[2 * k + 2]!;
+    const bz = pts[2 * k + 3]!;
+    const len = Math.hypot(bx - ax, bz - az);
+    const lo = Math.max(a, d);
+    const hi = Math.min(b, d + len);
+    if (hi > lo && len > 0) {
+      const p = (lo - d) / len;
+      if (out.length === 0) out.push(ax + (bx - ax) * p, az + (bz - az) * p);
+      const q = (hi - d) / len;
+      out.push(ax + (bx - ax) * q, az + (bz - az) * q);
+    }
+    d += len;
+  }
+  return Float32Array.from(out);
+}
 
 /**
  * Village streets, farm lanes and forest tracks from OpenStreetMap, draped over the full-resolution
- * terrain near the lap. Where they meet the ride's own road they run up to its edge with a slightly flared mouth,
- * so crossings and turn-offs read as junctions (they are scenery: the ride stays on the lap). Sampled at the terrain's
- * own triangulation so they never sink into a slope.
+ * terrain near the lap: streets in plain asphalt with worn edges, tracks in gravel. Where they meet the
+ * ride's road (or each other) they end in a junction area with rounded corners (junctions.ts), paved
+ * streets with a give-way line; ends without junction data run up to the road edge with a slightly
+ * flared mouth. They are scenery: the ride stays on the lap. Sampled at the terrain's own
+ * triangulation so they never sink into a slope.
  */
-export function buildSideRoads(scene: Scene, data: WorldData, corridor: RouteCorridor, quality: QualityProfile): Mesh[] {
+export function buildSideRoads(
+  scene: Scene,
+  data: WorldData,
+  corridor: RouteCorridor,
+  quality: QualityProfile,
+  plan: JunctionPlan,
+  style: Architecture,
+): Mesh[] {
   const g = data.near;
   const wl = data.waterLevel;
   const reach = REACH[quality.level];
   const rng = createRng(99);
-  const mat = new StandardMaterial('side-roads', scene);
-  mat.diffuseColor = Color3.White();
-  mat.specularColor = new Color3(0.03, 0.03, 0.03);
-  mat.zOffset = -2;
 
-  const tiles = new Map<number, MeshData>();
-  const tileOf = (x: number, z: number) => {
-    const key = (Math.floor((x - g.x0) / TILE) + 64) * 256 + Math.floor((z - g.z0) / TILE) + 64;
-    let md = tiles.get(key);
-    if (!md) tiles.set(key, (md = new MeshData(false, true)));
-    return md;
+  const material = (name: string, tex: Texture | null, color: Color3, zOffset: number) => {
+    const m = new StandardMaterial(name, scene);
+    m.diffuseTexture = tex;
+    m.diffuseColor = color;
+    m.specularColor = new Color3(0.03, 0.03, 0.03);
+    m.zOffset = zOffset;
+    return m;
+  };
+  const pavedTex = roadTexture(scene, false, style, 'none');
+  pavedTex.wrapU = Texture.CLAMP_ADDRESSMODE;
+  pavedTex.wrapV = Texture.WRAP_ADDRESSMODE;
+  // arms first, junction areas on top of their ends, give-way lines on top of both
+  const mats = {
+    paved: material('side-roads', pavedTex, Color3.White(), -2),
+    track: material('side-tracks', gravelTexture(scene), Color3.White(), -2),
+    patch: material('junctions', asphaltTexture(scene), Color3.White(), -3),
+    gravel: material('junctions-gravel', null, new Color3(0.53, 0.47, 0.38), -3),
+    line: material('give-way', null, new Color3(0.86, 0.86, 0.84), -4),
+  };
+  type Kind = keyof typeof mats;
+  const tiles = new Map<string, { kind: Kind; md: MeshData }>();
+  const tileOf = (kind: Kind, x: number, z: number) => {
+    const key = `${kind}:${Math.floor((x - g.x0) / TILE)},${Math.floor((z - g.z0) / TILE)}`;
+    let t = tiles.get(key);
+    if (!t) tiles.set(key, (t = { kind, md: new MeshData(true, true) }));
+    return t.md;
   };
 
-  const height = (x: number, z: number): number => {
-    const dem = triSample(g.heights, g.nx, (x - g.x0) / g.step, (z - g.z0) / g.step);
-    const hit = corridor.nearest(x, z, VERGE_OUT);
-    if (!hit) return dem;
-    return corridor.profile(hit.row, hit.offset >= 0 ? 1 : 0, Math.abs(hit.offset), dem, hit.y);
-  };
+  const height = sideRoadGround(corridor, g);
 
-  for (const road of data.roads) {
-    const pts = road.pts;
+  data.roads.forEach((road, ri) => {
+    const len = polylineLength(road.pts);
+    const a = plan.cuts[ri * 2]!;
+    const b = len - plan.cuts[ri * 2 + 1]!;
+    if (b - a < 0.5) return;
+    const pts = a > 0 || b < len ? slicePolyline(road.pts, a, b) : road.pts;
     const n = pts.length / 2;
-    if (n < 2) continue;
+    if (n < 2) return;
     // resample the polyline
     const xs: number[] = [];
     const zs: number[] = [];
@@ -66,15 +120,17 @@ export function buildSideRoads(scene: Scene, data: WorldData, corridor: RouteCor
     zs.push(pts[2 * n - 1]!);
 
     const hw = road.width / 2;
-    const tint = road.track ? [0.5, 0.43, 0.33] : [0.42, 0.41, 0.4];
+    const kind: Kind = road.track ? 'track' : 'paved';
+    const flared = plan.mouthed[ri] === 0;
     // Distance of a point outside the ride's road (asphalt + shoulder); null = far from the lap.
     const gapAt = (x: number, z: number): { gap: number; hit: RouteHit } | null => {
       const hit = corridor.nearest(x, z, 24);
       if (!hit) return null;
       return { gap: Math.abs(hit.offset) - corridor.hw[hit.offset >= 0 ? 1 : 0]![hit.row]! - SHOULDER, hit };
     };
-    // junction mouth: the lane widens a little over its last metres before the ride's road
+    // ends without a junction area: the lane widens a little over its last metres before the ride's road
     const flareAt = (x: number, z: number): number => {
+      if (!flared) return 1;
       const near = gapAt(x, z);
       return near ? 1 + 0.35 * (1 - smoothstep(JOIN_GAP, JOIN_GAP + 5, near.gap)) : 1;
     };
@@ -99,19 +155,21 @@ export function buildSideRoads(scene: Scene, data: WorldData, corridor: RouteCor
     };
     let prev: [number, number] | null = null;
     let md: MeshData | null = null;
+    let along = a;
+    let last: [number, number] | null = null;
     const emit = (x: number, z: number, tx: number, tz: number) => {
-      const shade = 0.9 + rng() * 0.18;
-      const r = tint[0]! * shade;
-      const gg = tint[1]! * shade;
-      const b = tint[2]! * shade;
+      if (last) along += Math.hypot(x - last[0], z - last[1]);
+      last = [x, z];
+      const shade = 0.93 + rng() * 0.1;
       const [lx, lz, qx, qz] = corners(x, z, tx, tz);
-      const cur = tileOf(x, z);
+      const cur = tileOf(kind, x, z);
       if (cur !== md) prev = null; // start a fresh strip in the new tile
       md = cur;
-      const a = md.vertex(lx, height(lx, lz) + LIFT, lz, 0, 1, 0, 0, 0, r, gg, b);
-      const c = md.vertex(qx, height(qx, qz) + LIFT, qz, 0, 1, 0, 0, 0, r, gg, b);
-      if (prev) md.stripQuad(prev[0], prev[1], a, c);
-      prev = [a, c];
+      const v = along / TEX_ALONG;
+      const l = md.vertex(lx, height(lx, lz) + LIFT, lz, 0, 1, 0, 0, v, shade, shade, shade);
+      const r = md.vertex(qx, height(qx, qz) + LIFT, qz, 0, 1, 0, 1, v, shade, shade, shade);
+      if (prev) md.stripQuad(prev[0], prev[1], l, r);
+      prev = [l, r];
     };
     // the last cross section between a drawn and a blocked sample that still fits beside the ride's road
     const meet = (ax: number, az: number, bx: number, bz: number, tx: number, tz: number): [number, number] | null => {
@@ -134,6 +192,9 @@ export function buildSideRoads(scene: Scene, data: WorldData, corridor: RouteCor
       const tl = Math.hypot(tx, tz) || 1;
       return [tx / tl, tz / tl];
     });
+    // the first and last cross sections inside a junction area meet its outline exactly
+    if (!Number.isNaN(plan.tans[ri * 4]!)) tan[0] = [plan.tans[ri * 4]!, plan.tans[ri * 4 + 1]!];
+    if (!Number.isNaN(plan.tans[ri * 4 + 2]!)) tan[tan.length - 1] = [plan.tans[ri * 4 + 2]!, plan.tans[ri * 4 + 3]!];
     const ok = xs.map((x, k) => usable(x, zs[k]!, tan[k]![0], tan[k]![1]));
     for (let k = 0; k < xs.length; k++) {
       const [tx, tz] = tan[k]!;
@@ -144,6 +205,7 @@ export function buildSideRoads(scene: Scene, data: WorldData, corridor: RouteCor
           if (p) emit(p[0], p[1], tx, tz);
         }
         prev = null;
+        last = null;
         continue;
       }
       if (!prev && k > 0 && !ok[k - 1]) {
@@ -153,13 +215,52 @@ export function buildSideRoads(scene: Scene, data: WorldData, corridor: RouteCor
       }
       emit(xs[k]!, zs[k]!, tx, tz);
     }
+  });
+
+  // ---- junction areas: where side roads meet the ride's road …
+  const fill = (kind: Kind, mesh: { pts: Array<[number, number, number]>; tris: number[] }) => {
+    if (mesh.tris.length === 0) return;
+    const md = tileOf(kind, mesh.pts[0]![0], mesh.pts[0]![2]);
+    const ids = mesh.pts.map((w) => md.vertex(w[0], w[1], w[2], 0, 1, 0, w[0] / PATCH_TILE, w[2] / PATCH_TILE));
+    for (let k = 0; k < mesh.tris.length; k += 3) md.tri(ids[mesh.tris[k]!]!, ids[mesh.tris[k + 1]!]!, ids[mesh.tris[k + 2]!]!, 0, 1, 0);
+  };
+  for (const m of plan.mouths) {
+    fill('patch', mouthMesh(corridor, height, m));
+    // give-way line across paved streets, just outside the ride's shoulder
+    for (const arm of m.arms) {
+      if (!arm.paved || arm.hw * 2 < GIVE_WAY_WIDTH) continue;
+      const lo = m.edge + 0.45;
+      const xsAt = [-1, 1].map((sgn) => {
+        const t = (lo - sgn * arm.hw * arm.dir[0]) / arm.dir[1];
+        return -sgn * arm.hw * arm.dir[1] + t * arm.dir[0];
+      });
+      const x0 = Math.min(xsAt[0]!, xsAt[1]!) + 0.2;
+      const x1 = Math.max(xsAt[0]!, xsAt[1]!) - 0.2;
+      for (let x = x0; x + 0.5 <= x1; x += 0.8) {
+        const quad: Vec2[] = [
+          [x, lo - 0.15],
+          [x + 0.5, lo - 0.15],
+          [x + 0.5, lo + 0.15],
+          [x, lo + 0.15],
+        ];
+        const w = quad.map((p) => mouthPoint(corridor, height, m, p, 0.01));
+        const md = tileOf('line', w[0]![0], w[0]![2]);
+        const ids = w.map((v) => md.vertex(v[0], v[1], v[2]));
+        md.quad(ids[0]!, ids[1]!, ids[2]!, ids[3]!, 0, 1, 0);
+      }
+    }
+  }
+  // … and each other
+  for (const node of plan.nodes) {
+    if (!gridContains(g, node.x, node.z, 2) || corridor.routeDistance(node.x, node.z) >= reach) continue;
+    fill(node.paved ? 'patch' : 'gravel', nodeMesh(height, node));
   }
 
   const meshes: Mesh[] = [];
   let id = 0;
-  for (const md of tiles.values()) {
+  for (const { kind, md } of tiles.values()) {
     md.computeNormals();
-    const m = md.build(scene, `side-roads-${id++}`, mat);
+    const m = md.build(scene, `side-roads-${kind}-${id++}`, mats[kind]);
     if (!m) continue;
     m.addLODLevel(quality.terrainLod[0], null);
     meshes.push(m);
