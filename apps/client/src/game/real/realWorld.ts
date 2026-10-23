@@ -103,6 +103,9 @@ export class RealWorld {
     const corridor = new RouteCorridor(track, field, buildingIndex, data.roundabouts);
     // junction mouths open walls and guardrails: before the terrain and the ribbon take the edges
     const junctions = planJunctions(data.roads, corridor);
+    // roundabouts: approaches cut the side roads back and open walls on the ride's road (before the ribbon)
+    const sideGround = sideRoadGround(corridor, data.near);
+    const rings = planRoundabouts(corridor, data.roads, sideGround, junctions);
 
     const fog = Color3.FromHexString(SKY.fog);
     scene.clearColor = new Color4(fog.r, fog.g, fog.b, 1);
@@ -137,7 +140,7 @@ export class RealWorld {
 
     await step('Dorfstraßen und Feldwege …');
     buildSideRoads(scene, data, corridor, quality, junctions, data.look.architecture);
-    buildRoundabouts(scene, planRoundabouts(corridor, data.roads, sideRoadGround(corridor, data.near)), terrain.nearMaterial);
+    buildRoundabouts(scene, rings, corridor, sideGround, terrain.nearMaterial);
     buildParking(scene, data, corridor, quality);
 
     await step('Gras und Blumen am Straßenrand …');

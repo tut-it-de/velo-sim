@@ -7,7 +7,7 @@ import { Noise2D } from '../noise';
 import { crossSection, mouthMesh, mouthPoint, nodeMesh, planJunctions, polylineLength, sideRoadGround } from './junctions';
 import { ROAD_COLS, drawnRuns, runGeometry } from './ribbonGeometry';
 import { polygonArea, selfIntersects, subdivide, triangulate, type Vec2 } from './roadGeometry';
-import { planRoundabouts } from './roundaboutPlan';
+import { inArc, planRoundabouts } from './roundaboutPlan';
 import { corridorFromDisk } from './routeFixture';
 
 const ROUTES = ['lago-di-como', 'feldberg-taunus', 'alpe-dhuez', 'taunus-mammolshain'];
@@ -134,12 +134,24 @@ describe.each(ROUTES)('%s', (id) => {
         const bend = Math.abs(ring.ys[(q + 1) % n]! - 2 * ring.ys[q]! + ring.ys[(q - 1 + n) % n]!) / (step * step);
         worst = Math.max(worst, bend);
       }
-      for (const arm of ring.arms) {
-        expect(arm.gap.span).toBeLessThan(Math.PI / 2);
-        if (arm.dashes) expect(arm.dashes.span).toBeLessThanOrEqual(arm.gap.span + 1e-6);
+      for (const a of ring.approaches) {
+        expect(a.gap.span).toBeLessThan(Math.PI);
+        // dashes lie within the approach's opening of the outer edge line
+        for (const d of a.dashes) {
+          expect(d.span).toBeLessThanOrEqual(a.gap.span + 1e-6);
+          expect(inArc(a.gap, d.a + d.span / 2)).toBe(true);
+        }
+        // areas and islands are simple polygons
+        expect(selfIntersects(a.poly)).toBe(false);
+        expect(polygonArea(a.poly)).toBeGreaterThan(0);
+        for (const isle of a.islands) expect(selfIntersects(isle)).toBe(false);
+      }
+      // the approaches do not overlap along the ring
+      for (const a of ring.approaches) {
+        for (const b of ring.approaches) if (a !== b) expect(inArc(a.gap, b.gap.a + b.gap.span / 2)).toBe(false);
       }
       // where the ride runs on the ring, it enters and leaves it
-      if (ring.ridden.some((v) => v)) expect(ring.arms.length).toBeGreaterThanOrEqual(2);
+      if (ring.ridden.some((v) => v)) expect(ring.approaches.length).toBeGreaterThanOrEqual(1);
     }
     expect(worst).toBeLessThan(0.05);
   });

@@ -489,6 +489,11 @@ export class RouteCorridor {
       const rb = this.roundabouts[k - 1]!;
       const f = this.frames[r]!;
       const inner = (rb.x - f.x) * f.rx + (rb.z - f.z) * f.rz > 0 ? 1 : 0;
+      // the row's (undrawn) asphalt spans the ring carriageway exactly: its verges start at the ring's edges
+      const d = Math.hypot(f.x - rb.x, f.z - rb.z);
+      this.hw[inner]![r] = Math.max(0.5, d - (rb.r - rb.hw) - SHOULDER);
+      this.hw[1 - inner]![r] = Math.max(0.5, rb.r + rb.hw - d - SHOULDER + 0.1);
+      this.edge[1 - inner]![r] = EDGE.verge;
       this.edge[inner]![r] = EDGE.verge;
       this.ext[inner]![r] = this.hw[inner]![r]! + SHOULDER + 1;
       this.mid[inner]![r] = f.y - 0.3;
