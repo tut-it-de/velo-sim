@@ -80,7 +80,8 @@ def make_lap(g):
 def make_segments(ctx: wg.Context):
     elev = ctx.elev
     # the junction is passed three times: up from town, back from the lake, back from Civenna (see lap order)
-    jpass = ctx.passes(*ctx.info['junction'])
+    # radius covers the shift from curve rounding near the junction node (worldgen.JUNCTION_SHIFT)
+    jpass = ctx.passes(*ctx.info['junction'], radius=12.0)
     assert len(jpass) == 3, jpass
     jx, jz = wg.local(*ctx.info['junction'])
     dj = np.hypot(ctx.path[:, 0] - jx, ctx.path[:, 1] - jz)

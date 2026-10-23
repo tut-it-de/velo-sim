@@ -480,6 +480,10 @@ def resample_closed(pts: np.ndarray, step: float, with_index: bool = False):
 MIN_RADIUS = {'trunk': 9.0, 'primary': 8.0, 'secondary': 7.0, 'tertiary': 7.0, 'unclassified': 6.0,
               'residential': 5.5, 'living_street': 5.0, 'service': 5.0}
 MAX_SHIFT = 3.0  # how far the smoothed lap may leave the mapped centre line, metres
+# Where the lap turns at a junction node (OSM puts the node in the middle of the junction area, so a
+# lap turning off there has a spike), the line may cut the corner across the junction area.
+JUNCTION_SHIFT = 9.0
+JUNCTION_REACH = 14.0
 
 
 def circumradius(p: np.ndarray, h: int) -> np.ndarray:
@@ -493,10 +497,10 @@ def circumradius(p: np.ndarray, h: int) -> np.ndarray:
         return np.where(cross > 1e-9, ab * bc * ca / np.maximum(2 * cross, 1e-12), np.inf)
 
 
-def limit_radius(p: np.ndarray, rmin: np.ndarray, max_shift: float = MAX_SHIFT, iterations: int = 400) -> np.ndarray:
+def limit_radius(p: np.ndarray, rmin: np.ndarray, max_shift=MAX_SHIFT, iterations: int = 400) -> np.ndarray:
     """Rounds bends of a closed 1 m polyline that are tighter than `rmin` (per point): local Laplacian
-    smoothing around the tight spots, never more than `max_shift` away from the input line. Direction
-    independent, so both passes of an out-and-back road get the same line."""
+    smoothing around the tight spots, never more than `max_shift` (per point or one value) away from the
+    input line. Direction independent, so both passes of an out-and-back road get the same line."""
     orig = p.copy()
     p = p.copy()
     for _ in range(iterations):
@@ -703,7 +707,11 @@ def build(cfg: Config, make_lap: Callable, make_segments: Callable[[Context], li
     rmin = np.array([MIN_RADIUS.get(cls[k], 5.0) if k < len(cls) else 5.0 for k in seg_of])
     before = float(np.sum(np.hypot(*np.diff(np.vstack([dense, dense[:1]]), axis=0).T)))
     tight = int(np.sum(circumradius(dense, 4) < rmin))
-    dense = limit_radius(dense, rmin)
+    # junction nodes of the lap (three or more roads meet)
+    junction_xy = np.array([pts[k] for k, nd in enumerate(nodes) if k < len(pts) and g.degree(nd) >= 3] or [[1e9, 1e9]])
+    near_junction = np.min(np.hypot(dense[:, None, 0] - junction_xy[None, :, 0], dense[:, None, 1] - junction_xy[None, :, 1]), axis=1) < JUNCTION_REACH
+    shift = np.where(near_junction, JUNCTION_SHIFT, MAX_SHIFT)
+    dense = limit_radius(dense, rmin, shift)
     after = float(np.sum(np.hypot(*np.diff(np.vstack([dense, dense[:1]]), axis=0).T)))
     log(f'bends: {tight} m tighter than the class radius, lap {after - before:+.1f} m by rounding them, '
         f'{int(np.sum(circumradius(dense, 4) < rmin))} m left (hairpins with close legs)')
