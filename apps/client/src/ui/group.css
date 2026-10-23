@@ -1,0 +1,230 @@
+/* ---------- Group rides (GroupRide.tsx) ---------- */
+.modal.group-dialog h2 {
+  margin: 0 0 12px;
+}
+.group-tabs {
+  margin-bottom: 14px;
+}
+.group-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.group-form > label:not(.toggle) {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.group-form input:not([type='checkbox']),
+.group-form select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 11px;
+}
+.group-start {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.group-start input {
+  flex: 1 1 180px;
+  width: auto !important;
+}
+.group-actions {
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+.group-found {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+}
+.group-invite {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 12px;
+  padding: 10px 12px;
+  margin: 10px 0;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+}
+.group-invite > span.muted {
+  grid-column: 1;
+}
+.group-invite button {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  pointer-events: auto;
+}
+.group-code {
+  font-family: var(--mono, monospace);
+  font-size: 26px;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+}
+.group-link {
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* lobby over the 3D view */
+.group-lobby-backdrop {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(3, 5, 9, 0.45);
+  z-index: 20;
+  padding: 16px;
+}
+.group-lobby {
+  width: min(440px, 100%);
+  max-height: calc(100% - 32px);
+  overflow: auto;
+}
+.group-lobby button {
+  pointer-events: auto;
+}
+.group-lobby-head h2 {
+  margin: 2px 0 6px;
+}
+.group-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-dim);
+  color: var(--accent-2);
+}
+.group-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 10px 0;
+}
+.group-countdown strong {
+  font-size: 56px;
+  line-height: 1;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.group-waiting {
+  margin: 12px 0;
+  text-align: center;
+}
+.group-members {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 10px 0;
+}
+.group-member {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+}
+.group-member.me {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* in-ride panel, under the draft bar */
+.group-hud {
+  position: absolute;
+  top: 92px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.group-hud-panel {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.group-hud-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 2px;
+}
+.group-hud-name {
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.group-hud-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.group-hud-rider {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.group-hud-row .gap.ahead {
+  color: var(--ok);
+}
+.group-hud-row .gap.behind {
+  color: var(--warn);
+}
+.group-hud-end {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 6px;
+}
+.group-hud-end button {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.group-hint {
+  font-weight: 700;
+  font-size: 14px;
+  padding: 6px 14px;
+  border-radius: var(--radius-md);
+  background: rgba(61, 220, 132, 0.9);
+  color: #04210f;
+}
+.group-hint.brake,
+.group-hint.hold {
+  background: rgba(245, 184, 74, 0.92);
+  color: #1d1300;
+}
+
+@media (max-width: 900px) {
+  .group-hud {
+    top: auto;
+    bottom: 150px;
+    left: 12px;
+    transform: none;
+    width: 220px;
+    align-items: flex-start;
+  }
+}

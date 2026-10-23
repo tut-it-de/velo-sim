@@ -24,6 +24,8 @@ export interface StoredActivity {
   segments?: Array<{ id: string; name: string; type: string; timeS: number; isPb: boolean; improved?: boolean }>;
   /** Workout ridden in this ride; `test`: a finished FTP test. */
   workout?: { name: string; completed: boolean; test?: boolean };
+  /** Group ride this ride was part of (invite code and name). */
+  group?: { id: string; name: string };
   strava?: {
     status: 'pending' | 'uploading' | 'processing' | 'ready' | 'duplicate' | 'error' | 'skipped';
     uploadId?: number;
@@ -85,7 +87,7 @@ export function activityTitle(routeName: string, startTime: number, prefix = 'Fr
   return `${prefix}: ${routeName} – ${d.toLocaleDateString('de-DE')} ${d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-export async function saveActivity(result: RideResult, simulated: boolean, titlePrefix?: string): Promise<StoredActivity> {
+export async function saveActivity(result: RideResult, simulated: boolean, titlePrefix?: string, group?: { id: string; name: string }): Promise<StoredActivity> {
   const { laps, ...rest } = result.summary;
   const activity: StoredActivity = {
     id: `${result.summary.startTime}-${result.routeId}`,
@@ -108,6 +110,7 @@ export async function saveActivity(result: RideResult, simulated: boolean, title
       improved: r.saved && r.previousBestS !== undefined && r.timeS < r.previousBestS,
     })),
     workout: result.workout && { name: result.workout.name, completed: result.workout.completed, test: !!result.workout.test?.ftp },
+    group,
   };
   try {
     await tx('readwrite', (s) => s.put(activity));

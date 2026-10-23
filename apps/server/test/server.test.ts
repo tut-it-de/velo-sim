@@ -4,6 +4,7 @@ import type { ServerMessage } from '@velo/protocol';
 import { hashPassword, signToken, verifyPassword, verifyToken } from '../src/auth';
 import { isAdmin } from '../src/http';
 import { wrapGap } from '../src/rooms';
+import { groupCenter, groupCode } from '../src/groups';
 import { startServer, type VeloServer } from '../src/server';
 import { MemoryStorage } from '../src/storage/memory';
 import { PostgresStorage } from '../src/storage/postgres';
@@ -99,6 +100,18 @@ function storageSuite(name: string, make: () => Promise<Storage>) {
       const last = (await storage.listActivities(u.id, 0, 10)).at(-1)!;
       expect(last).toMatchObject({ id: '1-r', deleted: true });
       expect(await storage.getActivityFit(u.id, '1-r')).toBeUndefined();
+    });
+
+    it('stores group rides by invite code', async () => {
+      const u = await storage.createUser(`gruppe+${Date.now()}@example.com`, 'Gina', 'hash');
+      const id = `T${Date.now().toString(36).slice(-5).toUpperCase()}`;
+      const group = { id, name: 'Sonntagsrunde', routeId: 'kuestenrunde', hostUserId: u.id, hostName: 'Gina', startAt: null, together: true, status: 'lobby' as const, createdAt: 1_700_000_000_000 };
+      expect(await storage.createGroupRide(group)).toBe(true);
+      expect(await storage.createGroupRide({ ...group, name: 'Doppelt' })).toBe(false);
+      expect(await storage.getGroupRide(id)).toEqual(group);
+      await storage.updateGroupRide(id, { status: 'riding', startAt: 1_700_000_100_000, startedAt: 1_700_000_100_000 });
+      expect(await storage.getGroupRide(id)).toEqual({ ...group, status: 'riding', startAt: 1_700_000_100_000, startedAt: 1_700_000_100_000 });
+      expect(await storage.getGroupRide('NIXDA')).toBeUndefined();
     });
   });
 }
@@ -277,4 +290,115 @@ describe('server', () => {
     d.send({ type: 'hello', v: 1, name: 'X', routeId: 'mond', loadout, weightKg: 70 });
     expect((await d.waitFor('error')).message).toMatch(/Unbekannte Strecke/);
   });
+});
+
+describe('group rides', () => {
+  let server: VeloServer;
+  beforeAll(async () => {
+    server = await startServer({ storage: new MemoryStorage(), secret: SECRET, port: 0, host: '127.0.0.1', groupCountdownMs: 400 });
+  });
+  afterAll(async () => {
+    await server.close();
+  });
+
+  it('makes codes without look-alike characters and takes the median of active riders', () => {
+    for (let i = 0; i < 50; i++) expect(groupCode()).toMatch(/^[A-HJ-KM-NP-Z2-9]{6}$/);
+    const now = 10_000;
+    expect(groupCenter([], now)).toBeUndefined();
+    const r = (d: number, v: number, updatedAt = now - 100) => ({ d, v, updatedAt });
+    expect(groupCenter([r(100, 10), r(60, 8)], now)).toEqual({ d: 80, v: 9, n: 2 });
+    // the paused rider (no update for 5 s) does not hold the group back
+    expect(groupCenter([r(100, 10), r(60, 8), r(500, 12), r(0, 0, now - 5000)], now)).toEqual({ d: 100, v: 10, n: 3 });
+  });
+
+  it('creates a group, fills the lobby, starts everyone together and sends the group position', async () => {
+    const regA = await api(server, '/api/auth/register', { email: 'host@g.de', name: 'Hanna', password: 'supergeheim' });
+    const regB = await api(server, '/api/auth/register', { email: 'gast@g.de', name: 'Gerd', password: 'supergeheim' });
+    const regC = await api(server, '/api/auth/register', { email: 'spaet@g.de', name: 'Carla', password: 'supergeheim' });
+    expect((await api(server, '/api/groups', { routeId: 'kuestenrunde' })).status).toBe(401);
+    expect((await api(server, '/api/groups', { routeId: 'mond' }, regA.json.token)).status).toBe(400);
+    const created = await api(server, '/api/groups', { name: 'Feierabendrunde', routeId: 'kuestenrunde', startAt: null, together: true }, regA.json.token);
+    expect(created.status).toBe(201);
+    const code = created.json.group.id as string;
+    expect(created.json.group).toMatchObject({ name: 'Feierabendrunde', routeId: 'kuestenrunde', status: 'lobby', together: true, hostName: 'Hanna', startAt: null });
+    const looked = await api(server, `/api/groups/${code.toLowerCase()}`, undefined, regB.json.token);
+    expect(looked.json.group).toMatchObject({ id: code, members: [] });
+    expect((await api(server, '/api/groups/ZZZZZZ', undefined, regB.json.token)).status).toBe(404);
+
+    // Without login there is no group ride.
+    const anon = new TestClient(server.url);
+    await anon.ready();
+    anon.send({ type: 'hello', v: 1, name: 'Anon', routeId: 'kuestenrunde', loadout, weightKg: 70, groupId: code });
+    expect((await anon.waitFor('error')).message).toMatch(/angemeldet/);
+
+    const a = new TestClient(server.url);
+    const b = new TestClient(server.url);
+    const stranger = new TestClient(server.url);
+    await Promise.all([a.ready(), b.ready(), stranger.ready()]);
+    stranger.send({ type: 'hello', v: 1, name: 'Fremd', routeId: 'kuestenrunde', loadout, weightKg: 70 });
+    await stranger.waitFor('welcome');
+    a.send({ type: 'hello', v: 1, token: regA.json.token, name: 'x', routeId: 'kuestenrunde', loadout, weightKg: 60, groupId: code });
+    const wa = await a.waitFor('welcome');
+    expect(wa.riders).toEqual([]); // own room: no strangers
+    expect((await a.waitFor('group')).group.members.map((m) => [m.name, m.host])).toEqual([['Hanna', true]]);
+    b.send({ type: 'hello', v: 1, token: regB.json.token, name: 'x', routeId: 'bergrunde', loadout, weightKg: 80, groupId: code });
+    const wb = await b.waitFor('welcome');
+    expect(wb.routeId).toBe('kuestenrunde');
+    expect(wb.riders.map((r) => r.name)).toEqual(['Hanna']);
+    await a.waitFor('group', (m) => m.group.members.length === 2);
+    expect((await api(server, `/api/groups/${code}`, undefined, regB.json.token)).json.group.members).toHaveLength(2);
+
+    // Nobody moves in the lobby, and only the host starts.
+    a.send({ type: 'state', d: 500, v: 10, p: 200, c: 90, lat: 1.4 });
+    b.send({ type: 'groupStart' });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(b.messages.some((m) => m.type === 'group' && m.group.startAt !== null)).toBe(false);
+    a.send({ type: 'groupStart' });
+    const countdown = await b.waitFor('group', (m) => m.group.startAt !== null);
+    expect(countdown.group.status).toBe('lobby');
+    await a.waitFor('group', (m) => m.group.status === 'riding');
+    await b.waitFor('group', (m) => m.group.status === 'riding');
+
+    a.send({ type: 'state', d: 12, v: 9, p: 300, c: 90, lat: 1.4 });
+    b.send({ type: 'state', d: 8, v: 8, p: 150, c: 85, lat: 1.4 });
+    const pos = await b.waitFor('groupPos', (m) => m.n === 2);
+    expect(pos.d).toBe(10);
+    expect(pos.v).toBe(8.5);
+    const snap = await b.waitFor('snapshot', (m) => m.r.some((t) => t[0] === wa.id && t[1] === 12));
+    expect(snap.r.map((t) => t[0])).toEqual([wa.id]);
+
+    // A late rider starts where the group is.
+    const c = new TestClient(server.url);
+    await c.ready();
+    c.send({ type: 'hello', v: 1, token: regC.json.token, name: 'x', routeId: 'kuestenrunde', loadout, weightKg: 70, groupId: code });
+    const late = await c.waitFor('group');
+    expect(late.group.status).toBe('riding');
+    expect(late.group.startD).toBe(10);
+    c.send({ type: 'state', d: 12, v: 8, p: 200, c: 85, lat: 1.4 });
+    await a.waitFor('groupPos', (m) => m.n === 3);
+
+    // Ride for 3 s at real power, then the host ends it for everyone.
+    for (let i = 1; i <= 12; i++) {
+      a.send({ type: 'state', d: 12 + i * 2.5, v: 10, p: 400, c: 90, lat: 1.4 });
+      b.send({ type: 'state', d: 8 + i * 2.5, v: 10, p: 400, c: 90, lat: 1.4 });
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    b.send({ type: 'groupEnd' }); // not the host: ignored
+    a.send({ type: 'groupEnd' });
+    const ended = await b.waitFor('group', (m) => m.group.status === 'ended');
+    expect(c.messages.some((m) => m.type === 'group' && m.group.status === 'ended')).toBe(true);
+    expect(ended.group.members).toHaveLength(3);
+    b.send({ type: 'bye' });
+    const summary = (await b.waitFor('rideSummary')).summary;
+    expect(summary.flagged).toBe(false);
+    expect(summary.kilojoules).toBeGreaterThan(1);
+    expect(summary.coins).toBe(Math.floor(summary.kilojoules)); // only kJ, the group help pays nothing
+
+    // An ended ride cannot be joined again.
+    const d = new TestClient(server.url);
+    await d.ready();
+    d.send({ type: 'hello', v: 1, token: regC.json.token, name: 'x', routeId: 'kuestenrunde', loadout, weightKg: 70, groupId: code });
+    expect((await d.waitFor('error')).message).toMatch(/vorbei/);
+    for (const x of [a, c, stranger, anon, d]) x.ws.close();
+  }, 20_000);
 });

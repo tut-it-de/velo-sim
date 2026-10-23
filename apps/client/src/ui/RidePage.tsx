@@ -25,10 +25,14 @@ import { RideSummary } from './RideSummary';
 import { WorkoutSelect } from './WorkoutSelect';
 import { formatDuration } from './components';
 import { Icon } from './icons';
+import type { GroupRideDTO } from '@velo/protocol';
+import { inviteCodeFromUrl } from '../net/groups';
+import { GroupAssist } from '../ride/groupAssist';
+import { GroupDialog, GroupHud, GroupLink, GroupLobby } from './GroupRide';
 
 type Phase =
   | { kind: 'select' }
-  | { kind: 'ride'; routeId: string; bots: boolean; workout?: Workout }
+  | { kind: 'ride'; routeId: string; bots: boolean; workout?: Workout; group?: GroupRideDTO }
   | { kind: 'summary'; result: RideResult; activity: StoredActivity; ftpAdvice?: FtpAdvice };
 
 /** Dev shortcut: `?ride=<route id>&km=<distance>` starts an offline ride at once (screenshots, tests). */
@@ -49,8 +53,10 @@ export function RidePage({ view }: { view: 'ride' | 'workouts' }) {
         routeId={phase.routeId}
         bots={phase.bots}
         workout={phase.workout}
+        group={phase.group}
         onFinish={async (result) => {
-          const activity = await saveActivity(result, result.simulated, result.workout ? `Workout „${result.workout.name}“` : undefined);
+          const title = result.workout ? `Workout „${result.workout.name}“` : phase.group ? `Gruppenfahrt „${phase.group.name}“` : undefined;
+          const activity = await saveActivity(result, result.simulated, title, phase.group && { id: phase.group.id, name: phase.group.name });
           if (isLoggedIn()) {
             // Online + logged in: the server books from its own telemetry.
             await refreshAccount().catch(() => undefined);
@@ -69,7 +75,10 @@ export function RidePage({ view }: { view: 'ride' | 'workouts' }) {
   }
   return (
     <>
-      <RouteSelect view={view} onStart={(routeId, workout) => setPhase({ kind: 'ride', routeId, bots: true, workout })} />
+      <RouteSelect
+        view={view}
+        onStart={(routeId, workout, group) => setPhase(group ? { kind: 'ride', routeId: group.routeId, bots: false, group } : { kind: 'ride', routeId, bots: true, workout })}
+      />
       {phase.kind === 'summary' && <RideSummary result={phase.result} activity={phase.activity} ftpAdvice={phase.ftpAdvice} onClose={() => setPhase({ kind: 'select' })} />}
     </>
   );
@@ -275,7 +284,7 @@ function StartDevicesDialog({ onReady, onClose }: { onReady: () => void; onClose
   );
 }
 
-function RouteSelect({ view, onStart }: { view: 'ride' | 'workouts'; onStart: (routeId: string, workout?: Workout) => void }) {
+function RouteSelect({ view, onStart }: { view: 'ride' | 'workouts'; onStart: (routeId: string, workout?: Workout, group?: GroupRideDTO) => void }) {
   const settings = useStore(settingsStore);
   const garage = useStore(garageStore);
   const slots = useStore(deviceManager.slots);
@@ -283,7 +292,18 @@ function RouteSelect({ view, onStart }: { view: 'ride' | 'workouts'; onStart: (r
   const [filter, setFilter] = useState<RouteFilter>('all');
   const [workout, setWorkout] = useState<Workout | undefined>();
   const [online, setOnline] = useState<Record<string, number> | null>(null);
-  const [pending, setPending] = useState<{ routeId: string; workout?: Workout } | null>(null);
+  const [pending, setPending] = useState<{ routeId: string; workout?: Workout; group?: GroupRideDTO } | null>(null);
+  // Group ride dialog; opened at once by an invite link (?group=CODE).
+  const [groupDialog, setGroupDialog] = useState<{ code?: string } | null>(() => {
+    const code = inviteCodeFromUrl();
+    return code ? { code } : null;
+  });
+  useEffect(() => {
+    if (!inviteCodeFromUrl()) return;
+    const url = new URL(location.href);
+    url.searchParams.delete('group');
+    history.replaceState(null, '', url);
+  }, []);
   const [ftpFor, setFtpFor] = useState<Workout | null>(null);
   const hasServer = !!serverBase();
 
@@ -318,6 +338,11 @@ function RouteSelect({ view, onStart }: { view: 'ride' | 'workouts'; onStart: (r
     if (w && w.powerUnit !== 'watts' && settingsStore.get().ftp <= 0) return setFtpFor(w);
     if (slots.trainer.state === 'connected' && slots.hrm.state === 'connected') onStart(routeId, w);
     else setPending({ routeId, workout: w });
+  };
+  const startGroup = (group: GroupRideDTO) => {
+    setGroupDialog(null);
+    if (slots.trainer.state === 'connected' && slots.hrm.state === 'connected') onStart(group.routeId, undefined, group);
+    else setPending({ routeId: group.routeId, group });
   };
 
   return (
@@ -367,6 +392,12 @@ function RouteSelect({ view, onStart }: { view: 'ride' | 'workouts'; onStart: (r
       <DeviceBar>
         {view === 'ride' ? (
           <>
+            {hasServer && (
+              <button className="ghost cta" onClick={() => setGroupDialog({})}>
+                <Icon name="ride" size={16} />
+                Gruppenfahrt
+              </button>
+            )}
             <button className="ghost cta" disabled={!sel} onClick={() => pageStore.set('workouts')}>
               <Icon name="workouts" size={16} />
               Workout auswählen
@@ -403,10 +434,11 @@ function RouteSelect({ view, onStart }: { view: 'ride' | 'workouts'; onStart: (r
           onClose={() => setPending(null)}
           onReady={() => {
             setPending(null);
-            onStart(pending.routeId, pending.workout);
+            onStart(pending.routeId, pending.workout, pending.group);
           }}
         />
       )}
+      {groupDialog && <GroupDialog routeId={routeId} initialCode={groupDialog.code} onJoin={startGroup} onClose={() => setGroupDialog(null)} />}
     </div>
   );
 }
@@ -415,12 +447,14 @@ function RideView({
   routeId,
   bots,
   workout,
+  group,
   onFinish,
   onCancel,
 }: {
   routeId: string;
   bots: boolean;
   workout?: Workout;
+  group?: GroupRideDTO;
   onFinish: (r: RideResult) => void;
   onCancel: () => void;
 }) {
@@ -431,6 +465,9 @@ function RideView({
   const [progress, setProgress] = useState('Strecke wird geladen …');
   const [error, setError] = useState<string | null>(null);
   const [camera, setCamera] = useState<CameraMode>('chase');
+  const [link, setLink] = useState<GroupLink | null>(null);
+  const [rolling, setRolling] = useState(!group);
+  const finishing = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -439,7 +476,7 @@ function RideView({
     const garage = garageStore.get();
     const st = settingsStore.get();
     const net =
-      serverBase() && !DEV_RIDE
+      serverBase() && (!DEV_RIDE || group)
         ? new MultiplayerClient(serverBase(), {
             name: accountStore.get().user?.name ?? st.riderName,
             country: st.country,
@@ -448,9 +485,14 @@ function RideView({
             weightKg: st.weightKg,
             token: accountStore.get().token,
             simulated: st.useSimulator,
+            groupId: group?.id,
           })
         : undefined;
-    const s = new RideSession(routeId, st, { bots, workout, loadout: garage.loadout, routesWithLap: garage.routesWithLap, net });
+    // Group ride: own room, and with "stay together" the speed help.
+    const assist = group?.together ? new GroupAssist(true) : undefined;
+    const groupLink = group && net ? new GroupLink(group, net, assist) : undefined;
+    const s = new RideSession(routeId, st, { bots, workout, loadout: garage.loadout, routesWithLap: garage.routesWithLap, net, assist });
+    setLink(groupLink ?? null);
     GameWorld.create(canvasRef.current!, routeId, lookFromLoadout(garage.loadout), setProgress, st.graphicsQuality)
       .then((created) => {
         if (cancelled) {
@@ -479,8 +521,23 @@ function RideView({
           net.connect();
         }
         created.setFrameProvider((dt) => s.frame(dt));
-        s.start();
-        if (DEV_RIDE && DEV.get('km')) s.teleport(Number(DEV.get('km')) * 1000);
+        if (groupLink) {
+          // Everyone starts together when the room says so (late riders where the group is).
+          let started = false;
+          const go = () => {
+            const g = groupLink.group.get();
+            if (!groupLink.live || started || g.status !== 'riding') return;
+            started = true;
+            if (g.startD) s.startFrom(g.startD);
+            s.start();
+            setRolling(true);
+          };
+          groupLink.group.subscribe(go);
+          go();
+        } else {
+          s.start();
+        }
+        if (DEV_RIDE && DEV.get('km') && !group) s.teleport(Number(DEV.get('km')) * 1000);
         setWorld(created);
         setSession(s);
         (window as unknown as { __velo?: unknown }).__velo = { world: created, session: s, devices: deviceManager };
@@ -495,7 +552,25 @@ function RideView({
       w?.dispose();
       void keepAwake(false);
     };
-  }, [routeId, bots, workout]);
+  }, [routeId, bots, workout, group]);
+
+  const finish = async () => {
+    if (!session || finishing.current) return;
+    finishing.current = true;
+    const result = session.finish();
+    if (session.net) result.server = await session.net.finish();
+    onFinish(result);
+  };
+  // The host ended the group ride: everyone's ride ends (and is booked) now.
+  useEffect(() => {
+    if (!link || !session) return;
+    return link.group.subscribe(() => {
+      if (link.group.get().status !== 'ended') return;
+      if (rolling) void finish();
+      else onCancel();
+    });
+  }, [link, session, rolling]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -572,13 +647,11 @@ function RideView({
             world.setCameraMode(mode);
             setCamera(mode);
           }}
-          onFinish={async () => {
-            const result = session.finish();
-            if (session.net) result.server = await session.net.finish();
-            onFinish(result);
-          }}
+          onFinish={finish}
         />
       )}
+      {session && world && link && rolling && <GroupHud link={link} session={session} onEndAll={() => link.net.sendGroup('groupEnd')} />}
+      {session && world && link && !rolling && <GroupLobby link={link} onLeave={onCancel} />}
     </div>
   );
 }

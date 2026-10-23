@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { CATALOG, STARTER_LOADOUT, type Loadout } from '@velo/equipment';
-import { type ActivityRecord, DuplicateEmailError, type Garage, type RideRecord, type Storage, type StravaConnectionRecord, type User } from './types';
+import { type ActivityRecord, DuplicateEmailError, type Garage, type GroupRidePatch, type GroupRideRecord, type RideRecord, type Storage, type StravaConnectionRecord, type User } from './types';
 
 const STARTER_ITEMS = CATALOG.filter((i) => i.price === 0).map((i) => i.id);
 
@@ -82,6 +82,18 @@ CREATE TABLE IF NOT EXISTS strava_connections (
   scope text NOT NULL,
   auto_upload boolean NOT NULL DEFAULT true,
   updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS group_rides (
+  id text PRIMARY KEY,
+  name text NOT NULL,
+  route_id text NOT NULL,
+  host_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  host_name text NOT NULL,
+  start_at timestamptz,
+  together boolean NOT NULL DEFAULT true,
+  status text NOT NULL DEFAULT 'lobby',
+  started_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
 );
 `;
 
@@ -346,5 +358,47 @@ export class PostgresStorage implements Storage {
 
   async close(): Promise<void> {
     await this.pool.end();
+  }
+
+  // --- group rides ---
+  async createGroupRide(g: GroupRideRecord): Promise<boolean> {
+    const res = await this.pool.query(
+      `INSERT INTO group_rides (id, name, route_id, host_id, host_name, start_at, together, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, to_timestamp($6 / 1000.0), $7, $8, to_timestamp($9 / 1000.0)) ON CONFLICT (id) DO NOTHING`,
+      [g.id, g.name, g.routeId, g.hostUserId, g.hostName, g.startAt, g.together, g.status, g.createdAt],
+    );
+    return res.rowCount === 1;
+  }
+
+  async getGroupRide(id: string): Promise<GroupRideRecord | undefined> {
+    const res = await this.pool.query('SELECT * FROM group_rides WHERE id = $1', [id]);
+    const r = res.rows[0];
+    if (!r) return undefined;
+    const ms = (v: unknown) => (v ? new Date(v as string).getTime() : undefined);
+    return {
+      id: r.id,
+      name: r.name,
+      routeId: r.route_id,
+      hostUserId: r.host_id,
+      hostName: r.host_name,
+      startAt: ms(r.start_at) ?? null,
+      together: r.together,
+      status: r.status,
+      startedAt: ms(r.started_at),
+      createdAt: ms(r.created_at)!,
+    };
+  }
+
+  async updateGroupRide(id: string, patch: GroupRidePatch): Promise<void> {
+    const sets: string[] = [];
+    const values: unknown[] = [id];
+    const add = (sql: string, v: unknown) => {
+      values.push(v);
+      sets.push(sql.replace('?', `$${values.length}`));
+    };
+    if (patch.status !== undefined) add('status = ?', patch.status);
+    if (patch.startAt !== undefined) add('start_at = to_timestamp(? / 1000.0)', patch.startAt);
+    if (patch.startedAt !== undefined) add('started_at = to_timestamp(? / 1000.0)', patch.startedAt);
+    if (sets.length) await this.pool.query(`UPDATE group_rides SET ${sets.join(', ')} WHERE id = $1`, values);
   }
 }

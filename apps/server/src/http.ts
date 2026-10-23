@@ -3,6 +3,8 @@ import { getItem, itemName } from '@velo/equipment';
 import { evaluateAchievements, toAchievementRide, type AchievementSource } from '@velo/metrics';
 import { ROUTES } from '@velo/routes';
 import { hashPassword, signToken, verifyPassword, verifyToken } from './auth';
+import type { GroupRegistry } from './groups';
+import { handleGroups } from './groups';
 import type { Game } from './rooms';
 import { StravaError } from './strava';
 import { callbackPage, type StravaService } from './stravaService';
@@ -14,9 +16,10 @@ export interface ApiContext {
   game: Game;
   /** Undefined when STRAVA_CLIENT_ID/SECRET are not configured. */
   strava?: StravaService;
+  groups?: GroupRegistry;
 }
 
-class HttpError extends Error {
+export class HttpError extends Error {
   constructor(
     readonly status: number,
     message: string,
@@ -32,7 +35,7 @@ const ACTIVITY_PAGE = 200;
 const ACTIVITY_ID_RE = /^[\w.-]{1,100}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-async function readJson(req: IncomingMessage, maxBytes = MAX_BODY): Promise<Record<string, unknown>> {
+export async function readJson(req: IncomingMessage, maxBytes = MAX_BODY): Promise<Record<string, unknown>> {
   let size = 0;
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
@@ -49,7 +52,7 @@ async function readJson(req: IncomingMessage, maxBytes = MAX_BODY): Promise<Reco
   }
 }
 
-function send(res: ServerResponse, status: number, body: unknown): void {
+export function send(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'access-control-allow-origin': '*',
@@ -79,7 +82,7 @@ function limit(ip: string, max = 20, windowMs = 60_000): void {
   if (++a.count > max) throw new HttpError(429, 'Zu viele Versuche – bitte kurz warten');
 }
 
-async function requireUser(ctx: ApiContext, req: IncomingMessage): Promise<User> {
+export async function requireUser(ctx: ApiContext, req: IncomingMessage): Promise<User> {
   const header = req.headers.authorization ?? '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
   const payload = token ? verifyToken(token, ctx.secret) : null;
@@ -98,6 +101,7 @@ export async function handleHttp(ctx: ApiContext, req: IncomingMessage, res: Ser
     const ip = forwarded || req.socket.remoteAddress || 'unknown';
 
     if (url.pathname.startsWith('/api/strava/')) return await handleStrava(ctx, req, res, url);
+    if (url.pathname === '/api/groups' || url.pathname.startsWith('/api/groups/')) return await handleGroups(ctx, req, res, url);
 
     switch (route) {
       case 'GET /api/health':

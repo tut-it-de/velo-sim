@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { PROTOCOL_VERSION, parseClientMessage, type ServerMessage } from '@velo/protocol';
 import { verifyToken } from './auth';
+import { GroupRegistry, GroupRoom } from './groups';
 import { handleHttp } from './http';
 import { Game, type Connection, type Rider, type Room } from './rooms';
 import { createStaticHandler } from './static';
@@ -21,6 +22,8 @@ export interface VeloServerOptions {
   /** Built web client (apps/client/dist) to serve on / — omitted: API and WebSocket only. */
   clientDir?: string;
   /** Also serve everything over HTTPS on this port, e.g. so phones in the LAN may use Web Bluetooth (secure context only). */
+  /** Group ride countdown after the host's start (tests use a short one). */
+  groupCountdownMs?: number;
   tls?: { port: number; cert: string | Buffer; key: string | Buffer; /** DER root, offered for download on /velo-ca.crt. */ ca?: Buffer };
 }
 
@@ -54,7 +57,8 @@ const isApiPath = (url = '/') => /^\/(api|ws)(\/|\?|$)/.test(url);
 export async function startServer(opts: VeloServerOptions): Promise<VeloServer> {
   const game = new Game({ storage: opts.storage });
   const strava = opts.strava ? new StravaService(opts.strava, opts.storage, opts.secret) : undefined;
-  const ctx = { storage: opts.storage, secret: opts.secret, game, strava };
+  const groups = new GroupRegistry(game, opts.storage, opts.groupCountdownMs);
+  const ctx = { storage: opts.storage, secret: opts.secret, game, strava, groups };
   const client = opts.clientDir ? createStaticHandler(opts.clientDir) : undefined;
   const onRequest: RequestListener = (req, res) => {
     if (opts.tls?.ca && req.url === '/velo-ca.crt') {
@@ -86,6 +90,7 @@ export async function startServer(opts: VeloServerOptions): Promise<VeloServer> 
     const conn = wsConnection(ws);
     let joined: { rider: Rider; room: Room } | null = null;
     let leaving = false;
+    let joining = false;
     // Clients must say hello within 10 s.
     const helloTimer = setTimeout(() => !joined && ws.close(4000, 'hello timeout'), 10_000);
 
@@ -93,7 +98,7 @@ export async function startServer(opts: VeloServerOptions): Promise<VeloServer> 
       if (!joined || leaving) return;
       leaving = true;
       try {
-        const summary = await game.leave(joined.room, joined.rider);
+        const summary = joined.room instanceof GroupRoom ? await groups.leave(joined.room, joined.rider) : await game.leave(joined.room, joined.rider);
         if (summary) conn.send({ type: 'rideSummary', summary });
       } catch (err) {
         console.error('[game] ride booking failed', err);
@@ -104,21 +109,24 @@ export async function startServer(opts: VeloServerOptions): Promise<VeloServer> 
       const msg = parseClientMessage(data.toString());
       if (!msg) return;
       if (!joined) {
-        if (msg.type !== 'hello') return;
+        if (msg.type !== 'hello' || joining) return;
         if (msg.v !== PROTOCOL_VERSION) {
           conn.send({ type: 'error', message: 'Bitte die App aktualisieren (Protokollversion).' });
           ws.close(4001, 'protocol');
           return;
         }
         let user: { id: string; name: string } | undefined;
+        joining = true;
         if (msg.token) {
           const payload = verifyToken(msg.token, opts.secret);
           const u = payload ? await opts.storage.getUser(payload.sub) : undefined;
           if (u) user = { id: u.id, name: u.name };
         }
         clearTimeout(helloTimer);
-        joined = game.join(conn, msg, user);
-        if (!joined) ws.close(4002, 'route');
+        joined = msg.groupId ? await groups.join(conn, msg, user) : game.join(conn, msg, user);
+        joining = false;
+        if (!joined) ws.close(msg.groupId ? 4003 : 4002, msg.groupId ? 'group' : 'route');
+        else if (ws.readyState !== ws.OPEN) void leave(); // closed while joining
         return;
       }
       if (msg.type === 'bye') {
@@ -136,6 +144,7 @@ export async function startServer(opts: VeloServerOptions): Promise<VeloServer> 
   });
 
   game.start();
+  groups.start();
   await new Promise<void>((resolve) => http.listen(opts.port ?? 8080, opts.host ?? '0.0.0.0', resolve));
   const addr = http.address() as AddressInfo;
   const hostName = (a: AddressInfo) => (a.address === '0.0.0.0' || a.address === '::' ? 'localhost' : a.address);
@@ -155,6 +164,7 @@ export async function startServer(opts: VeloServerOptions): Promise<VeloServer> 
     httpsUrl,
     async close() {
       game.stop();
+      groups.stop();
       for (const client of wss.clients) client.terminate();
       await new Promise<void>((resolve) => wss.close(() => resolve()));
       await new Promise<void>((resolve) => http.close(() => resolve()));

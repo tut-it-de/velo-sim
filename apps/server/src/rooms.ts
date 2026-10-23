@@ -19,6 +19,10 @@ interface Telemetry {
   lastSpeed: number;
   window: Array<[number, number]>;
   flags: Set<string>;
+  /** Where the ride started (late riders join a group ride mid-way): only the distance beyond counts. */
+  baseDistance?: number;
+  /** Group ride with speed help: Taler only from kJ, no lap bonuses (laps are helped along). */
+  noLapBonus?: boolean;
 }
 
 export interface Rider {
@@ -226,27 +230,7 @@ export class Game {
       conn.send({ type: 'error', message: `Unbekannte Strecke: ${hello.routeId}` });
       return null;
     }
-    const now = Date.now();
-    const rider: Rider = {
-      id: randomUUID().slice(0, 12),
-      userId: user?.id,
-      name: user?.name ?? hello.name,
-      country: hello.country,
-      loadout: hello.loadout,
-      weightKg: hello.weightKg,
-      bot: !!hello.bot,
-      simulated: !!hello.simulated,
-      conn,
-      d: 0,
-      v: 0,
-      lat: 1.4,
-      p: 0,
-      c: 0,
-      updatedAt: 0,
-      lastChatAt: 0,
-      lastEmoteAt: 0,
-      telemetry: { startedAt: now, lastAt: now, kilojoules: 0, maxDistance: 0, lastDistance: 0, lastSpeed: 0, window: [], flags: new Set() },
-    };
+    const rider = newRider(conn, hello, user);
     const room = this.roomFor(hello.routeId);
     room.join(rider, !!user);
     return { rider, room };
@@ -264,7 +248,9 @@ export class Game {
     const t = rider.telemetry;
     const userId = rider.userId!;
     if (t.kilojoules < 1) return undefined;
-    const laps = Math.floor(t.maxDistance / lapLength);
+    const distance = Math.max(0, t.maxDistance - (t.baseDistance ?? 0));
+    const laps = Math.floor(distance / lapLength);
+    const lapBonus = !t.noLapBonus;
     if (rider.simulated || rider.bot) {
       return { kilojoules: t.kilojoules, coins: 0, laps, flagged: false, reason: 'Simulator – keine Taler' };
     }
@@ -276,21 +262,21 @@ export class Game {
           kilojoules: t.kilojoules,
           workoutKilojoules: 0,
           workoutCompleted: false,
-          lapsCompleted: laps,
-          firstLapOnRoute: !garage.routesWithLap.includes(routeId),
+          lapsCompleted: lapBonus ? laps : 0,
+          firstLapOnRoute: lapBonus && !garage.routesWithLap.includes(routeId),
           personalBests: 0,
         });
     const coins = total(lines);
     let balance = garage.balance;
     if (coins > 0) balance = await storage.addLedger(userId, coins, `Fahrt: ${getTrack(routeId).name} (${Math.round(t.kilojoules)} kJ)`);
-    if (laps > 0) await storage.markRouteLap(userId, routeId);
+    if (laps > 0 && lapBonus) await storage.markRouteLap(userId, routeId);
     await storage.saveRide({
       id: randomUUID(),
       userId,
       routeId,
       startedAt: t.startedAt,
       durationS: (t.lastAt - t.startedAt) / 1000,
-      distanceM: t.maxDistance,
+      distanceM: distance,
       kilojoules: t.kilojoules,
       coins,
       flagged,
@@ -298,4 +284,29 @@ export class Game {
     });
     return { kilojoules: t.kilojoules, coins, laps, flagged, reason: flagged ? [...t.flags].join(', ') : undefined, balance };
   }
+}
+
+/** A fresh rider for a hello (also used by group rooms). */
+export function newRider(conn: Connection, hello: Extract<ClientMessage, { type: 'hello' }>, user?: { id: string; name: string }): Rider {
+  const now = Date.now();
+  return {
+    id: randomUUID().slice(0, 12),
+    userId: user?.id,
+    name: user?.name ?? hello.name,
+    country: hello.country,
+    loadout: hello.loadout,
+    weightKg: hello.weightKg,
+    bot: !!hello.bot,
+    simulated: !!hello.simulated,
+    conn,
+    d: 0,
+    v: 0,
+    lat: 1.4,
+    p: 0,
+    c: 0,
+    updatedAt: 0,
+    lastChatAt: 0,
+    lastEmoteAt: 0,
+    telemetry: { startedAt: now, lastAt: now, kilojoules: 0, maxDistance: 0, lastDistance: 0, lastSpeed: 0, window: [], flags: new Set() },
+  };
 }
