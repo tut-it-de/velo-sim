@@ -786,7 +786,10 @@ def build(cfg: Config, make_lap: Callable, make_segments: Callable[[Context], li
         if nb[0] < tx < nb[2] and nb[1] < tz < nb[3]:
             tree_xy += [int(round(float(tx) * 10)), int(round(float(tz) * 10))]
     lap_edges = {frozenset((u, v)) for u, v in zip(nodes, nodes[1:] + nodes[:1])}
-    roads = build_side_roads(segments, lap_edges, set(nodes), path, nb)
+    roundabouts = find_roundabouts(g, nb)
+    ring_edges = set().union(*(o['edges'] for o in roundabouts)) if roundabouts else set()
+    # the client draws the rings itself: side roads stop at them
+    roads = build_side_roads(segments, lap_edges, set(nodes), path, nb, ring_edges)
     places = []
     for p in place_points(land):
         px, pz = local(*p['pt'][:2])
@@ -800,7 +803,7 @@ def build(cfg: Config, make_lap: Callable, make_segments: Callable[[Context], li
                 rings.append([[round(c[0]), round(c[1])] for c in poly.exterior.coords])
     water_level = cfg.water_level if lake_local is not None else math.floor(float(horizon.height.min())) - 50.0
     landmarks = build_landmarks(overture('base', 'infrastructure', cfg.fetch_near, 'infrastructure', tags=True), nb) if cfg.landmarks else []
-    write_world(near, far, horizon, buildings, tree_xy, roads, places, rings, water_level, landmarks)
+    write_world(near, far, horizon, buildings, tree_xy, roads, places, rings, water_level, landmarks, roundabouts)
     import add_parking  # surface car parks from OpenStreetMap (Overpass), patched into world.json
     add_parking.patch(C.id)
 
@@ -910,8 +913,90 @@ def build_landmarks(rows, nb) -> list[dict]:
 # Flags of a side road end (world.json version 2): it meets the lap / other side roads there.
 JOIN_LAP_START, JOIN_LAP_END, JOIN_ROAD_START, JOIN_ROAD_END = 1, 2, 4, 8
 
+# Roundabouts: closed rings of the road graph this long (centre line, m), round enough (4πA/P²) and
+# with every node this close to the mean radius (relative). Overture carries no junction=roundabout tag.
+ROUNDABOUT_LEN = (35.0, 190.0)
+ROUNDABOUT_ROUNDNESS = 0.86
+ROUNDABOUT_RADIUS_SPREAD = 0.2
 
-def build_side_roads(segments, lap_edges, lap_nodes, path, nb):
+
+def find_roundabouts(g, nb) -> list[dict]:
+    """Small, nearly circular cycles of the road graph inside the near bounds.
+
+    Returns [{'x', 'z', 'r', 'hw', 'edges'}]: centre and mean radius of the ring's centre line in local
+    metres, half width of the ring carriageway and its graph edges (frozensets of node pairs).
+    """
+    junction = {n for n in g.nodes if g.degree(n) != 2}
+    # chains of degree-2 nodes between junction nodes
+    chains = []
+    seen = set()
+    for a in junction:
+        for b in g[a]:
+            if frozenset((a, b)) in seen:
+                continue
+            path = [a, b]
+            seen.add(frozenset((a, b)))
+            while path[-1] not in junction:
+                nxt = next(m for m in g[path[-1]] if m != path[-2])
+                seen.add(frozenset((path[-1], nxt)))
+                path.append(nxt)
+            chains.append(path)
+    h = nx.MultiGraph()
+    for k, p in enumerate(chains):
+        h.add_edge(p[0], p[-1], key=k, w=path_len(g, p))
+    found: dict[frozenset, dict] = {}
+    lo, hi = ROUNDABOUT_LEN
+    for k, p in enumerate(chains):
+        length = h.edges[p[0], p[-1], k]['w']
+        if length >= hi or p[0] == p[-1]:
+            continue
+        x0, z0 = local(*p[0])
+        if not (nb[0] < x0 < nb[2] and nb[1] < z0 < nb[3]):
+            continue
+
+        def weight(u, v, d, k=k):
+            ws = [e['w'] for kk, e in d.items() if kk != k]
+            return min(ws) if ws else None
+        try:
+            _, back = nx.single_source_dijkstra(h, p[-1], p[0], cutoff=hi - length, weight=weight)
+        except nx.NetworkXNoPath:
+            continue
+        keys = [k]
+        for u, v in zip(back, back[1:]):
+            d = h.get_edge_data(u, v)
+            keys.append(min((kk for kk in d if kk != k), key=lambda kk: d[kk]['w']))
+        if len(set(keys)) != len(keys):
+            continue
+        total = sum(h.edges[chains[kk][0], chains[kk][-1], kk]['w'] for kk in keys)
+        if not lo <= total <= hi or frozenset(keys) in found:
+            continue
+        # ring nodes in order
+        ring = list(p)
+        for kk, (u, v) in zip(keys[1:], zip(back, back[1:])):
+            c = chains[kk]
+            ring += (c if c[0] == u else c[::-1])[1:]
+        xs, zs = local(np.array([n[0] for n in ring]), np.array([n[1] for n in ring]))
+        poly = Polygon(np.column_stack([xs, zs]))
+        if not poly.is_valid or poly.area <= 0:
+            continue
+        if 4 * math.pi * poly.area / poly.length ** 2 < ROUNDABOUT_ROUNDNESS:
+            continue
+        cx, cz = poly.centroid.x, poly.centroid.y
+        rad = np.hypot(xs - cx, zs - cz)
+        r = float(rad.mean())
+        if r < 5 or np.max(np.abs(rad - r)) > ROUNDABOUT_RADIUS_SPREAD * r:
+            continue
+        edges = {frozenset((u, v)) for u, v in zip(ring, ring[1:])}
+        classes = [g.edges[tuple(e)]['cls'] for e in edges]
+        width = max(SIDE_ROAD_WIDTH.get(c, 5.0) for c in classes)
+        hw = min(max(4.0, width / 2 + 0.5), 0.5 * r)
+        found[frozenset(keys)] = {'x': cx, 'z': cz, 'r': r, 'hw': hw, 'edges': edges}
+    out = list(found.values())
+    log(f'  {len(out)} roundabouts' + ''.join(f', r {o["r"]:.0f} m at ({o["x"]:.0f}, {o["z"]:.0f})' for o in out[:8]))
+    return out
+
+
+def build_side_roads(segments, lap_edges, lap_nodes, path, nb, ring_edges=frozenset()):
     """Side roads as a network: [width dm, kind (0 paved, 1 track), flags, ring_dm …] per arm.
 
     Every road is split where it meets the lap and at its junctions with other side roads, so each
@@ -933,7 +1018,7 @@ def build_side_roads(segments, lap_edges, lap_nodes, path, nb):
                 kb = (round(b[0], 7), round(b[1], 7))
                 if ka == kb:
                     continue
-                if frozenset((ka, kb)) in lap_edges:
+                if frozenset((ka, kb)) in lap_edges or frozenset((ka, kb)) in ring_edges:
                     if len(run) >= 2:
                         pieces.append((cls, run))
                     run = []
@@ -1045,7 +1130,7 @@ export const {P}_SEGMENTS: RouteSegment[] = {seg};
     log(f'wrote {out_route.relative_to(ROOT)} ({len(body) // 1024} KB)')
 
 
-def write_world(near, far, horizon, buildings, trees, roads, places, lake_rings, water_level, landmarks=()):
+def write_world(near, far, horizon, buildings, trees, roads, places, lake_rings, water_level, landmarks=(), roundabouts=()):
     out_world = ROOT / 'apps/client/public/worlds' / C.id
     out_world.mkdir(parents=True, exist_ok=True)
     blobs = []
@@ -1076,6 +1161,8 @@ def write_world(near, far, horizon, buildings, trees, roads, places, lake_rings,
         'buildings': buildings,
         'trees': trees,
         'roads': roads,
+        # [centre x, centre z, ring radius (centre line), half width] in decimetres
+        'roundabouts': [[round(o['x'] * 10), round(o['z'] * 10), round(o['r'] * 10), round(o['hw'] * 10)] for o in roundabouts],
         'landmarks': list(landmarks),
         'look': {'flora': C.flora, 'architecture': C.architecture},
     }

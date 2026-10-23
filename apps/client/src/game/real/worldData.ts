@@ -54,6 +54,16 @@ export interface SideRoad {
   pts: Float32Array;
 }
 
+/** Roundabout found by the generator (closed ring of the road graph): centre, ring radius, half width, m. */
+export interface Roundabout {
+  x: number;
+  z: number;
+  /** Radius of the ring's centre line. */
+  r: number;
+  /** Half width of the ring carriageway. */
+  hw: number;
+}
+
 export interface Place {
   name: string;
   x: number;
@@ -98,6 +108,7 @@ export interface WorldData {
   /** Single trees (x, z pairs). */
   trees: Float32Array;
   roads: SideRoad[];
+  roundabouts: Roundabout[];
   /** Surface car parks (outlines, x, z pairs, counter-clockwise seen from above). */
   parking: Float32Array[];
   landmarks: Landmark[];
@@ -127,6 +138,8 @@ interface WorldJson {
   buildings: number[][];
   trees: number[];
   roads: number[][];
+  /** [x, z, r, hw] in decimetres; missing in worlds generated before roundabouts existed. */
+  roundabouts?: number[][];
   /** Car parks (tools/geo/add_parking.py); missing in older worlds. */
   parking?: number[][];
   /** Missing in worlds generated before landmarks existed. */
@@ -207,6 +220,7 @@ export function decodeWorld(id: string, parsed: unknown, bin: ArrayBuffer): Worl
     buildings: json.buildings.map((b) => ({ height: b[0]! / 10, kind: b[1] as BuildingKind, ring: decodeRing(b, 2) })),
     trees: Float32Array.from(json.trees, (v) => v / 10),
     roads: decodeRoads(json.roads, json.version ?? 1),
+    roundabouts: (json.roundabouts ?? []).map(([x, z, r, hw]) => ({ x: x! / 10, z: z! / 10, r: r! / 10, hw: hw! / 10 })),
     parking: (json.parking ?? []).map((r) => decodeRing(r, 0)),
     landmarks: json.landmarks ?? [],
     look: { flora: json.look?.flora ?? 'mediterranean', architecture: json.look?.architecture ?? 'italian' },
