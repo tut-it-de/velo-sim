@@ -1,3 +1,5 @@
+import type { FtpAdvice } from '../ftp/advisor';
+import { FtpAdviceCard, WorkoutFeedbackCard } from './FtpUi';
 import { exportFile } from '../devices/files';
 import type { RideResult } from '../ride/rideSession';
 import { fitFileName, type StoredActivity } from '../state/activities';
@@ -10,7 +12,7 @@ import { TestResultCard } from './TestResultCard';
 import { isLoggedIn } from '../net/api';
 import { useStore } from '../state/store';
 
-export function RideSummary({ result, activity, onClose }: { result: RideResult; activity: StoredActivity; onClose: () => void }) {
+export function RideSummary({ result, activity, ftpAdvice, onClose }: { result: RideResult; activity: StoredActivity; ftpAdvice?: FtpAdvice; onClose: () => void }) {
   const s = result.summary;
   const garage = useStore(garageStore);
   const live = useStore(activitiesStore).find((a) => a.id === activity.id) ?? activity;
@@ -87,6 +89,8 @@ export function RideSummary({ result, activity, onClose }: { result: RideResult;
           </div>
         )}
         {result.workout?.test && <TestResultCard test={result.workout.test} summary={s} />}
+        {result.workout && !result.workout.test && !result.simulated && <WorkoutFeedbackCard workout={result.workout} at={s.startTime} />}
+        {ftpAdvice && <FtpAdviceCard advice={ftpAdvice} />}
         {result.segments.length > 0 && (
           <div style={{ marginTop: 12 }}>
             <div className="muted small" style={{ marginBottom: 4 }}>

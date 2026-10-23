@@ -1,4 +1,4 @@
-import { encodeFitActivity, type ActivitySummary } from '@velo/metrics';
+import { encodeFitActivity, powerCurve, type ActivitySummary } from '@velo/metrics';
 import type { RideResult } from '../ride/rideSession';
 import { Store } from './store';
 
@@ -11,6 +11,8 @@ export interface StoredActivity {
   summary: Omit<ActivitySummary, 'laps'> & { lapCount: number };
   simulated: boolean;
   fit: Uint8Array;
+  /** Best power for each of CURVE_DURATIONS – the input for the FTP estimate (missing on older rides). */
+  curve?: number[];
   segments?: Array<{ id: string; name: string; type: string; timeS: number; isPb: boolean }>;
   strava?: {
     status: 'pending' | 'uploading' | 'processing' | 'ready' | 'duplicate' | 'error' | 'skipped';
@@ -72,6 +74,7 @@ export async function saveActivity(result: RideResult, simulated: boolean, title
     summary: { ...rest, lapCount: laps.length },
     simulated,
     fit: encodeFitActivity(result.samples, result.summary),
+    curve: powerCurve(result.samples.map((x) => x.power)),
     segments: result.segments.map((r) => ({ id: r.segment.id, name: r.segment.name, type: r.segment.type, timeS: r.timeS, isPb: r.saved })),
   };
   try {

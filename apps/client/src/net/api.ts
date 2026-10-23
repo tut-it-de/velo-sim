@@ -3,6 +3,8 @@ import { garageStore, type GarageState } from '../state/garage';
 import { settingsStore } from '../state/settings';
 import { Store, loadJson, saveJson } from '../state/store';
 import { fixedServer } from './serverUrl';
+import { applyRemoteFtp, ftpStore, onFtpChange } from '../ftp/ftpStore';
+import type { FtpState } from '../ftp/advisor';
 
 export interface AccountUser {
   id: string;
@@ -119,10 +121,20 @@ accountStore.subscribe(enforceAdminOnly);
 
 export async function refreshAccount(): Promise<void> {
   if (!isLoggedIn()) return;
-  const r = await call<{ user: AccountUser; garage: ServerGarage }>('/api/me');
+  const r = await call<{ user: AccountUser; garage: ServerGarage; fitness?: { ftp: number; state: FtpState } | null }>('/api/me');
   accountStore.set({ ...accountStore.get(), user: r.user });
   applyGarage(r.garage);
+  // FTP: the newer side wins – take the server's or send ours.
+  if (r.fitness) applyRemoteFtp(r.fitness);
+  if (ftpStore.get().updatedAt > (r.fitness?.state.updatedAt ?? 0)) await pushFtp();
 }
+
+/** Sends the FTP and its history to the account (silently retried on the next refresh when offline). */
+export async function pushFtp(): Promise<void> {
+  if (!isLoggedIn()) return;
+  await call('/api/me/fitness', { ftp: settingsStore.get().ftp, state: ftpStore.get() });
+}
+onFtpChange(() => void pushFtp().catch(() => undefined));
 
 export async function serverBuy(itemId: string): Promise<void> {
   const r = await call<{ garage: ServerGarage }>('/api/garage/buy', { itemId });

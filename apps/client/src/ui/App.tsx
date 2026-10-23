@@ -1,4 +1,6 @@
 import { useEffect } from 'react';
+import { ftpStore, skipLevelQuestion } from '../ftp/ftpStore';
+import { FtpSetupDialog } from './FtpUi';
 import { settingsStore } from '../state/settings';
 import { accountStore, isAdminUser, refreshAccount } from '../net/api';
 import { deviceManager } from '../devices/deviceManager';
@@ -46,6 +48,7 @@ export function App() {
   const garage = useStore(garageStore);
   const settings = useStore(settingsStore);
   const activities = useStore(activitiesStore);
+  const ftpState = useStore(ftpStore);
   useSimulatorKeys();
 
   useEffect(() => {
@@ -125,6 +128,8 @@ export function App() {
         {page === 'login' && <LoginPage />}
       </div>
       <BluetoothChooser />
+      {/* First start without an FTP: ask once how fit the rider is (can be skipped). */}
+      {!immersive && settings.ftp <= 0 && !ftpState.levelAsked && <FtpSetupDialog onDone={() => undefined} onClose={skipLevelQuestion} />}
     </div>
   );
 }

@@ -9,7 +9,7 @@ import {
   type RiderState,
 } from '@velo/physics';
 import { SegmentTracker, getTrack, type ActiveSegment, type RouteSegment, type Track } from '@velo/routes';
-import { WorkoutPlayer, evaluateTest, type PlayerState, type TestResult, type Workout } from '@velo/workouts';
+import { WorkoutPlayer, evaluateTest, type PlayerState, type TestResult, type Workout, type WorkoutCategory } from '@velo/workouts';
 import { deviceManager } from '../devices/deviceManager';
 import type { MultiplayerClient } from '../net/multiplayer';
 import type { RideSummaryDTO } from '@velo/protocol';
@@ -18,6 +18,7 @@ import type { RiderFrame } from '../game/world';
 import { botPosition, planBots, type BotPlan } from './bots';
 import { getBest, submitResult } from '../state/records';
 import { settingsStore, type Settings } from '../state/settings';
+import { referenceFtp } from '../ftp/advisor';
 import { Store } from '../state/store';
 
 export type RideState = 'riding' | 'paused' | 'finished';
@@ -88,7 +89,7 @@ export interface RideResult {
   routeName: string;
   summary: ActivitySummary;
   samples: ActivitySample[];
-  workout?: { id: string; name: string; compliance: number; completed: boolean; test?: TestResult };
+  workout?: { id: string; name: string; category?: WorkoutCategory; compliance: number; completed: boolean; test?: TestResult };
   segments: SegmentOutcome[];
   earnings: EarningLine[];
   simulated: boolean;
@@ -201,7 +202,7 @@ export class RideSession {
     this.net = options.net;
     this.recorder = new ActivityRecorder(settings.ftp);
     this.lastElevation = this.track.sample(0).y;
-    if (options.workout) this.player = new WorkoutPlayer(options.workout, settings.ftp);
+    if (options.workout) this.player = new WorkoutPlayer(options.workout, referenceFtp(settings));
     this.segmentTracker = new SegmentTracker(this.track.segments, this.track.length);
     if (options.bots) {
       for (const plan of planBots(this.track, this.setup)) {
@@ -322,6 +323,7 @@ export class RideSession {
       workout: p && {
         id: p.workout.id,
         name: p.workout.name,
+        category: p.workout.category,
         compliance: p.state.compliance,
         completed: p.state.finished,
         test: evaluateTest(p.workout, p.testProgress, summary.best1min),

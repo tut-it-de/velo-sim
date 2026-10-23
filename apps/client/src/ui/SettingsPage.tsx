@@ -1,3 +1,4 @@
+import { FtpCard } from './FtpUi';
 import { useEffect, useState } from 'react';
 import connectWithStrava from '../assets/strava/connect-with-strava.svg';
 import { PoweredByStrava } from './StravaStatusLine';
@@ -60,13 +61,9 @@ export function SettingsPage() {
             <NumberField k="weightKg" min={35} max={160} step={0.5} />
             <label>Größe (cm)</label>
             <NumberField k="heightCm" min={130} max={215} />
-            <label>FTP (W)</label>
-            <div className="row">
-              <NumberField k="ftp" min={50} max={600} />
-              <span className="muted small">{(s.ftp / s.weightKg).toFixed(2)} W/kg – Grundlage für alle Workouts</span>
-            </div>
           </div>
         </div>
+        <FtpCard />
         <AccountCard />
         <StravaCard />
         <div className="card">

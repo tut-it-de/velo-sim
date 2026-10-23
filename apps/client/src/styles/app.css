@@ -3193,3 +3193,106 @@ button.strava-connect:disabled {
 .shift-test-bar span.on {
   background: var(--accent);
 }
+
+/* FTP: first question, advice after rides, settings card */
+.modal.ftp-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(560px, calc(100vw - 32px));
+}
+.modal.ftp-setup h2,
+.modal.ftp-setup p {
+  margin: 0;
+}
+.ftp-levels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.ftp-level {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 12px;
+  text-align: left;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.ftp-level:hover {
+  border-color: var(--accent);
+}
+.ftp-level-w {
+  margin-top: 4px;
+  color: var(--accent);
+  font-weight: 700;
+}
+.ftp-own {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ftp-advice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--accent-dim);
+  background: var(--accent-dim);
+}
+.ftp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ftp-card h2 {
+  margin: 0;
+}
+.ftp-now {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ftp-now .big {
+  font-size: 32px;
+  font-weight: 800;
+}
+.ftp-estimate {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+.ftp-chart {
+  display: block;
+  width: 100%;
+  height: 90px;
+}
+.ftp-chart-wrap {
+  display: flex;
+  gap: 8px;
+}
+.ftp-chart-wrap .ftp-chart {
+  flex: 1;
+  min-width: 0;
+}
+.ftp-chart-labels {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .ftp-levels {
+    grid-template-columns: 1fr;
+  }
+}

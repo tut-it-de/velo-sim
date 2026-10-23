@@ -1,3 +1,4 @@
+import { referenceFtp } from '../ftp/advisor';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { formatCoins } from '@velo/equipment';
 import { powerZone } from '@velo/metrics';
@@ -149,7 +150,7 @@ export function Hud({
 
       {s.workout && (
         <div className="hud-center">
-          <WorkoutHud session={session} snapshot={s} ftp={settings.ftp} />
+          <WorkoutHud session={session} snapshot={s} ftp={referenceFtp(settings)} />
         </div>
       )}
 

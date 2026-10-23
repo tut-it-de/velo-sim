@@ -14,6 +14,7 @@ interface UserData {
   user: User;
   owned: Set<string>;
   loadout: Loadout;
+  fitness?: unknown;
   ledger: LedgerEntry[];
   routesWithLap: Set<string>;
   rides: RideRecord[];
@@ -51,6 +52,14 @@ export class MemoryStorage implements Storage {
 
   async setUserName(userId: string, name: string): Promise<void> {
     this.data(userId).user.name = name;
+  }
+
+  async getFitness(userId: string): Promise<unknown> {
+    return this.data(userId).fitness;
+  }
+
+  async setFitness(userId: string, fitness: unknown): Promise<void> {
+    this.data(userId).fitness = fitness;
   }
 
   async getGarage(userId: string): Promise<Garage> {

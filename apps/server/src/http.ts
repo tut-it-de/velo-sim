@@ -125,7 +125,22 @@ export async function handleHttp(ctx: ApiContext, req: IncomingMessage, res: Ser
 
       case 'GET /api/me': {
         const user = await requireUser(ctx, req);
-        return send(res, 200, { user: publicUser(user), garage: await ctx.storage.getGarage(user.id) });
+        return send(res, 200, { user: publicUser(user), garage: await ctx.storage.getGarage(user.id), fitness: (await ctx.storage.getFitness(user.id)) ?? null });
+      }
+
+      case 'POST /api/me/fitness': {
+        const user = await requireUser(ctx, req);
+        const b = await readJson(req);
+        const ftp = Number(b.ftp);
+        const state = b.state as { updatedAt?: unknown } | undefined;
+        if (!Number.isFinite(ftp) || ftp < 0 || ftp > 2000 || !state || typeof state !== 'object' || typeof state.updatedAt !== 'number') {
+          throw new HttpError(400, 'Ungültige FTP-Daten');
+        }
+        if (JSON.stringify(state).length > 64_000) throw new HttpError(413, 'FTP-Daten zu groß');
+        // The newer side wins – an older device must not overwrite a newer FTP.
+        const current = (await ctx.storage.getFitness(user.id)) as { state?: { updatedAt?: number } } | undefined;
+        if ((current?.state?.updatedAt ?? 0) <= state.updatedAt) await ctx.storage.setFitness(user.id, { ftp: Math.round(ftp), state });
+        return send(res, 200, { fitness: (await ctx.storage.getFitness(user.id)) ?? null });
       }
 
       case 'POST /api/me/name': {

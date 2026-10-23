@@ -59,6 +59,9 @@ export interface Storage {
   findUserByEmail(email: string): Promise<User | undefined>;
   getUser(id: string): Promise<User | undefined>;
   setUserName(userId: string, name: string): Promise<void>;
+  /** FTP and its bookkeeping (source, history, workout feedback) as the client keeps it – opaque JSON. */
+  getFitness(userId: string): Promise<unknown>;
+  setFitness(userId: string, fitness: unknown): Promise<void>;
   getGarage(userId: string): Promise<Garage>;
   /** Adds a ledger entry and returns the new balance. */
   addLedger(userId: string, amount: number, label: string): Promise<number>;

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { ActivitySummary } from '@velo/metrics';
 import { zoneWatts, type TestResult } from '@velo/workouts';
-import { settingsStore, updateSettings } from '../state/settings';
+import { setFtp } from '../ftp/ftpStore';
+import { settingsStore } from '../state/settings';
 import { useStore } from '../state/store';
 import { fmt } from './components';
 
@@ -35,7 +36,7 @@ export function TestResultCard({ test, summary }: { test: TestResult; summary: A
             <div className="test-ftp">
               <span className="big">{ftp}</span> W FTP
               <span className={`test-diff ${diff > 0 ? 'up' : diff < 0 ? 'down' : ''}`}>
-                {diff === 0 ? '±0' : `${diff > 0 ? '+' : ''}${diff} W (${diff > 0 ? '+' : ''}${fmt((diff / oldFtp) * 100, 1)} %)`}
+                {oldFtp <= 0 ? 'erste FTP' : diff === 0 ? '±0' : `${diff > 0 ? '+' : ''}${diff} W (${diff > 0 ? '+' : ''}${fmt((diff / oldFtp) * 100, 1)} %)`}
               </span>
             </div>
           ) : (
@@ -43,7 +44,7 @@ export function TestResultCard({ test, summary }: { test: TestResult; summary: A
           )}
           <div className="muted small">
             {test.basis}
-            {ftp !== undefined && ` · ${fmt(ftp / settings.weightKg, 2)} W/kg · bisher ${oldFtp} W`}
+            {ftp !== undefined && ` · ${fmt(ftp / settings.weightKg, 2)} W/kg${oldFtp > 0 ? ` · bisher ${oldFtp} W` : ''}`}
           </div>
         </div>
         {test.confidence && <span className={`badge test-conf ${test.confidence === 'hoch' ? 'ok' : ''}`}>{CONFIDENCE[test.confidence]}</span>}
@@ -83,7 +84,7 @@ export function TestResultCard({ test, summary }: { test: TestResult; summary: A
 
       {ftp !== undefined && (
         <div className="row" style={{ justifyContent: 'flex-end' }}>
-          <button className="primary" disabled={applied} onClick={() => updateSettings({ ftp })}>
+          <button className="primary" disabled={applied} onClick={() => setFtp(ftp, 'test', `${test.kind === 'ramp' ? 'Rampentest' : '20-Minuten-Test'}: ${test.basis}`)}>
             {applied ? 'Übernommen ✓' : `FTP ${ftp} W übernehmen`}
           </button>
         </div>

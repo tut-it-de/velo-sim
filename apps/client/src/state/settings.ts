@@ -8,7 +8,7 @@ export interface Settings {
   country: string;
   weightKg: number;
   heightCm: number;
-  /** Functional Threshold Power in watts — workouts are defined relative to it. */
+  /** Functional Threshold Power in watts — workouts are defined relative to it. 0 = not known yet (see ftp/ftpStore). */
   ftp: number;
   /** 0…1 — how much of the virtual grade the trainer simulates (Zwift default 50 %). */
   trainerDifficulty: number;
@@ -41,7 +41,7 @@ export const DEFAULT_SETTINGS: Settings = {
   country: 'DE',
   weightKg: 75,
   heightCm: 178,
-  ftp: 200,
+  ftp: 0,
   trainerDifficulty: 0.5,
   useSimulator: false,
   preferCadenceSensor: true,

@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react';
+import { referenceFtp } from '../ftp/advisor';
+import { FtpMissingNotice, FtpSetupDialog } from './FtpUi';
 import { CATEGORY_LABEL, LEVEL_LABEL, parseZwo, serializeZwo, workoutStats, type Workout, type WorkoutCategory, type WorkoutLevel } from '@velo/workouts';
 import { exportFile } from '../devices/files';
 import { settingsStore } from '../state/settings';
@@ -10,6 +12,7 @@ import { WorkoutEditor } from './WorkoutEditor';
 
 export function WorkoutSelect({ selectedId, onSelect }: { selectedId?: string; onSelect: (w: Workout) => void }) {
   useStore(customWorkoutsStore);
+  const [ftpSetup, setFtpSetup] = useState(false);
   const settings = useStore(settingsStore);
   const [filter, setFilter] = useState<WorkoutCategory | 'all'>('all');
   const [level, setLevel] = useState<WorkoutLevel | 'all'>('all');
@@ -41,6 +44,8 @@ export function WorkoutSelect({ selectedId, onSelect }: { selectedId?: string; o
 
   return (
     <div className="card">
+      <FtpMissingNotice onSetup={() => setFtpSetup(true)} />
+      {ftpSetup && <FtpSetupDialog onDone={() => setFtpSetup(false)} onClose={() => setFtpSetup(false)} />}
       <div className="row" style={{ justifyContent: 'space-between', marginBottom: 10 }}>
         <div className="row chips">
           <button className={filter === 'all' ? 'chip active' : 'chip'} onClick={() => setFilter('all')}>
@@ -87,7 +92,7 @@ export function WorkoutSelect({ selectedId, onSelect }: { selectedId?: string; o
       {error && <div className="error-text" style={{ marginBottom: 8 }}>{error}</div>}
       <div className="workout-list">
         {shown.map((w) => {
-          const st = workoutStats(w, settings.ftp);
+          const st = workoutStats(w, referenceFtp(settings));
           const custom = isCustom(w.id);
           return (
             <div key={w.id} className={`workout-card ${selectedId === w.id ? 'selected' : ''}`} onClick={() => onSelect(w)} role="button" aria-pressed={selectedId === w.id}>
@@ -98,7 +103,7 @@ export function WorkoutSelect({ selectedId, onSelect }: { selectedId?: string; o
                   <span className="badge">{CATEGORY_LABEL[w.category ?? 'custom']}</span>
                 </span>
               </div>
-              <WorkoutChart workout={w} height={46} ftp={settings.ftp} />
+              <WorkoutChart workout={w} height={46} ftp={referenceFtp(settings)} />
               <div className="muted small">
                 {w.test
                   ? `${w.test === 'ramp' ? `bis zur Erschöpfung · max. ${formatDuration(st.durationS)}` : formatDuration(st.durationS)} · Ergebnis: neue FTP`
@@ -109,7 +114,7 @@ export function WorkoutSelect({ selectedId, onSelect }: { selectedId?: string; o
                 <button className="link" onClick={() => setEditing(custom ? w : { ...w, id: newWorkoutId(), name: `${w.name} (Kopie)`, category: 'custom' })}>
                   {custom ? 'Bearbeiten' : 'Kopie bearbeiten'}
                 </button>
-                <button className="link" onClick={() => exportFile(`${w.name.replace(/[^\w\- äöüÄÖÜß]/g, '_')}.zwo`, new TextEncoder().encode(serializeZwo(w, settings.ftp)), 'application/xml')}>
+                <button className="link" onClick={() => exportFile(`${w.name.replace(/[^\w\- äöüÄÖÜß]/g, '_')}.zwo`, new TextEncoder().encode(serializeZwo(w, referenceFtp(settings))), 'application/xml')}>
                   Export .zwo
                 </button>
                 {custom && (

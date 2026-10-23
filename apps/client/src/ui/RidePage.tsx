@@ -1,3 +1,7 @@
+import { adviceAfterRide } from '../ftp/ftpStore';
+import type { FtpAdvice } from '../ftp/advisor';
+import { FtpSetupDialog } from './FtpUi';
+import { referenceFtp } from '../ftp/advisor';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { accountStore, fetchOnline, isLoggedIn, refreshAccount, serverBase } from '../net/api';
 import { MultiplayerClient } from '../net/multiplayer';
@@ -24,7 +28,7 @@ import { Icon } from './icons';
 type Phase =
   | { kind: 'select' }
   | { kind: 'ride'; routeId: string; bots: boolean; workout?: Workout }
-  | { kind: 'summary'; result: RideResult; activity: StoredActivity };
+  | { kind: 'summary'; result: RideResult; activity: StoredActivity; ftpAdvice?: FtpAdvice };
 
 /** Dev shortcut: `?ride=<route id>&km=<distance>` starts an offline ride at once (screenshots, tests). */
 const DEV = new URLSearchParams(location.search);
@@ -53,7 +57,9 @@ export function RidePage({ view }: { view: 'ride' | 'workouts' }) {
             creditRide(result.earnings, result.routeId, result.lapsCompleted, activity.title);
           }
           void maybeAutoUpload(activity.id);
-          setPhase({ kind: 'summary', result, activity });
+          // The new ride may change the FTP estimate (taken over at once while the FTP is unknown).
+          const ftpAdvice = result.simulated ? undefined : adviceAfterRide();
+          setPhase({ kind: 'summary', result, activity, ftpAdvice });
         }}
         onCancel={() => setPhase({ kind: 'select' })}
       />
@@ -62,7 +68,7 @@ export function RidePage({ view }: { view: 'ride' | 'workouts' }) {
   return (
     <>
       <RouteSelect view={view} onStart={(routeId, workout) => setPhase({ kind: 'ride', routeId, bots: true, workout })} />
-      {phase.kind === 'summary' && <RideSummary result={phase.result} activity={phase.activity} onClose={() => setPhase({ kind: 'select' })} />}
+      {phase.kind === 'summary' && <RideSummary result={phase.result} activity={phase.activity} ftpAdvice={phase.ftpAdvice} onClose={() => setPhase({ kind: 'select' })} />}
     </>
   );
 }
@@ -276,6 +282,7 @@ function RouteSelect({ view, onStart }: { view: 'ride' | 'workouts'; onStart: (r
   const [workout, setWorkout] = useState<Workout | undefined>();
   const [online, setOnline] = useState<Record<string, number> | null>(null);
   const [pending, setPending] = useState<{ routeId: string; workout?: Workout } | null>(null);
+  const [ftpFor, setFtpFor] = useState<Workout | null>(null);
   const hasServer = !!serverBase();
 
   useEffect(() => {
@@ -290,7 +297,7 @@ function RouteSelect({ view, onStart }: { view: 'ride' | 'workouts'; onStart: (r
     };
   }, [hasServer]);
 
-  const power = Math.round(settings.ftp * 0.75);
+  const power = Math.round(referenceFtp(settings) * 0.75);
   const routes = useMemo<RouteRow[]>(() => {
     const setup = setupFor(settings, garage.loadout);
     return ROUTES.map((r) => {
@@ -305,6 +312,8 @@ function RouteSelect({ view, onStart }: { view: 'ride' | 'workouts'; onStart: (r
   // Without trainer or strap, the device dialog comes first.
   const start = (w?: Workout) => {
     if (!routeId) return;
+    // Workouts in % of FTP need one – ask first (absolute-watt workouts like the Zwift ramp do not).
+    if (w && w.powerUnit !== 'watts' && settingsStore.get().ftp <= 0) return setFtpFor(w);
     if (slots.trainer.state === 'connected' && slots.hrm.state === 'connected') onStart(routeId, w);
     else setPending({ routeId, workout: w });
   };
@@ -376,6 +385,17 @@ function RouteSelect({ view, onStart }: { view: 'ride' | 'workouts'; onStart: (r
           </button>
         )}
       </DeviceBar>
+      {ftpFor && (
+        <FtpSetupDialog
+          reason={`„${ftpFor.name}“ richtet sich nach deiner FTP.`}
+          onClose={() => setFtpFor(null)}
+          onDone={() => {
+            const w = ftpFor;
+            setFtpFor(null);
+            start(w);
+          }}
+        />
+      )}
       {pending && (
         <StartDevicesDialog
           onClose={() => setPending(null)}

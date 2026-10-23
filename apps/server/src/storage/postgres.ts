@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS loadouts (
   jersey text NOT NULL
 );
 ALTER TABLE loadouts ADD COLUMN IF NOT EXISTS helmet text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS fitness jsonb;
 CREATE TABLE IF NOT EXISTS route_laps (
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   route_id text NOT NULL,
@@ -127,6 +128,15 @@ export class PostgresStorage implements Storage {
 
   async setUserName(userId: string, name: string): Promise<void> {
     await this.pool.query('UPDATE users SET name = $2 WHERE id = $1', [userId, name]);
+  }
+
+  async getFitness(userId: string): Promise<unknown> {
+    const res = await this.pool.query('SELECT fitness FROM users WHERE id = $1', [userId]);
+    return res.rows[0]?.fitness ?? undefined;
+  }
+
+  async setFitness(userId: string, fitness: unknown): Promise<void> {
+    await this.pool.query('UPDATE users SET fitness = $2 WHERE id = $1', [userId, JSON.stringify(fitness)]);
   }
 
   async getGarage(userId: string): Promise<Garage> {
