@@ -27,6 +27,9 @@ export const ROAD_MARKINGS: Record<Architecture, { dash: number; period: number 
   alpine: { dash: 3, period: 13 },
 };
 
+/** Markings painted on a road texture: edge lines and centre line, edge lines only, none. */
+export type RoadLines = 'all' | 'edges' | 'none';
+
 /** Length of road one repeat of the road texture covers (two dash periods), m. */
 export const roadTextureRepeat = (style: Architecture) => 2 * ROAD_MARKINGS[style].period;
 
@@ -35,9 +38,9 @@ export const roadTextureRepeat = (style: Architecture) => 2 * ROAD_MARKINGS[styl
  * two dash periods of the country's centre line. Open road: white edge lines and centre dashes.
  * Town: kerbstones, patched asphalt, no centre line.
  */
-export function roadTexture(scene: Scene, town: boolean, style: Architecture = 'italian'): DynamicTexture {
+export function roadTexture(scene: Scene, town: boolean, style: Architecture = 'italian', lines: RoadLines = town ? 'edges' : 'all'): DynamicTexture {
   const { dash: dashM, period } = ROAD_MARKINGS[style];
-  return canvasTexture(scene, town ? 'road-town-tex' : `road-tex-${style}`, 512, 1024, (ctx, w, h) => {
+  return canvasTexture(scene, `${town ? 'road-town-tex' : `road-tex-${style}`}-${lines}`, 512, 1024, (ctx, w, h) => {
     const rng = createRng(town ? 77 : 42);
     const px = (u: number) => Math.round(u * w);
     const a0 = px(0.06);
@@ -86,9 +89,11 @@ export function roadTexture(scene: Scene, town: boolean, style: Architecture = '
     }
     ctx.fillStyle = town ? 'rgba(225,225,220,0.55)' : 'rgba(235,235,230,0.92)';
     const lw = 9;
-    ctx.fillRect(px(0.075), 0, lw, h);
-    ctx.fillRect(px(0.925) - lw, 0, lw, h);
-    if (!town) {
+    if (lines !== 'none') {
+      ctx.fillRect(px(0.075), 0, lw, h);
+      ctx.fillRect(px(0.925) - lw, 0, lw, h);
+    }
+    if (!town && lines === 'all') {
       const dash = (dashM / (2 * period)) * h;
       for (let k = 0; k < 2; k++) ctx.fillRect(w / 2 - lw / 2, k * (h / 2) + h / 8, lw, dash);
     }
@@ -415,6 +420,60 @@ export function roofTexture(scene: Scene, style: Architecture = 'italian'): Dyna
   const draw = style === 'italian' ? coppi : style === 'german' ? pfanne : slate;
   const tex = canvasTexture(scene, `roof-tex-${style}`, 256, 256, (ctx, w, h) => draw(ctx, w, h));
   tex.wrapU = Texture.WRAP_ADDRESSMODE;
+  tex.wrapV = Texture.WRAP_ADDRESSMODE;
+  return tex;
+}
+
+/** Plain asphalt without markings that tiles in both directions (junction areas), 6 m per repeat. */
+export function asphaltTexture(scene: Scene): DynamicTexture {
+  const tex = canvasTexture(scene, 'asphalt-tile-tex', 512, 512, (ctx, w, h) => {
+    const rng = createRng(53);
+    ctx.fillStyle = '#434548';
+    ctx.fillRect(0, 0, w, h);
+    speckle(ctx, rng, 0, w, h, 13000, 70, 30);
+    for (let i = 0; i < 3; i++) {
+      const g = 52 + Math.floor(rng() * 22);
+      ctx.fillStyle = `rgba(${g},${g},${g + 3},0.6)`;
+      ctx.fillRect(rng() * (w - 120), rng() * (h - 120), 30 + rng() * 90, 20 + rng() * 90);
+    }
+  });
+  tex.wrapU = Texture.WRAP_ADDRESSMODE;
+  tex.wrapV = Texture.WRAP_ADDRESSMODE;
+  return tex;
+}
+
+/**
+ * Field and forest track across its width (u 0–1): gravel with two darker wheel ruts and a grassy
+ * crown strip, the edges fray into the verge; repeats every 8 m along the track.
+ */
+export function gravelTexture(scene: Scene): DynamicTexture {
+  const tex = canvasTexture(scene, 'gravel-tex', 256, 512, (ctx, w, h) => {
+    const rng = createRng(61);
+    ctx.fillStyle = '#8a7b64';
+    ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 9000; i++) {
+      const g = 110 + Math.floor((rng() - 0.5) * 70);
+      ctx.fillStyle = `rgb(${g + 14},${g + 4},${g - 12})`;
+      ctx.fillRect(rng() * w, rng() * h, 2, 2);
+    }
+    for (const u of [0.28, 0.72]) {
+      const g = ctx.createLinearGradient((u - 0.1) * w, 0, (u + 0.1) * w, 0);
+      g.addColorStop(0, 'rgba(60,50,38,0)');
+      g.addColorStop(0.5, 'rgba(60,50,38,0.35)');
+      g.addColorStop(1, 'rgba(60,50,38,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect((u - 0.1) * w, 0, 0.2 * w, h);
+    }
+    // grass on the crown and frayed edges
+    for (let i = 0; i < 2600; i++) {
+      const edge = rng() < 0.6;
+      const u = edge ? (rng() < 0.5 ? rng() * 0.1 : 1 - rng() * 0.1) : 0.5 + (rng() - 0.5) * 0.12;
+      const g = 70 + Math.floor(rng() * 50);
+      ctx.fillStyle = `rgba(${g - 20},${g + 20},${g - 40},0.8)`;
+      ctx.fillRect(u * w, rng() * h, 2, 3);
+    }
+  });
+  tex.wrapU = Texture.CLAMP_ADDRESSMODE;
   tex.wrapV = Texture.WRAP_ADDRESSMODE;
   return tex;
 }
