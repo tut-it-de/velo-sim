@@ -30,11 +30,12 @@ export function WattLockControl({ session, snapshot: s }: { session: RideSession
     return (
       <button
         className="watt-lock-button"
+        aria-label="Watt-Lock"
         onClick={() => session.toggleWattLock()}
         disabled={!s.canWattLock}
         title={s.canWattLock ? 'Watt-Lock: der Trainer hält deine aktuellen Watt (Taste L)' : 'Watt-Lock braucht einen Trainer mit ERG-Modus'}
       >
-        🔒 Watt-Lock
+        🔒<span className="watt-lock-label"> Watt-Lock</span>
       </button>
     );
   }

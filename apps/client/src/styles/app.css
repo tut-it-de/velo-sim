@@ -2054,6 +2054,16 @@ button.cta {
   .hud-metrics {
     grid-auto-columns: minmax(0, 1fr);
   }
+  .watt-lock-label {
+    display: none;
+  }
+  .watt-lock .watt-lock-value {
+    min-width: 70px;
+    font-size: 17px;
+  }
+  .watt-lock button {
+    padding: 6px 10px;
+  }
   /* phones in portrait: at most 3 tiles per row (6 data fields) */
   .hud-metrics .hud-metric:nth-child(n + 4) {
     display: none;

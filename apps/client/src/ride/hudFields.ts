@@ -195,7 +195,7 @@ export function fieldValue(id: HudFieldId, s: RideSnapshot, ctx: FieldContext): 
     case 'kj':
       return { value: num(s.kilojoules), unit: 'kJ', sub: `≈ ${Math.round(s.kilojoules)} kcal` };
     case 'tss':
-      return { value: ctx.ftp > 0 ? num(liveTss(s, ctx.ftp)) : DASH, sub: ctx.ftp > 0 ? `FTP ${Math.round(ctx.ftp)} W` : 'FTP fehlt' };
+      return { value: ctx.ftp > 0 ? num(liveTss(s, ctx.ftp), liveTss(s, ctx.ftp) < 10 ? 1 : 0) : DASH, sub: ctx.ftp > 0 ? `FTP ${Math.round(ctx.ftp)} W` : 'FTP fehlt' };
     case 'if':
       return { value: ctx.ftp > 0 && s.movingS > 0 ? liveIntensity(s, ctx.ftp).toFixed(2) : DASH, sub: ctx.ftp > 0 ? `NP ${Math.round(s.normalizedPower)} W` : 'FTP fehlt' };
     case 'lapPower':
