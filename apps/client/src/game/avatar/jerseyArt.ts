@@ -159,6 +159,49 @@ function emblem(ctx: Ctx, x: number, y: number, size: number, color: string, asp
   ctx.restore();
 }
 
+// ---------------------------------------------------------------------------- sponsor logo
+
+/**
+ * Outside of the upper arm, the side a rider is seen from (u 0.25/0.75 face the elbow and the crook):
+ * u 0.5 on the right arm, u 0 on the left one, where the strip runs the other way round.
+ */
+const SLEEVE_OUT = [
+  { u: 0.5, mirror: false },
+  { u: 0, mirror: true },
+];
+const TUT_IT_ASPECT = 800 / 234;
+const tutIt = typeof Image !== 'undefined' ? new Image() : undefined;
+/** Resolves once the logo images are loaded; textures painted before that are painted again then. */
+export const jerseyArtReady: Promise<void> = tutIt
+  ? new Promise((resolve) => {
+      tutIt.onload = tutIt.onerror = () => resolve();
+      tutIt.src = new URL('./tut-it-logo.png', import.meta.url).href;
+    })
+  : Promise.resolve();
+export const jerseyArtLoaded = (): boolean => !tutIt || tutIt.complete;
+
+/** The Tut IT logo (white on transparent, tinted to `color`) centred on the sleeve at (u, s), `w` px wide. */
+function sponsorLogo(ctx: Ctx, u: number, s: number, w: number, color: string, mirror = false): void {
+  const h = w / TUT_IT_ASPECT;
+  const draw = () => {
+    ctx.save();
+    ctx.translate(X(u), TORSO_H + s * SLEEVE_H);
+    ctx.scale(mirror ? -1 : 1, SLEEVE_ASPECT);
+    if (tutIt?.complete && tutIt.naturalWidth) {
+      // tint: the logo is white, so a light colour only needs the image itself
+      ctx.drawImage(tutIt, -w / 2, -h / 2, w, h);
+    } else {
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `700 ${h * 0.75}px ${FONT}`;
+      ctx.fillText('Tut IT', 0, 0);
+    }
+    ctx.restore();
+  };
+  wrapped(ctx, draw);
+}
+
 // ---------------------------------------------------------------------------- patterns
 
 interface Palette {
@@ -1040,32 +1083,8 @@ function n69n(ctx: Ctx, p: Palette): void {
   // --- sleeves: black with a grey cuff, Tut IT on the outside
   sleeveBand(ctx, 0, 1, p.base);
   sleeveBand(ctx, 0.88, 1, shade(p.base, 2.4));
-  for (const u of [0.25, 0.75]) {
-    ctx.save();
-    ctx.translate(X(u), TORSO_H + 0.52 * SLEEVE_H);
-    ctx.scale(1, SLEEVE_ASPECT * 1.9);
-    // the mark: two offset triangles like a folded flag
-    ctx.fillStyle = white;
-    ctx.beginPath();
-    ctx.moveTo(-74, -14);
-    ctx.lineTo(-56, -18);
-    ctx.lineTo(-56, -2);
-    ctx.closePath();
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(-70, 18);
-    ctx.lineTo(-70, -4);
-    ctx.lineTo(-54, 0);
-    ctx.lineTo(-62, 12);
-    ctx.closePath();
-    ctx.fill();
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.font = `800 40px ${FONT}`;
-    sp.letterSpacing = '0px';
-    ctx.fillText('Tut IT', -46, 0);
-    ctx.restore();
-  }
+  // the logo on the outside of each upper arm, readable from the side
+  for (const o of SLEEVE_OUT) sponsorLogo(ctx, o.u, 0.5, 300, white, o.mirror);
 }
 
 const PATTERNS: Record<JerseyDesign['pattern'], (ctx: Ctx, p: Palette) => void> = {

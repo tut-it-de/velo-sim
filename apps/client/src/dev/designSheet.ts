@@ -5,7 +5,7 @@
  */
 import { JERSEYS, WHEELS, type JerseyItem, type WheelsItem } from '@velo/equipment';
 import { BASE_SPEC } from '../game/avatar/geometry';
-import { JERSEY_TEX, SLEEVE_H, TORSO_H, paintJersey } from '../game/avatar/jerseyArt';
+import { JERSEY_TEX, SLEEVE_H, TORSO_H, jerseyArtReady, paintJersey } from '../game/avatar/jerseyArt';
 import { RIM_H, RIM_W, paintRim, rimGeometry } from '../game/avatar/wheelArt';
 
 const q = new URLSearchParams(location.search);
@@ -310,6 +310,6 @@ function wheelCard(w: WheelsItem): void {
 const sheet = el('div', 'sheet');
 document.body.append(el('h1', undefined, 'Design-Referenz: Trikots und Laufräder'), sheet);
 await document.fonts.ready;
-if (only !== 'wheels') JERSEYS.forEach(jerseyCard);
+if (only !== 'wheels') await jerseyArtReady.then(() => JERSEYS.forEach(jerseyCard));
 if (only !== 'jerseys') WHEELS.forEach(wheelCard);
 document.body.dataset.ready = '1';

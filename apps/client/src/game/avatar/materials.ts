@@ -1,6 +1,6 @@
 import { Color3, DynamicTexture, StandardMaterial, type Scene } from '@babylonjs/core';
 import type { JerseyDesign } from '@velo/equipment';
-import { JERSEY_TEX, paintJersey } from './jerseyArt';
+import { JERSEY_TEX, jerseyArtLoaded, jerseyArtReady, paintJersey } from './jerseyArt';
 import { FabricPlugin } from './fabricPlugin';
 import { DecalPlugin } from './decalPlugin';
 import { FRAME_TEX_H, FRAME_TEX_W, decalFontsReady, paintFrameDecals, type DecalSlot } from './frameArt';
@@ -54,6 +54,12 @@ export function jerseyMaterial(scene: Scene, design: JerseyDesign): StandardMate
     const tex = new DynamicTexture(`jersey-tex-${byKey.size}`, { width: JERSEY_TEX, height: JERSEY_TEX }, scene, true);
     paintJersey(tex.getContext() as unknown as CanvasRenderingContext2D, design);
     tex.update();
+    // logos still loading: paint once more when they are there
+    if (!jerseyArtLoaded())
+      void jerseyArtReady.then(() => {
+        paintJersey(tex.getContext() as unknown as CanvasRenderingContext2D, design);
+        tex.update();
+      });
     tex.anisotropicFilteringLevel = 8;
     m = make(scene, `jersey-${byKey.size}`, 0.12, 20);
     new FabricPlugin(m, tex);
