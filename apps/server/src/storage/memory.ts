@@ -3,6 +3,8 @@ import { CATALOG, STARTER_LOADOUT, type Loadout } from '@velo/equipment';
 import {
   DuplicateEmailError,
   type Garage,
+  type GroupRidePatch,
+  type GroupRideRecord,
   type LedgerEntry,
   type RideRecord,
   type Storage,
@@ -26,6 +28,7 @@ const STARTER_ITEMS = CATALOG.filter((i) => i.price === 0).map((i) => i.id);
 export class MemoryStorage implements Storage {
   private users = new Map<string, UserData>();
   private strava = new Map<string, StravaConnectionRecord>();
+  private groups = new Map<string, GroupRideRecord>();
 
   private data(userId: string): UserData {
     const d = this.users.get(userId);
@@ -119,4 +122,21 @@ export class MemoryStorage implements Storage {
   }
 
   async close(): Promise<void> {}
+
+  // --- group rides ---
+  async createGroupRide(group: GroupRideRecord): Promise<boolean> {
+    if (this.groups.has(group.id)) return false;
+    this.groups.set(group.id, { ...group });
+    return true;
+  }
+
+  async getGroupRide(id: string): Promise<GroupRideRecord | undefined> {
+    const g = this.groups.get(id);
+    return g && { ...g };
+  }
+
+  async updateGroupRide(id: string, patch: GroupRidePatch): Promise<void> {
+    const g = this.groups.get(id);
+    if (g) this.groups.set(id, { ...g, ...patch });
+  }
 }

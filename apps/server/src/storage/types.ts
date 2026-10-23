@@ -1,4 +1,5 @@
 import type { Loadout } from '@velo/equipment';
+import type { GroupRideDTO, GroupStatus } from '@velo/protocol';
 
 export interface User {
   id: string;
@@ -75,4 +76,13 @@ export interface Storage {
   saveStrava(record: StravaConnectionRecord): Promise<void>;
   deleteStrava(userId: string): Promise<void>;
   close(): Promise<void>;
+  // --- group rides ---
+  /** Stores a new group ride; false when the code is already taken. */
+  createGroupRide(group: GroupRideRecord): Promise<boolean>;
+  getGroupRide(id: string): Promise<GroupRideRecord | undefined>;
+  updateGroupRide(id: string, patch: GroupRidePatch): Promise<void>;
 }
+
+/** A group ride (invite code = id); the riders themselves only live in the game room. */
+export type GroupRideRecord = GroupRideDTO;
+export type GroupRidePatch = Partial<{ status: GroupStatus; startAt: number | null; startedAt: number }>;

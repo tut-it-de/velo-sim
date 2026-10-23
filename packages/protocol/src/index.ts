@@ -32,12 +32,15 @@ export type Emote = (typeof EMOTES)[number];
 export type RiderTuple = [string, number, number, number, number, number];
 
 export type ClientMessage =
-  | { type: 'hello'; v: number; token?: string; name: string; country?: string; routeId: string; loadout: LoadoutDTO; weightKg: number; bot?: boolean; simulated?: boolean }
+  | { type: 'hello'; v: number; token?: string; name: string; country?: string; routeId: string; loadout: LoadoutDTO; weightKg: number; bot?: boolean; simulated?: boolean; groupId?: string }
   | { type: 'state'; d: number; v: number; p: number; c: number; lat: number; hr?: number }
   | { type: 'chat'; text: string }
   | { type: 'rideOn'; to: string }
   | { type: 'emote'; e: Emote }
-  | { type: 'bye' };
+  | { type: 'bye' }
+  /** Group ride host: start the countdown now / end the ride for everyone. */
+  | { type: 'groupStart' }
+  | { type: 'groupEnd' };
 
 export interface RideSummaryDTO {
   kilojoules: number;
@@ -57,7 +60,39 @@ export type ServerMessage =
   | { type: 'rideOn'; from: string; name: string; to: string }
   | { type: 'emote'; from: string; e: Emote }
   | { type: 'rideSummary'; summary: RideSummaryDTO }
+  | { type: 'group'; group: GroupStateDTO }
+  | { type: 'groupPos'; t: number; d: number; v: number; n: number }
   | { type: 'error'; message: string };
+
+/** Status of a group ride: waiting in the lobby, riding, or over. */
+export type GroupStatus = 'lobby' | 'riding' | 'ended';
+
+/** A group ride as the HTTP API returns it. */
+export interface GroupRideDTO {
+  /** Invite code, e.g. "K7QX2M". */
+  id: string;
+  name: string;
+  routeId: string;
+  hostUserId: string;
+  hostName: string;
+  /** Planned start (ms); null = the host starts by hand. */
+  startAt: number | null;
+  /** Speed help so everyone stays together (no race). */
+  together: boolean;
+  status: GroupStatus;
+  startedAt?: number;
+  createdAt: number;
+}
+
+/** Live group state in the room (lobby list, countdown, start/end). */
+export interface GroupStateDTO extends GroupRideDTO {
+  members: Array<{ id: string; name: string; country?: string; host: boolean }>;
+  /** Distance of the group when a late rider joins a running ride – that rider starts there. */
+  startD?: number;
+}
+
+/** Invite codes: 6 characters without look-alikes (0/O, 1/I/L). */
+export const GROUP_CODE_RE = /^[A-HJ-KM-NP-Z2-9]{6}$/;
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isStr = (v: unknown, max = 200): v is string => typeof v === 'string' && v.length <= max;
@@ -99,6 +134,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
         weightKg: Math.min(200, Math.max(30, o.weightKg)),
         bot: o.bot === true,
         simulated: o.simulated === true,
+        groupId: isStr(o.groupId, 12) && o.groupId.trim() ? o.groupId.trim().toUpperCase() : undefined,
       };
     case 'state':
       if (!isNum(o.d) || !isNum(o.v) || !isNum(o.p) || !isNum(o.c) || !isNum(o.lat)) return null;
@@ -121,6 +157,9 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return (EMOTES as readonly unknown[]).includes(o.e) ? { type: 'emote', e: o.e as Emote } : null;
     case 'bye':
       return { type: 'bye' };
+    case 'groupStart':
+    case 'groupEnd':
+      return { type: o.type };
     default:
       return null;
   }
