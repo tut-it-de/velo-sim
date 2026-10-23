@@ -46,7 +46,8 @@ export function ShiftingPage() {
             <h1>Virtuelle Schaltung</h1>
             <span className="muted">
               24 Gänge wie bei Zwift: Der Trainer macht den Widerstand schwerer oder leichter. In ERG-Workouts hält der Trainer die Watt, dort
-              wirkt das Schalten nicht.
+              wirkt das Schalten nicht. Mit Watt-Lock (Taste <kbd>L</kbd> in der freien Fahrt) ändert jeder Schaltvorgang die gehaltenen Watt um
+              5 W statt des Gangs.
             </span>
           </div>
         </div>

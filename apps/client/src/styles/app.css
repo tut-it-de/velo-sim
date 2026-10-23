@@ -1715,6 +1715,33 @@ button.cta {
 .shifter.off {
   opacity: 0.5;
 }
+/* Watt-Lock: − 220 W + in place of the gear while it holds the watts */
+.watt-lock {
+  border-color: #f0b429;
+  box-shadow: 0 0 0 1px rgba(240, 180, 41, 0.35), 0 0 18px rgba(240, 180, 41, 0.25);
+}
+.watt-lock .watt-lock-value {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 92px;
+  padding: 4px 8px;
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #f0b429;
+}
+.watt-lock .watt-lock-value small {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.watt-lock-button {
+  white-space: nowrap;
+}
 .hud-left {
   position: absolute;
   left: max(12px, env(safe-area-inset-left));
@@ -2026,6 +2053,10 @@ button.cta {
   }
   .hud-metrics {
     grid-auto-columns: minmax(0, 1fr);
+  }
+  /* phones in portrait: at most 3 tiles per row (6 data fields) */
+  .hud-metrics .hud-metric:nth-child(n + 4) {
+    display: none;
   }
   .hud-value {
     font-size: 22px;
@@ -3295,4 +3326,50 @@ button.strava-connect:disabled {
   .ftp-levels {
     grid-template-columns: 1fr;
   }
+}
+
+/* settings: data fields of the ride HUD */
+.hud-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+.hud-field-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hud-field-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 4px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+}
+.hud-field-list .pos {
+  width: 18px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.hud-field-list .name {
+  flex: 1;
+  min-width: 0;
+}
+.hud-field-list button {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0 8px;
+}
+.hud-field-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.hud-field-add button {
+  min-height: 40px;
 }

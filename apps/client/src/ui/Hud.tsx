@@ -1,7 +1,6 @@
 import { referenceFtp } from '../ftp/advisor';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { formatCoins } from '@velo/equipment';
-import { powerZone } from '@velo/metrics';
 import { MAX_DRAFT_REDUCTION } from '@velo/physics';
 import type { MinimapData } from '../game/real/realWorld';
 import { CAMERA_MODES, type CameraMode } from '../game/world';
@@ -9,27 +8,16 @@ import { GEARS, type RideSession, type RideSnapshot } from '../ride/rideSession'
 import { accountStore } from '../net/api';
 import { settingsStore } from '../state/settings';
 import { useStore } from '../state/store';
-import { ClimbPanel, gradeColor } from './ClimbPanel';
-import { fmt, formatDuration } from './components';
+import { ClimbPanel } from './ClimbPanel';
+import { formatDuration } from './components';
 import { ElevationProfile } from './ElevationProfile';
 import { Flag } from './Flag';
+import { HudFieldBar } from './HudFields';
 import { Minimap } from './Minimap';
 import { WorkoutHud } from './WorkoutHud';
 import { ActiveSegments, SegmentToast } from './SegmentHud';
 import { TeleportPanel } from './TeleportPanel';
-
-function Metric({ label, value, unit, sub, accent }: { label: string; value: ReactNode; unit?: string; sub?: ReactNode; accent?: string }) {
-  return (
-    <div className="hud-metric" style={accent ? { borderBottomColor: accent } : undefined}>
-      <div className="hud-label">{label}</div>
-      <div className="hud-value">
-        {value}
-        {unit && <span className="hud-unit">{unit}</span>}
-      </div>
-      <div className="hud-sub">{sub ?? '\u00a0'}</div>
-    </div>
-  );
-}
+import { WattLockControl } from './WattLockControl';
 
 const OTHER_COLOR = { bot: '#58a6ff', remote: '#3fb950' };
 
@@ -49,10 +37,8 @@ export function Hud({
   const s = useStore(session.snapshot);
   const settings = useStore(settingsStore);
   const track = session.track;
-  const zone = powerZone(s.power3s, settings.ftp);
   const paused = s.state === 'paused';
   const lapFraction = s.lapDistanceM / track.length;
-  const avgKmh = s.movingS > 0 ? (s.distanceM / s.movingS) * 3.6 : 0;
   const [teleportOpen, setTeleportOpen] = useState(false);
   const admin = settings.adminMode;
   // Ramp test: stopping the pedals ends the test – straight to the result.
@@ -103,6 +89,7 @@ export function Hud({
         </div>
 
         <div className="hud-controls">
+          {s.wattLock === undefined && (
           <div className={`shifter${session.mode === 'erg' ? ' off' : ''}`} title={session.mode === 'erg' ? 'Im ERG-Modus hält der Trainer die Watt – Schalten wirkt erst wieder in der freien Fahrt' : 'Virtuell schalten: Taste − / +'}>
             <button onClick={() => session.shift(-1)} disabled={s.gear <= 1} aria-label="Leichter schalten">
               −
@@ -115,6 +102,8 @@ export function Hud({
               +
             </button>
           </div>
+          )}
+          <WattLockControl session={session} snapshot={s} />
           <select value={camera} onChange={(e) => onCamera(e.target.value as CameraMode)} aria-label="Kamera">
             {CAMERA_MODES.map((m) => (
               <option key={m.id} value={m.id}>
@@ -169,34 +158,15 @@ export function Hud({
         <div className="hud-warning paused">{s.autoPaused ? 'Pausiert – einfach weitertreten' : 'Pausiert – „Weiter“ oder Taste P'}</div>
       )}
 
-      <div className="hud-bottom">
-        <div className="hud-metrics hud-metrics-left">
-          <Metric label="Speed" value={fmt(s.speedMps * 3.6, 1)} unit="km/h" />
-          <Metric
-            label="Leistung"
-            value={fmt(s.power3s)}
-            unit="W"
-            sub={`${(s.power3s / settings.weightKg).toFixed(1)} W/kg · Z${zone.zone}`}
-            accent={zone.color}
-          />
-          <Metric label="Kadenz" value={fmt(s.cadence)} unit="rpm" />
-          <Metric label="Herzfrequenz" value={fmt(s.heartRate)} unit="bpm" accent={s.heartRate ? '#f85149' : undefined} />
-        </div>
-        <div className="hud-panel hud-profile">
-          <ElevationProfile track={track} positionM={s.lapDistanceM} height={70} markers={markers} />
-        </div>
-        <div className="hud-metrics hud-metrics-right">
-          <Metric label="Distanz" value={(s.distanceM / 1000).toFixed(2)} unit="km" sub={`⛰ ${Math.round(s.ascentM)} hm`} />
-          <Metric label="Zeit" value={formatDuration(s.movingS)} sub={s.movingS >= 10 ? `Ø ${avgKmh.toFixed(1)} km/h` : undefined} />
-          <Metric
-            label="Steigung"
-            value={`${s.gradePercent < 0 ? '−' : ''}${Math.abs(s.gradePercent).toFixed(1)}`}
-            unit="%"
-            sub={s.trainerGrade !== undefined ? `Trainer ${s.trainerGrade.toFixed(1)} %` : undefined}
-            accent={gradeColor(s.gradePercent)}
-          />
-        </div>
-      </div>
+      <HudFieldBar
+        snapshot={s}
+        settings={settings}
+        profile={
+          <div className="hud-panel hud-profile">
+            <ElevationProfile track={track} positionM={s.lapDistanceM} height={70} markers={markers} />
+          </div>
+        }
+      />
     </div>
   );
 }

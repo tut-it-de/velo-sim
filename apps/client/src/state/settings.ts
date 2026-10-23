@@ -1,5 +1,6 @@
 import type { GraphicsQuality } from '../game/real/quality';
 import { builtInServer } from '../net/serverUrl';
+import { DEFAULT_HUD_LAYOUT, sanitizeLayout, type HudLayout } from '../ride/hudFields';
 import { Store, loadJson, saveJson } from './store';
 
 export interface Settings {
@@ -32,6 +33,8 @@ export interface Settings {
   shiftMouse: boolean;
   /** Virtual shifting with the keys − and +. */
   shiftKeys: boolean;
+  /** Data fields of the bottom HUD bar and their order, for free rides and workouts. */
+  hudFields: HudLayout;
 }
 
 const KEY = 'velo.settings.v1';
@@ -53,7 +56,16 @@ export const DEFAULT_SETTINGS: Settings = {
   knownDevices: {},
   shiftMouse: false,
   shiftKeys: true,
+  hudFields: DEFAULT_HUD_LAYOUT,
 };
+
+/**
+ * Brings stored settings up to date: older versions have no `hudFields` (→ today's layout), lists from
+ * other versions may hold unknown or duplicate fields or too many of them.
+ */
+export function migrateSettings(stored: Settings): Settings {
+  return { ...stored, hudFields: stored.hudFields ? sanitizeLayout(stored.hudFields) : DEFAULT_HUD_LAYOUT };
+}
 
 /**
  * Builds with a public server (the iPad app → https://velo.tut-it.de) drop an older LAN address like
@@ -64,7 +76,7 @@ function withoutStaleLanServer(s: Settings): Settings {
   return builtInServer.startsWith('https://') && lan.test(s.serverUrl) ? { ...s, serverUrl: '' } : s;
 }
 
-export const settingsStore = new Store<Settings>(withoutStaleLanServer(loadJson(KEY, DEFAULT_SETTINGS)));
+export const settingsStore = new Store<Settings>(withoutStaleLanServer(migrateSettings(loadJson(KEY, DEFAULT_SETTINGS))));
 settingsStore.subscribe(() => saveJson(KEY, settingsStore.get()));
 
 export function updateSettings(patch: Partial<Settings>): void {
