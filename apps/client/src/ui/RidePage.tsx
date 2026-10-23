@@ -54,7 +54,8 @@ export function RidePage({ view }: { view: 'ride' | 'workouts' }) {
         workout={phase.workout}
         group={phase.group}
         onFinish={async (result) => {
-          const activity = await saveActivity(result, result.simulated, result.workout ? `Workout „${result.workout.name}“` : undefined);
+          const title = result.workout ? `Workout „${result.workout.name}“` : phase.group ? `Gruppenfahrt „${phase.group.name}“` : undefined;
+          const activity = await saveActivity(result, result.simulated, title);
           if (isLoggedIn()) {
             // Online + logged in: the server books from its own telemetry.
             await refreshAccount().catch(() => undefined);

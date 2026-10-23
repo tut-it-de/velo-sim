@@ -117,8 +117,12 @@ export class GroupAssist implements RideAssist {
       return env;
     }
     const out = assistEnvironment(env, me, g);
+    // hysteresis: the hint shows from HINT_GRADE and stays until half of it, so it does not flicker
     const offset = out.gradePercent - env.gradePercent;
-    this.publish(gap, Math.abs(gap) > ASSIST.HARD_M ? 'hold' : offset < -ASSIST.HINT_GRADE ? 'pull' : offset > ASSIST.HINT_GRADE ? 'brake' : 'none');
+    const was = this.state.get().mode;
+    const pull = offset < -(was === 'pull' ? ASSIST.HINT_GRADE / 2 : ASSIST.HINT_GRADE);
+    const brake = offset > (was === 'brake' ? ASSIST.HINT_GRADE / 2 : ASSIST.HINT_GRADE);
+    this.publish(gap, Math.abs(gap) > ASSIST.HARD_M ? 'hold' : pull ? 'pull' : brake ? 'brake' : 'none');
     return out;
   }
 
