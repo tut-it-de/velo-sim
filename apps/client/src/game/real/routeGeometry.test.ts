@@ -1,12 +1,13 @@
 /**
  * Geometry checks on the real routes (world files from public/worlds): ribbon edges without folds,
- * valid junction areas, no height steps where side roads join the ride's road.
+ * valid junction areas, no height steps where side roads join the ride's road, roundabouts.
  */
 import { describe, expect, it } from 'vitest';
 import { Noise2D } from '../noise';
 import { crossSection, mouthMesh, mouthPoint, nodeMesh, planJunctions, polylineLength, sideRoadGround } from './junctions';
 import { ROAD_COLS, drawnRuns, runGeometry } from './ribbonGeometry';
 import { polygonArea, selfIntersects, subdivide, triangulate, type Vec2 } from './roadGeometry';
+import { planRoundabouts } from './roundaboutPlan';
 import { corridorFromDisk } from './routeFixture';
 
 const ROUTES = ['lago-di-como', 'feldberg-taunus', 'alpe-dhuez', 'taunus-mammolshain'];
@@ -109,5 +110,37 @@ describe.each(ROUTES)('%s', (id) => {
         expect(p[1] - on.y).toBeLessThan(0.05);
       }
     }
+  });
+
+  it('the road at the start and end of the lap is drawn once, with its markings', () => {
+    const near = Math.ceil(100 / c.rowLength);
+    for (let k = -near; k <= near; k++) {
+      const r = (k + c.rows) % c.rows;
+      if (c.covered[r] || c.ring[r]) continue;
+      expect(c.merged[r], `row ${r}`).toBe(0);
+    }
+  });
+
+  it('roundabouts are smooth rings at the height of the ride', () => {
+    const rings = planRoundabouts(c, data.roads, sideRoadGround(c, data.near));
+    expect(rings.length).toBe(data.roundabouts.length);
+    let worst = 0;
+    for (const ring of rings) {
+      const n = ring.ys.length;
+      const step = (2 * Math.PI * ring.rb.r) / n;
+      for (let q = 0; q < n; q++) {
+        expect(Number.isFinite(ring.ys[q]!)).toBe(true);
+        // no kinks along the ring (the slope changes by less than 5 % per metre)
+        const bend = Math.abs(ring.ys[(q + 1) % n]! - 2 * ring.ys[q]! + ring.ys[(q - 1 + n) % n]!) / (step * step);
+        worst = Math.max(worst, bend);
+      }
+      for (const arm of ring.arms) {
+        expect(arm.gap.span).toBeLessThan(Math.PI / 2);
+        if (arm.dashes) expect(arm.dashes.span).toBeLessThanOrEqual(arm.gap.span + 1e-6);
+      }
+      // where the ride runs on the ring, it enters and leaves it
+      if (ring.ridden.some((v) => v)) expect(ring.arms.length).toBeGreaterThanOrEqual(2);
+    }
+    expect(worst).toBeLessThan(0.05);
   });
 });

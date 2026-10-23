@@ -16,7 +16,10 @@
     { "name": "gipfel-zusammenlauf-11.71", "m": 11692 },
     { "name": "kehre-12.20", "m": 12180 },
     { "name": "sandplacken-15.21", "m": 15172 },
-    { "name": "hohemark-23.38", "m": 23340 }
+    { "name": "hohemark-23.38", "m": 23340 },
+    { "name": "start-0m", "m": 25, "views": ["chase"] },
+    { "name": "start-30m", "m": 55, "views": ["chase", "low"] },
+    { "name": "start-100m", "m": 125, "views": ["chase", "top"] }
   ],
   "alpe-dhuez": [
     { "name": "kehre-2.16", "m": 2160 },
@@ -26,7 +29,10 @@
     { "name": "kehre-18.58", "m": 18576 },
     { "name": "kehre-22.91", "m": 22908 },
     { "name": "kehre-26.66", "m": 26656 },
-    { "name": "kreisel-28.90", "m": 28896 }
+    { "name": "kreisel-28.90", "m": 28896 },
+    { "name": "start-0m", "m": 25, "views": ["chase"] },
+    { "name": "start-30m", "m": 55, "views": ["chase", "low"] },
+    { "name": "start-100m", "m": 125, "views": ["chase", "top"] }
   ],
   "taunus-mammolshain": [
     { "name": "ecke-0.53", "m": 528 },
