@@ -43,9 +43,14 @@ export interface Building {
   ring: Float32Array;
 }
 
+/** Ends of a side road that meet the lap or other side roads (bit flags, world.json version 2). */
+export const ROAD_JOIN = { lapStart: 1, lapEnd: 2, roadStart: 4, roadEnd: 8 } as const;
+
 export interface SideRoad {
   width: number;
   track: boolean;
+  /** ROAD_JOIN flags; 0 in version 1 worlds (no junction information). */
+  joins: number;
   pts: Float32Array;
 }
 
@@ -159,9 +164,24 @@ async function fetchOk(url: string): Promise<Response> {
 
 async function load(id: string): Promise<WorldData> {
   const [json, bin] = await Promise.all([
-    fetchOk(worldUrl(id, 'world.json')).then((r) => r.json() as Promise<WorldJson>),
+    fetchOk(worldUrl(id, 'world.json')).then((r) => r.json() as Promise<unknown>),
     fetchOk(worldUrl(id, 'terrain.bin')).then((r) => r.arrayBuffer()),
   ]);
+  return decodeWorld(id, json, bin);
+}
+
+/** Side roads: version 1 is [width dm, track, ring …], version 2 adds the junction flags after the kind. */
+function decodeRoads(rows: number[][], version: number): SideRoad[] {
+  return rows.map((r) =>
+    version >= 2
+      ? { width: r[0]! / 10, track: r[1] === 1, joins: r[2]!, pts: decodeRing(r, 3) }
+      : { width: r[0]! / 10, track: r[1] === 1, joins: 0, pts: decodeRing(r, 2) },
+  );
+}
+
+/** Decodes world.json (parsed) and terrain.bin; pure, so tests can feed it files from disk. */
+export function decodeWorld(id: string, parsed: unknown, bin: ArrayBuffer): WorldData {
+  const json = parsed as WorldJson;
   if (bin.byteLength !== json.terrainBytes) throw new Error('terrain.bin passt nicht zu world.json');
 
   const grid = (name: GridName): WorldGrid => {
@@ -186,7 +206,7 @@ async function load(id: string): Promise<WorldData> {
     places: json.places,
     buildings: json.buildings.map((b) => ({ height: b[0]! / 10, kind: b[1] as BuildingKind, ring: decodeRing(b, 2) })),
     trees: Float32Array.from(json.trees, (v) => v / 10),
-    roads: json.roads.map((r) => ({ width: r[0]! / 10, track: r[1] === 1, pts: decodeRing(r, 2) })),
+    roads: decodeRoads(json.roads, json.version ?? 1),
     parking: (json.parking ?? []).map((r) => decodeRing(r, 0)),
     landmarks: json.landmarks ?? [],
     look: { flora: json.look?.flora ?? 'mediterranean', architecture: json.look?.architecture ?? 'italian' },

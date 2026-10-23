@@ -459,14 +459,64 @@ def unify_passes(path: np.ndarray, elev: np.ndarray, min_gap_m: float = 150.0, s
     return out
 
 
-def resample_closed(pts: np.ndarray, step: float) -> np.ndarray:
+def resample_closed(pts: np.ndarray, step: float, with_index: bool = False):
+    """Closed polyline resampled at (about) `step`; with_index also returns, per new point, the index
+    of the source segment it lies on."""
     closed = np.vstack([pts, pts[:1]])
     seg = np.hypot(*np.diff(closed, axis=0).T)
     cum = np.concatenate([[0], np.cumsum(seg)])
     total = cum[-1]
     n = int(round(total / step))
     t = np.arange(n) * total / n
-    return np.column_stack([np.interp(t, cum, closed[:, 0]), np.interp(t, cum, closed[:, 1])])
+    out = np.column_stack([np.interp(t, cum, closed[:, 0]), np.interp(t, cum, closed[:, 1])])
+    if with_index:
+        return out, np.clip(np.searchsorted(cum, t, side='right') - 1, 0, len(pts) - 1)
+    return out
+
+
+# Smallest centre-line radius a road class is drawn with (metres). The map draws junction corners and
+# switchbacks as sharp kinks; real carriageways turn on arcs. Hairpins whose legs lie closer together
+# than twice this radius keep their radius (the shift limit stops the smoothing), the client copes.
+MIN_RADIUS = {'trunk': 9.0, 'primary': 8.0, 'secondary': 7.0, 'tertiary': 7.0, 'unclassified': 6.0,
+              'residential': 5.5, 'living_street': 5.0, 'service': 5.0}
+MAX_SHIFT = 3.0  # how far the smoothed lap may leave the mapped centre line, metres
+# Where the lap turns at a junction node (OSM puts the node in the middle of the junction area, so a
+# lap turning off there has a spike), the line may cut the corner across the junction area.
+JUNCTION_SHIFT = 9.0
+JUNCTION_REACH = 14.0
+
+
+def circumradius(p: np.ndarray, h: int) -> np.ndarray:
+    """Radius of the circle through the points i-h, i, i+h of a closed polyline (inf on straights)."""
+    a, b, c = np.roll(p, h, 0), p, np.roll(p, -h, 0)
+    ab = np.hypot(*(b - a).T)
+    bc = np.hypot(*(c - b).T)
+    ca = np.hypot(*(a - c).T)
+    cross = np.abs((b - a)[:, 0] * (c - a)[:, 1] - (b - a)[:, 1] * (c - a)[:, 0])
+    with np.errstate(divide='ignore', invalid='ignore'):
+        return np.where(cross > 1e-9, ab * bc * ca / np.maximum(2 * cross, 1e-12), np.inf)
+
+
+def limit_radius(p: np.ndarray, rmin: np.ndarray, max_shift=MAX_SHIFT, iterations: int = 400) -> np.ndarray:
+    """Rounds bends of a closed 1 m polyline that are tighter than `rmin` (per point): local Laplacian
+    smoothing around the tight spots, never more than `max_shift` (per point or one value) away from the
+    input line. Direction independent, so both passes of an out-and-back road get the same line."""
+    orig = p.copy()
+    p = p.copy()
+    for _ in range(iterations):
+        bad = circumradius(p, 4) < rmin
+        if not bad.any():
+            break
+        w = np.zeros(len(p))
+        for k in range(-6, 7):
+            w = np.maximum(w, np.roll(bad, k) * (1 - abs(k) / 7))
+        mid = 0.5 * (np.roll(p, 2, 0) + np.roll(p, -2, 0))
+        p = p + 0.5 * w[:, None] * (mid - p)
+        d = p - orig
+        dist = np.hypot(*d.T)
+        scale = np.minimum(1.0, max_shift / np.maximum(dist, 1e-9))
+        p = orig + d * scale[:, None]
+    return p
 
 
 def circular_smooth(v: np.ndarray, half: int) -> np.ndarray:
@@ -642,12 +692,29 @@ def build(cfg: Config, make_lap: Callable, make_segments: Callable[[Context], li
     lat = np.array([n[1] for n in nodes])
     x, z = local(lon, lat)
     pts = np.column_stack([x, z])
+    # road class of the segment that starts at each point (the last point closes the lap)
+    cls = [g.edges[u, v]['cls'] if g.has_edge(u, v) else 'service' for u, v in zip(nodes, nodes[1:] + nodes[:1])]
     if info.get('turnaround'):
         # open out-and-back without a real loop at the far end: nodes run start → end only
-        pts = np.vstack([pts, turnaround_points(pts, info.get('turnaround_radius', 9.0)), pts[::-1][1:-1]])
-    # drop duplicates, round corners (±6 m moving average on a 1 m resampling), resample to STEP
-    dense = resample_closed(pts, 1.0)
+        turn = turnaround_points(pts, info.get('turnaround_radius', 9.0))
+        cls = cls[:-1] + [cls[-2]] * (len(turn) + 1) + cls[:-1][::-1][1:len(pts) - 1]
+        pts = np.vstack([pts, turn, pts[::-1][1:-1]])
+    assert len(cls) == len(pts), (len(cls), len(pts))
+    # drop duplicates, round corners (±6 m moving average on a 1 m resampling), widen the bends that are
+    # still tighter than the road class allows, resample to STEP
+    dense, seg_of = resample_closed(pts, 1.0, with_index=True)
     dense = np.column_stack([circular_smooth(dense[:, 0], 6), circular_smooth(dense[:, 1], 6)])
+    rmin = np.array([MIN_RADIUS.get(cls[k], 5.0) if k < len(cls) else 5.0 for k in seg_of])
+    before = float(np.sum(np.hypot(*np.diff(np.vstack([dense, dense[:1]]), axis=0).T)))
+    tight = int(np.sum(circumradius(dense, 4) < rmin))
+    # junction nodes of the lap (three or more roads meet)
+    junction_xy = np.array([pts[k] for k, nd in enumerate(nodes) if k < len(pts) and g.degree(nd) >= 3] or [[1e9, 1e9]])
+    near_junction = np.min(np.hypot(dense[:, None, 0] - junction_xy[None, :, 0], dense[:, None, 1] - junction_xy[None, :, 1]), axis=1) < JUNCTION_REACH
+    shift = np.where(near_junction, JUNCTION_SHIFT, MAX_SHIFT)
+    dense = limit_radius(dense, rmin, shift)
+    after = float(np.sum(np.hypot(*np.diff(np.vstack([dense, dense[:1]]), axis=0).T)))
+    log(f'bends: {tight} m tighter than the class radius, lap {after - before:+.1f} m by rounding them, '
+        f'{int(np.sum(circumradius(dense, 4) < rmin))} m left (hairpins with close legs)')
     path = resample_closed(dense, STEP)
     n = len(path)
     lap_m = n * STEP
@@ -719,7 +786,7 @@ def build(cfg: Config, make_lap: Callable, make_segments: Callable[[Context], li
         if nb[0] < tx < nb[2] and nb[1] < tz < nb[3]:
             tree_xy += [int(round(float(tx) * 10)), int(round(float(tz) * 10))]
     lap_edges = {frozenset((u, v)) for u, v in zip(nodes, nodes[1:] + nodes[:1])}
-    roads = build_side_roads(segments, lap_edges, nb)
+    roads = build_side_roads(segments, lap_edges, set(nodes), path, nb)
     places = []
     for p in place_points(land):
         px, pz = local(*p['pt'][:2])
@@ -840,8 +907,18 @@ def build_landmarks(rows, nb) -> list[dict]:
     return out
 
 
-def build_side_roads(segments, lap_edges, nb):
-    out = []
+# Flags of a side road end (world.json version 2): it meets the lap / other side roads there.
+JOIN_LAP_START, JOIN_LAP_END, JOIN_ROAD_START, JOIN_ROAD_END = 1, 2, 4, 8
+
+
+def build_side_roads(segments, lap_edges, lap_nodes, path, nb):
+    """Side roads as a network: [width dm, kind (0 paved, 1 track), flags, ring_dm …] per arm.
+
+    Every road is split where it meets the lap and at its junctions with other side roads, so each
+    piece ends exactly in a junction. Ends on the lap are moved onto the smoothed lap centre line (the
+    client builds the junction mouth from there); the flags say which ends are junctions.
+    """
+    pieces = []
     for s in segments:
         cls = s['class']
         if s['subtype'] != 'road' or cls not in SIDE_ROAD_WIDTH:
@@ -854,27 +931,60 @@ def build_side_roads(segments, lap_edges, nb):
             for a, b in zip(line, line[1:]):
                 ka = (round(a[0], 7), round(a[1], 7))
                 kb = (round(b[0], 7), round(b[1], 7))
+                if ka == kb:
+                    continue
                 if frozenset((ka, kb)) in lap_edges:
                     if len(run) >= 2:
-                        out.append((cls, run))
+                        pieces.append((cls, run))
                     run = []
                     continue
                 if not run:
                     run = [ka]
                 run.append(kb)
             if len(run) >= 2:
-                out.append((cls, run))
+                pieces.append((cls, run))
+    # node degree in the side-road network (an end counts once, a node inside a piece twice)
+    degree: dict = {}
+    for _, run in pieces:
+        for k, p in enumerate(run):
+            degree[p] = degree.get(p, 0) + (1 if k in (0, len(run) - 1) else 2)
+    split_at = {p for p, d in degree.items() if d >= 3} | set(lap_nodes)
+    out = []
+    for cls, run in pieces:
+        cur = [run[0]]
+        for p in run[1:]:
+            cur.append(p)
+            if p in split_at and len(cur) >= 2:
+                out.append((cls, cur))
+                cur = [p]
+        if len(cur) >= 2:
+            out.append((cls, cur))
+    lap_line = LineString(np.vstack([path, path[:1]]))
     roads = []
+    joined = 0
     for cls, run in out:
         xs, zs = local(np.array([p[0] for p in run]), np.array([p[1] for p in run]))
-        ls = LineString(np.column_stack([xs, zs])).simplify(0.8)
-        cs = list(ls.coords)
+        cs = [tuple(c) for c in LineString(np.column_stack([xs, zs])).simplify(0.8).coords]
         mx = sum(c[0] for c in cs) / len(cs)
         mz = sum(c[1] for c in cs) / len(cs)
         if not (nb[0] < mx < nb[2] and nb[1] < mz < nb[3]):
             continue
-        roads.append([int(round(SIDE_ROAD_WIDTH[cls] * 10)), 1 if cls == 'track' else 0] + ring_dm(cs))
-    log(f'  {len(roads)} side roads')
+        flags = 0
+        for end, lap_flag, road_flag in ((0, JOIN_LAP_START, JOIN_ROAD_START), (-1, JOIN_LAP_END, JOIN_ROAD_END)):
+            node = run[end]
+            if node in lap_nodes:
+                # the smoothed lap may have left the map node (rounded corners): end on the lap itself
+                foot = lap_line.interpolate(lap_line.project(shapely.Point(cs[end])))
+                if math.hypot(foot.x - cs[end][0], foot.y - cs[end][1]) < 12:
+                    cs[end] = (foot.x, foot.y)
+                    flags |= lap_flag
+                    joined += 1
+            elif degree.get(node, 0) >= 3:
+                flags |= road_flag
+        if len(cs) < 2 or math.hypot(cs[-1][0] - cs[0][0], cs[-1][1] - cs[0][1]) < 0.5:
+            continue
+        roads.append([int(round(SIDE_ROAD_WIDTH[cls] * 10)), 1 if cls == 'track' else 0, flags] + ring_dm(cs))
+    log(f'  {len(roads)} side roads, {joined} ends on the lap')
     return roads
 
 
@@ -953,7 +1063,7 @@ def write_world(near, far, horizon, buildings, trees, roads, places, lake_rings,
     data = b''.join(blobs)
     (out_world / 'terrain.bin').write_bytes(data)
     world = {
-        'version': 1,
+        'version': 2,
         'name': C.name,
         'attribution': C.attribution,
         'origin': list(ORIGIN),

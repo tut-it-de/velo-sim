@@ -22,6 +22,21 @@ export const WALL_THICK = 0.45;
 export const EDGE = { verge: 0, lake: 1, wall: 2, rail: 3, parapet: 4 } as const;
 /** Every 2nd track sample (4 m) is a ribbon row. */
 export const ROW_STRIDE = 2;
+/** Samples (2 m) on each side over which the cross direction of a ribbon row is averaged. */
+const FRAME_SMOOTH = 4;
+/** Below this radius (m) the centre line is left out (the lanes are no longer meaningful in a hairpin). */
+export const TIGHT_RADIUS = 14;
+/** Another pass of the lap farther along than this (m) that overlaps the asphalt is a merge, not a fold. */
+const MERGE_GAP = 60;
+
+/** Centre point and cross direction (right of travel) of a ribbon row. */
+export interface Frame {
+  x: number;
+  y: number;
+  z: number;
+  rx: number;
+  rz: number;
+}
 
 export interface RouteHit {
   /** Track sample index. */
@@ -52,6 +67,13 @@ export class RouteCorridor {
   readonly wallH: SideArrays<Float32Array>;
   readonly urban: Uint8Array;
   readonly covered: Uint8Array;
+  /** Rows whose asphalt overlaps an earlier, drawn pass (summit loops, roundabouts, double-passed junctions). */
+  readonly merged: Uint8Array;
+  /** Rows in bends tighter than TIGHT_RADIUS. */
+  readonly tight: Uint8Array;
+  /** Signed turn radius of the ribbon frames per row (> 0 turns right, Infinity = straight). */
+  readonly radius: Float32Array;
+  readonly frames: Frame[];
   private readonly cell = 16;
   private readonly cells = new Map<number, number[]>();
 
@@ -75,7 +97,103 @@ export class RouteCorridor {
     this.wallH = pair(() => new Float32Array(rows));
     this.urban = new Uint8Array(rows);
     this.covered = new Uint8Array(rows);
+    this.merged = new Uint8Array(rows);
+    this.tight = new Uint8Array(rows);
+    this.radius = new Float32Array(rows);
+    this.frames = [];
+    for (let r = 0; r < rows; r++) this.frames.push(this.computeFrame(r));
     this.analyze(buildings);
+  }
+
+  /** Length of one ribbon row, m. */
+  get rowLength(): number {
+    return ROW_STRIDE * this.track.step;
+  }
+
+  private computeFrame(r: number): Frame {
+    const t = this.track;
+    const n = t.count;
+    const i = this.sampleOf(r);
+    // Cross direction from the heading averaged over ±FRAME_SMOOTH samples (tent weights): on a constant bend it
+    // equals the local heading, but where the map line kinks the cross sections fan out over a few metres
+    // instead of folding the inner edge over itself (what is left of that, roadGeometry.untangle removes).
+    let sx = 0;
+    let sz = 0;
+    for (let k = -FRAME_SMOOTH; k <= FRAME_SMOOTH; k++) {
+      const h = t.headings[(((i + k) % n) + n) % n]!;
+      const wgt = FRAME_SMOOTH + 1 - Math.abs(k);
+      sx += Math.sin(h) * wgt;
+      sz += Math.cos(h) * wgt;
+    }
+    const h = Math.atan2(sx, sz);
+    return { x: t.xs[i]!, y: t.ys[i]!, z: t.zs[i]!, rx: Math.cos(h), rz: -Math.sin(h) };
+  }
+
+  /**
+   * World position at lap distance `s` (m, any lap) and signed lateral offset `o` (right of travel),
+   * interpolated between ribbon rows exactly as the ribbon's quads are: on the drawn asphalt.
+   */
+  pointAt(s: number, o: number): { x: number; y: number; z: number } {
+    const R = this.rows;
+    const u = s / this.rowLength;
+    const k = Math.floor(u);
+    const w = u - k;
+    const a = this.frames[((k % R) + R) % R]!;
+    const b = this.frames[(((k + 1) % R) + R) % R]!;
+    return {
+      x: a.x + a.rx * o + (b.x + b.rx * o - a.x - a.rx * o) * w,
+      y: a.y + (b.y - a.y) * w,
+      z: a.z + a.rz * o + (b.z + b.rz * o - a.z - a.rz * o) * w,
+    };
+  }
+
+  /** Lap distance (m) of the foot point of (x, z) near sample `i`, and its signed lateral offset. */
+  lapCoords(x: number, z: number, i: number): { s: number; o: number } {
+    const t = this.track;
+    const h = t.headings[i]!;
+    const vx = x - t.xs[i]!;
+    const vz = z - t.zs[i]!;
+    return { s: i * t.step + vx * Math.sin(h) + vz * Math.cos(h), o: vx * Math.cos(h) - vz * Math.sin(h) };
+  }
+
+  /**
+   * Inverse of `pointAt` near lap distance `s`: the (s, o) that `pointAt` maps onto (x, z), so points
+   * placed in lap coordinates land exactly where they were taken from.
+   */
+  lapCoordsAt(x: number, z: number, s: number, o = 0): { s: number; o: number } {
+    for (let it = 0; it < 8; it++) {
+      const p = this.pointAt(s, o);
+      const a = this.pointAt(s - 0.5, o);
+      const b = this.pointAt(s + 0.5, o);
+      const fx = b.x - a.x;
+      const fz = b.z - a.z;
+      const f2 = fx * fx + fz * fz;
+      if (f2 < 1e-6) break;
+      // lateral direction of the interpolated rows: unit vector across the strip at s
+      const r0 = this.pointAt(s, o + 1);
+      const rx = r0.x - p.x;
+      const rz = r0.z - p.z;
+      const dx = x - p.x;
+      const dz = z - p.z;
+      // solve d = ds·f + do·r (2×2)
+      const det = fx * rz - fz * rx;
+      if (Math.abs(det) < 1e-9) break;
+      const ds = (dx * rz - dz * rx) / det;
+      const dov = (fx * dz - fz * dx) / det;
+      s += Math.max(-20, Math.min(20, ds));
+      o += Math.max(-20, Math.min(20, dov));
+      if (Math.abs(ds) + Math.abs(dov) < 1e-4) break;
+    }
+    return { s, o };
+  }
+
+  /** No wall, guardrail or parapet on one side of rows r0…r1 (a side road joins there). */
+  openEdge(side: number, r0: number, r1: number): void {
+    const R = this.rows;
+    for (let r = r0; r <= r1; r++) {
+      const k = ((r % R) + R) % R;
+      if (this.edge[side]![k] !== EDGE.lake) this.edge[side]![k] = EDGE.verge;
+    }
   }
 
   sampleOf(row: number): number {
@@ -225,6 +343,23 @@ export class RouteCorridor {
       const hit = this.nearest(t.xs[i]!, t.zs[i]!, 2.2, (j) => this.lapGap(i, j) > 150);
       if (hit && hit.i < i) this.covered[r] = 1;
     }
+    // rows whose asphalt runs onto an earlier pass where the two diverge: drawn on top without markings
+    for (let r = 0; r < rows; r++) {
+      if (this.covered[r]) continue;
+      const i = this.sampleOf(r);
+      const reach = this.hw[0]![r]! + this.hw[1]![r]! + 2 * SHOULDER;
+      const hit = this.nearest(t.xs[i]!, t.zs[i]!, reach, (j) => this.lapGap(i, j) > MERGE_GAP && j < i && !this.covered[Math.round(j / ROW_STRIDE) % rows]);
+      if (hit && Math.abs(t.ys[i]! - hit.y) < 1.5) this.merged[r] = 1;
+    }
+    // turn radius of the frames over ±2 rows
+    for (let r = 0; r < rows; r++) {
+      const a = this.frames[(r - 2 + rows) % rows]!;
+      const b = this.frames[(r + 2) % rows]!;
+      const dh = wrapAngle(Math.atan2(-b.rz, b.rx) - Math.atan2(-a.rz, a.rx));
+      this.radius[r] = Math.abs(dh) < 1e-4 ? Infinity : (4 * this.rowLength) / dh;
+      if (Math.abs(this.radius[r]!) < TIGHT_RADIUS) this.tight[r] = 1;
+    }
+    cleanRuns(this.tight, 3);
 
     // 4) edges and verge extents
     // The elevation model is a surface model (trees, roofs), so the road profile deliberately sits

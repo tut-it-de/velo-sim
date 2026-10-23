@@ -12,24 +12,19 @@ import {
   type Material,
   type Scene,
 } from '@babylonjs/core';
-import { Noise2D, smoothstep } from '../noise';
-import { EDGE, ROW_STRIDE, SHOULDER, VERGE_BLEND, WALL_THICK, type RouteCorridor } from './corridor';
+import { Noise2D } from '../noise';
+import { EDGE, SHOULDER, WALL_THICK, type Frame, type RouteCorridor } from './corridor';
 import { SKY, TO_SUN } from './env';
 import { applyDetail } from './detailMaps';
 import { MeshData } from './meshData';
+import { ROAD_COLS, ROAD_U, VERGE_COLS, drawnRuns, runGeometry, type Row } from './ribbonGeometry';
 import { NOISE_GLSL } from './terrainMaterial';
 import type { RealTerrain } from './terrain';
 import { roadTexture, roadTextureRepeat, stoneTexture } from './textures';
 import type { Architecture } from './worldData';
 
 const CHUNK_ROWS = 96;
-const VERGE_COLS = 12;
 const STONE_REPEAT = 2.5;
-/** Strips per half of the asphalt (vertices per road row = 2 * ROAD_SPLITS + 3). */
-const ROAD_SPLITS = 4;
-/** Samples (2 m) on each side over which the cross direction of a ribbon row is averaged. */
-const FRAME_SMOOTH = 4;
-const ROAD_COLS = 2 * ROAD_SPLITS + 3;
 /** Asphalt detail tiles across the road: the U range spans roughly 9 m of road and shoulder, one tile per 1.5 m. */
 const ROAD_DETAIL_ACROSS = 6;
 const PARAPET_H = 0.85;
@@ -40,20 +35,6 @@ const CAP_OVER = 0.05;
 /** Vertex colour at the foot of a wall (damp, mossy stone); the rest of the face stays white. */
 const MOSS = [0.6, 0.68, 0.52] as const;
 
-interface Row {
-  /** Corridor row. */
-  r: number;
-  /** Running distance for texture coordinates. */
-  d: number;
-}
-
-interface Frame {
-  x: number;
-  y: number;
-  z: number;
-  rx: number;
-  rz: number;
-}
 
 const glslColor = (hex: string) => {
   const c = Color3.FromHexString(hex);
@@ -96,39 +77,10 @@ class AsphaltPlugin extends MaterialPluginBase {
   }
 }
 
-/** Stretches of rows to draw: everything except the second pass of out-and-back sections. */
-function drawnRuns(c: RouteCorridor): Row[][] {
-  const R = c.rows;
-  const cov = c.covered;
-  const rowLen = ROW_STRIDE * c.track.step;
-  const start = cov.indexOf(1);
-  if (start < 0) {
-    const all: Row[] = [];
-    for (let k = 0; k <= R; k++) all.push({ r: k % R, d: k * rowLen });
-    return [all];
-  }
-  const out: Row[][] = [];
-  let k = 0;
-  while (k < R) {
-    const r = (start + k) % R;
-    if (cov[r]) {
-      k++;
-      continue;
-    }
-    let len = 0;
-    while (len < R && !cov[(r + len) % R]) len++;
-    // one extra row at both ends closes the gap to the pass that is drawn instead
-    const rows: Row[] = [];
-    for (let q = -1; q <= len; q++) rows.push({ r: (r + q + R) % R, d: (start + k + q) * rowLen });
-    out.push(rows);
-    k += len;
-  }
-  return out;
-}
 
-function chunks(rows: Row[]): Row[][] {
-  const out: Row[][] = [];
-  for (let s = 0; s < rows.length - 1; s += CHUNK_ROWS) out.push(rows.slice(s, Math.min(rows.length, s + CHUNK_ROWS + 1)));
+function chunks(rows: Row[]): Array<{ start: number; rows: Row[] }> {
+  const out: Array<{ start: number; rows: Row[] }> = [];
+  for (let s = 0; s < rows.length - 1; s += CHUNK_ROWS) out.push({ start: s, rows: rows.slice(s, Math.min(rows.length, s + CHUNK_ROWS + 1)) });
   return out;
 }
 
@@ -152,29 +104,19 @@ export function buildRouteRibbon(
   const texRepeat = roadTextureRepeat(markings);
   const t = c.track;
   const field = c.field;
-  const n = t.count;
-  const frame = (r: number): Frame => {
-    const i = c.sampleOf(r);
-    // Cross direction from the heading averaged over ±FRAME_SMOOTH samples (tent weights): on a constant bend it
-    // equals the local heading, but where the map line kinks (a turn-off at a junction) the cross sections fan
-    // out over a few metres instead of folding the inner edge over itself (overlapping triangles flicker).
-    let sx = 0;
-    let sz = 0;
-    for (let k = -FRAME_SMOOTH; k <= FRAME_SMOOTH; k++) {
-      const h = t.headings[(((i + k) % n) + n) % n]!;
-      const wgt = FRAME_SMOOTH + 1 - Math.abs(k);
-      sx += Math.sin(h) * wgt;
-      sz += Math.cos(h) * wgt;
-    }
-    const h = Math.atan2(sx, sz);
-    return { x: t.xs[i]!, y: t.ys[i]!, z: t.zs[i]!, rx: Math.cos(h), rz: -Math.sin(h) };
-  };
-
+  // four asphalt looks: open road, town, open road without centre line (hairpins), and plain asphalt drawn
+  // on top where a later pass of the lap runs onto an earlier one (summit loops, roundabouts)
   const openMat = new StandardMaterial('road-open', scene);
   openMat.diffuseTexture = roadTexture(scene, false, markings);
   const townMat = new StandardMaterial('road-town', scene);
   townMat.diffuseTexture = roadTexture(scene, true);
-  for (const m of [openMat, townMat]) {
+  const bendMat = new StandardMaterial('road-bend', scene);
+  bendMat.diffuseTexture = roadTexture(scene, false, markings, 'edges');
+  const mergeMat = new StandardMaterial('road-merge', scene);
+  mergeMat.diffuseTexture = roadTexture(scene, false, markings, 'none');
+  mergeMat.zOffset = -1;
+  const roadMats = [openMat, townMat, bendMat, mergeMat];
+  for (const m of roadMats) {
     // across the road the texture ends at the shoulders; along the road it repeats (dynamic textures default to clamp)
     (m.diffuseTexture as Texture).wrapU = Texture.CLAMP_ADDRESSMODE;
     (m.diffuseTexture as Texture).wrapV = Texture.WRAP_ADDRESSMODE;
@@ -192,7 +134,7 @@ export function buildRouteRibbon(
   capMat.backFaceCulling = false; // the slab ends are open where a wall stops
   if (detail) {
     // fine asphalt grain and stone courses on top of the base textures (one tile per 1.5 m along the lap, 2 m for stone)
-    for (const m of [openMat, townMat]) applyDetail(m, scene, 'asphalt', [ROAD_DETAIL_ACROSS, texRepeat / 1.5], { diffuse: 0.45, bump: 0.5 });
+    for (const m of roadMats) applyDetail(m, scene, 'asphalt', [ROAD_DETAIL_ACROSS, texRepeat / 1.5], { diffuse: 0.45, bump: 0.5 });
     applyDetail(stoneMat, scene, 'drystone', [STONE_REPEAT / 2, STONE_REPEAT / 2], { diffuse: 0.6, bump: 1 });
     applyDetail(capMat, scene, 'drystone', [STONE_REPEAT / 2, STONE_REPEAT / 2], { diffuse: 0.6, bump: 1 });
   }
@@ -212,35 +154,30 @@ export function buildRouteRibbon(
   let chunkId = 0;
 
   for (const run of drawnRuns(c)) {
-    for (const rows of chunks(run)) {
+    const geo = runGeometry(c, run, noise);
+    for (const { start, rows } of chunks(run)) {
       const id = chunkId++;
-      const frames = rows.map((row) => frame(row.r));
+      const frames = rows.map((row) => c.frames[row.r]!);
+      // rows whose inner shoulder had to be pulled into a corner (no wall or rail there)
+      const pinched = (side: number, k: number) => geo.pinched[side]![start + k]! === 1;
 
-      // --- asphalt (open road / town) ---
-      const open = new MeshData(true);
-      const town = new MeshData(true);
-      const emitted = [new Map<number, number>(), new Map<number, number>()];
+      // --- asphalt ---
+      const mds = roadMats.map(() => new MeshData(true));
+      const emitted = roadMats.map(() => new Map<number, number>());
       const roadRow = (md: MeshData, k: number) => {
-        const f = frames[k]!;
-        const r = rows[k]!.r;
-        const hl = c.hw[0][r]!;
-        const hr = c.hw[1][r]!;
-        // shoulder, ROAD_SPLITS strips per half of the asphalt, shoulder: in bends the quads turn into trapezoids,
-        // and wide ones shear the lane markings along their diagonal; narrow strips keep the lines straight
         const base = md.vertexCount;
-        const put = (o: number, dy: number, u: number) => md.vertex(f.x + f.rx * o, f.y + dy, f.z + f.rz * o, 0, 1, 0, u, rows[k]!.d / texRepeat);
-        put(-(hl + SHOULDER), -0.05, 0);
-        for (let q = 0; q <= 2 * ROAD_SPLITS; q++) {
-          const t = q / ROAD_SPLITS - 1; // -1 left edge … 1 right edge
-          // rounded crown, 3.5 cm at the centre line
-          put(t < 0 ? t * hl : t * hr, 0.035 * (1 - t * t), 0.5 + t * 0.44);
+        const v = rows[k]!.d / texRepeat;
+        for (let q = 0; q < ROAD_COLS; q++) {
+          const lv = geo.road[q]!;
+          const kk = start + k;
+          md.vertex(lv.x[kk]!, lv.y[kk]!, lv.z[kk]!, 0, 1, 0, ROAD_U[q]!, v);
         }
-        put(hr + SHOULDER, -0.05, 1);
         return base;
       };
       for (let k = 0; k < rows.length - 1; k++) {
-        const which = c.urban[rows[k]!.r] ? 1 : 0;
-        const md = which ? town : open;
+        const r = rows[k]!.r;
+        const which = c.merged[r] ? 3 : c.urban[r] ? 1 : c.tight[r] ? 2 : 0;
+        const md = mds[which]!;
         const map = emitted[which]!;
         let a = map.get(k);
         if (a === undefined) map.set(k, (a = roadRow(md, k)));
@@ -248,12 +185,10 @@ export function buildRouteRibbon(
         if (b === undefined) map.set(k + 1, (b = roadRow(md, k + 1)));
         for (let q = 0; q < ROAD_COLS - 1; q++) md.stripQuad(a + q, a + q + 1, b + q, b + q + 1);
       }
-      for (const [md, mat, name] of [
-        [open, openMat, 'road'],
-        [town, townMat, 'road-town'],
-      ] as const) {
+      for (let w = 0; w < roadMats.length; w++) {
+        const md = mds[w]!;
         md.computeNormals();
-        const m = md.build(scene, `${name}-${id}`, mat);
+        const m = md.build(scene, `road-${w}-${id}`, roadMats[w]!);
         if (m) road.push(m);
       }
 
@@ -263,49 +198,18 @@ export function buildRouteRibbon(
       const rock: number[] = [];
       const cols = VERGE_COLS + 2;
       for (let side = 0; side < 2; side++) {
-        const sg = side === 0 ? -1 : 1;
         const bases: number[] = [];
+        const lv = geo.verge[side]!;
         for (let k = 0; k < rows.length; k++) {
-          const f = frames[k]!;
-          const r = rows[k]!.r;
-          const hw = c.hw[side]![r]!;
-          const edge0 = c.edge[side]![r]!;
-          const edge = edge0 === EDGE.lake ? EDGE.verge : edge0;
-          const o0 = hw + SHOULDER + (edge === EDGE.wall ? WALL_THICK : 0);
-          const ext = Math.max(o0 + 1, c.ext[side]![r]!);
-          const mid = c.mid[side]![r]!;
-          // [x, y, z, blend, rock]; rock marks the cut slopes (only real verges, not lake shores)
-          const verts: Array<[number, number, number, number, number]> = [];
-          let prevO = 0;
-          let prevY = 0;
-          for (let q = 0; q <= VERGE_COLS; q++) {
-            const o = o0 + (ext - o0) * Math.pow(q / VERGE_COLS, 1.4);
-            let x = f.x + sg * f.rx * o;
-            let z = f.z + sg * f.rz * o;
-            const sink = 0.15 * smoothstep(o0 + 2, ext, o);
-            const y = c.profile(r, side, o, field.dem(x, z), f.y, edge) - sink;
-            const w = Number.isNaN(mid) ? smoothstep(o0 + 1, o0 + VERGE_BLEND, o) : 0;
-            // cut weight: a few metres into a cutting, fading out where the verge blends into the terrain
-            const cut = edge0 === EDGE.verge
-              ? smoothstep(1.2, 3.5, y - f.y) * smoothstep(o0 + 2.5, o0 + 4, o) * (1 - smoothstep(o0 + 0.6 * VERGE_BLEND, o0 + VERGE_BLEND, o))
-              : 0;
-            const slope = q === 0 ? 0 : (y - prevY) / (o - prevO);
-            prevO = o;
-            prevY = y;
-            // rough cut face: push the point sideways (layered by height, so the bands run horizontally)
-            const d = cut * 0.45 * noise.fbm((x + z) * 0.12, y * 0.7, 3);
-            x += sg * f.rx * d;
-            z += sg * f.rz * d;
-            verts.push([x, y, z, w, cut * smoothstep(0.35, 0.8, slope)]);
-          }
-          const last = verts[verts.length - 1]!;
-          verts.push([last[0], last[1] - 3, last[2], 0, 0]);
-          if (side === 0) verts.reverse();
+          const kk = start + k;
           bases.push(verge.vertexCount);
-          for (const v of verts) {
-            verge.vertex(v[0], v[1], v[2]);
-            blend.push(v[3]);
-            rock.push(v[4]);
+          for (let qq = 0; qq < cols; qq++) {
+            // left side: outermost column first, so the strips face up on both sides
+            const q = side === 0 ? cols - 1 - qq : qq;
+            const l = lv[q]!;
+            verge.vertex(l.x[kk]!, l.y[kk]!, l.z[kk]!);
+            blend.push(geo.blend[side]![q]![kk]!);
+            rock.push(geo.rock[side]![q]![kk]!);
           }
         }
         for (let k = 0; k < rows.length - 1; k++) {
@@ -347,6 +251,7 @@ export function buildRouteRibbon(
         const sg = side === 0 ? -1 : 1;
         // profile points (lateral offset, height) per row, each consecutive pair is one face
         const profileOf = (k: number): Array<[number, number]> | null => {
+          if (pinched(side, k)) return null;
           const r = rows[k]!.r;
           const f = frames[k]!;
           const o = c.hw[side]![r]! + SHOULDER;
@@ -383,6 +288,7 @@ export function buildRouteRibbon(
         };
         // crown of a wall or parapet, if this row has one (P4.4)
         const crownOf = (k: number): number | null => {
+          if (pinched(side, k)) return null;
           const r = rows[k]!.r;
           const edge = c.edge[side]![r]!;
           if (edge === EDGE.wall) return frames[k]!.y + c.wallH[side]![r]!;
@@ -469,7 +375,7 @@ export function buildRouteRibbon(
           };
           if (pa && (k === 0 || profileOf(k - 1)?.length !== pa.length)) capEnd(k, pa, -1);
           if (pb && (k + 1 === rows.length - 1 || profileOf(k + 2)?.length !== pb.length)) capEnd(k + 1, pb, 1);
-          if (c.edge[side]![r] === EDGE.rail && c.edge[side]![rows[k + 1]!.r] === EDGE.rail) {
+          if (c.edge[side]![r] === EDGE.rail && c.edge[side]![rows[k + 1]!.r] === EDGE.rail && !pinched(side, k) && !pinched(side, k + 1)) {
             const fa = frames[k]!;
             const fb = frames[k + 1]!;
             const oa = c.hw[side]![r]! + SHOULDER + 0.3;
