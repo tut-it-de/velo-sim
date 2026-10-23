@@ -1,0 +1,37 @@
+{
+  "_comment": "Check points of the road geometry per route (lap distance m, optional lateral offset lat). probe.mjs renders them; see README.md.",
+  "lago-di-como": [
+    { "name": "ecke-0.62", "m": 620 },
+    { "name": "einmuendung-1.54", "m": 1540 },
+    { "name": "kehre-4.74", "m": 4740 },
+    { "name": "kehre-10.33", "m": 10330 },
+    { "name": "kehre-13.89", "m": 13890 },
+    { "name": "kehre-17.52", "m": 17520 },
+    { "name": "kreuzung-20.02", "m": 20020 }
+  ],
+  "feldberg-taunus": [
+    { "name": "einmuendung-2.37", "m": 2370 },
+    { "name": "sandplacken-8.12", "m": 8120 },
+    { "name": "gipfel-11.64", "m": 11640 },
+    { "name": "kehre-12.20", "m": 12200 },
+    { "name": "sandplacken-15.21", "m": 15210 },
+    { "name": "hohemark-23.38", "m": 23380 }
+  ],
+  "alpe-dhuez": [
+    { "name": "kehre-2.16", "m": 2160 },
+    { "name": "kehre-5.91", "m": 5910 },
+    { "name": "europe-13.54", "m": 13540 },
+    { "name": "resort-14.23", "m": 14230 },
+    { "name": "kehre-18.58", "m": 18580 },
+    { "name": "kehre-22.91", "m": 22910 },
+    { "name": "kehre-26.66", "m": 26660 },
+    { "name": "kreisel-28.90", "m": 28900 }
+  ],
+  "taunus-mammolshain": [
+    { "name": "ecke-0.53", "m": 530 },
+    { "name": "kreuzung-2.84", "m": 2840 },
+    { "name": "kreuzung-4.68", "m": 4680 },
+    { "name": "einmuendung-9.13", "m": 9130 },
+    { "name": "kehre-9.76", "m": 9760 }
+  ]
+}
