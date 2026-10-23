@@ -25,7 +25,7 @@ export function LoginPage() {
     try {
       if (mode === 'login') await login(email.trim(), password);
       else await register(email.trim(), name.trim(), password);
-      updateSettings({ rideOnline: true });
+      updateSettings({ rideOnline: true, guest: false });
       pageStore.set('ride');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -65,8 +65,8 @@ export function LoginPage() {
         </div>
         <h1>{register_ ? 'Konto erstellen' : 'Anmelden'}</h1>
         <p className="muted">
-          Zum Fahren brauchst du ein Konto. Einmal angemeldet, fährst du auch ohne Internet – Strava-Uploads holt die App nach, sobald du wieder
-          online bist.
+          Mit Konto folgen dir Fahrten, Garage und Watt-Taler auf jedes Gerät. Einmal angemeldet, fährst du auch ohne Internet – Strava-Uploads holt
+          die App nach, sobald du wieder online bist.
         </p>
         <form className="auth-form" onSubmit={submit}>
           <label>
@@ -101,6 +101,18 @@ export function LoginPage() {
             {register_ ? 'Anmelden' : 'Registrieren'}
           </button>
         </p>
+        <div className="auth-guest">
+          <button
+            type="button"
+            onClick={() => {
+              updateSettings({ guest: true });
+              pageStore.set('ride');
+            }}
+          >
+            Als Gast fortfahren
+          </button>
+          <span className="muted small">Ohne Konto bleiben Fahrten und Taler nur auf diesem Gerät.</span>
+        </div>
       </div>
     </div>
   );

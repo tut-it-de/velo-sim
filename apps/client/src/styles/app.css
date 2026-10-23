@@ -518,6 +518,24 @@ input[type='checkbox'] {
   padding: 0;
   font-size: inherit;
 }
+/* Without an account: rides, garage and Taler stay on the device */
+.auth-guest {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.auth-guest button {
+  padding: 10px;
+}
+.guest-chip {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  font-size: 14px;
+}
 
 .page {
   flex: 1;

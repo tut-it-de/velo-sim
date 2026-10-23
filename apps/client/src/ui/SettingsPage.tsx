@@ -19,6 +19,7 @@ import {
 } from '../ride/hudFields';
 import { settingsStore, updateSettings, type Settings } from '../state/settings';
 import { useStore } from '../state/store';
+import { pageStore } from '../state/ui';
 import { COUNTRIES, Flag } from './Flag';
 import { Toggle } from './components';
 
@@ -206,6 +207,18 @@ function AccountCard() {
     }
   };
 
+  if (!account.user) {
+    return (
+      <div className="card">
+        <h2>Konto</h2>
+        <p className="muted small">Du fährst als Gast: Fahrten, Garage und Watt-Taler bleiben nur auf diesem Gerät. Mit Konto folgen sie dir auf jedes Gerät.</p>
+        <button className="primary" onClick={() => pageStore.set('login')}>
+          Anmelden oder Konto erstellen
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="card">
       <h2>Konto</h2>
@@ -250,7 +263,7 @@ function StravaCard() {
         <span className="strava-mark">Strava</span>
       </h2>
       {!account.user ? (
-        <div className="muted small">Melde dich oben mit deinem Server-Konto an – der Strava-Upload läuft über den Server.</div>
+        <div className="muted small">Als Gast kannst du Strava noch nicht verbinden – der Upload läuft über dein Konto. Melde dich oben an.</div>
       ) : !strava.configured ? (
         <div className="muted small">
           Auf deinem Server ist Strava noch nicht eingerichtet (STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET und PUBLIC_URL setzen – siehe README).

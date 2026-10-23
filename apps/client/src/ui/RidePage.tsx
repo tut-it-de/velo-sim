@@ -212,7 +212,7 @@ function DeviceBar({ children }: { children: ReactNode }) {
 
 /**
  * Opens before a ride when the trainer or the heart rate strap is missing.
- * The trainer is required; a ride without a strap is possible.
+ * Without a strap, or without any device (the rider stands and can look around), the ride starts too.
  */
 function StartDevicesDialog({ onReady, onClose }: { onReady: () => void; onClose: () => void }) {
   const slots = useStore(deviceManager.slots);
@@ -258,7 +258,7 @@ function StartDevicesDialog({ onReady, onClose }: { onReady: () => void; onClose
     <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal start-devices" role="dialog" aria-label="Geräte verbinden">
         <h2>Geräte verbinden</h2>
-        <p className="muted small">Vor dem Start brauchst du deinen Trainer. Mit Pulsgurt siehst du auch deine Herzfrequenz.</p>
+        <p className="muted small">Zum Fahren brauchst du deinen Trainer. Mit Pulsgurt siehst du auch deine Herzfrequenz. Ohne Geräte kannst du dich auf der Strecke umsehen.</p>
         {row('trainer', 'Smart-Trainer', 'Pflicht – z. B. Wahoo KICKR')}
         <div className={`start-device${trainerOk ? ' ok' : ''}`}>
           <span className="device-icon">
@@ -275,9 +275,13 @@ function StartDevicesDialog({ onReady, onClose }: { onReady: () => void; onClose
         {row('hrm', 'Pulsgurt', 'Optional – Brustgurt oder Uhr')}
         <div className="row start-devices-actions">
           <button onClick={onClose}>Abbrechen</button>
-          <button className="primary" disabled={!trainerOk} onClick={onReady}>
-            {hrmOk ? 'Los geht’s' : 'Ohne Pulsgurt starten'}
-          </button>
+          {trainerOk ? (
+            <button className="primary" onClick={onReady}>
+              {hrmOk ? 'Los geht’s' : 'Ohne Pulsgurt starten'}
+            </button>
+          ) : (
+            <button onClick={onReady}>Ohne Geräte starten</button>
+          )}
         </div>
       </div>
     </div>

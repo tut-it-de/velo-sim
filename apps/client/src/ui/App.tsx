@@ -75,8 +75,8 @@ export function App() {
   const lvl = riderLevel(totalKm);
   const ridePage = page === 'ride' || page === 'workouts';
 
-  // An account is required. Once signed in, the app stays signed in and also works offline.
-  if (!account.user) {
+  // Without an account only as a guest. Once signed in, the app stays signed in and also works offline.
+  if (!account.user && !settings.guest) {
     return (
       <div className="app auth-gate">
         <LoginPage />
@@ -105,6 +105,11 @@ export function App() {
       <div className="main">
         <header className="topbar" hidden={immersive}>
           <div className="spacer" />
+          {!account.user && (
+            <button className="guest-chip" onClick={() => setPage('login')} title="Mit Konto bucht der Server die Taler, und deine Fahrten folgen dir auf jedes Gerät">
+              Gast · <strong>Anmelden</strong>
+            </button>
+          )}
           <button className="wallet-chip" onClick={() => setPage('garage')} title="Watt-Taler – zur Garage">
             <span className="coin" aria-hidden>W</span>
             <strong>{settings.adminMode ? '∞' : formatCoins(balance(garage))}</strong>

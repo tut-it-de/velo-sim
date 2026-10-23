@@ -27,6 +27,8 @@ export interface Settings {
   graphicsQuality: GraphicsQuality;
   /** Admin tools in the ride (teleport along the route). Rides with a teleport earn nothing. */
   adminMode: boolean;
+  /** Rides without an account: rides, garage and Taler stay on this device. */
+  guest: boolean;
   /** Last trainer and heart rate strap, found again automatically in the iPad app. */
   knownDevices: { trainer?: string; hrm?: string; cadence?: string; shifter?: string };
   /** Virtual shifting with the mouse while riding: left click heavier, right click lighter. */
@@ -53,6 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
   rideOnline: true,
   graphicsQuality: 'auto',
   adminMode: false,
+  guest: false,
   knownDevices: {},
   shiftMouse: false,
   shiftKeys: true,
