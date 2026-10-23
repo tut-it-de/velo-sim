@@ -22,5 +22,5 @@ export function corridorFromDisk(id: string): { data: WorldData; corridor: Route
   const data = loadWorldFromDisk(id);
   const field = new HeightField(data);
   const buildings = new BuildingIndex(data.buildings, data.parking);
-  return { data, corridor: new RouteCorridor(getTrack(id), field, buildings) };
+  return { data, corridor: new RouteCorridor(getTrack(id), field, buildings, data.roundabouts) };
 }

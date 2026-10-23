@@ -176,7 +176,8 @@ export function buildRouteRibbon(
       };
       for (let k = 0; k < rows.length - 1; k++) {
         const r = rows[k]!.r;
-        const which = c.merged[r] ? 3 : c.urban[r] ? 1 : c.tight[r] ? 2 : 0;
+        // ring rows lie under the roundabout mesh (roundabouts.ts); split lanes keep only their edge lines
+        const which = c.merged[r] || c.ring[r] ? 3 : c.twin[r] === 2 || c.tight[r] ? 2 : c.urban[r] ? 1 : 0;
         const md = mds[which]!;
         const map = emitted[which]!;
         let a = map.get(k);

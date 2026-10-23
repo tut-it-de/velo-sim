@@ -125,6 +125,7 @@ export async function buildRoadsideFlora(
     // out-and-back sections are already planted by their first pass
     if (corridor.covered[r]) continue;
     const i = corridor.sampleOf(r);
+    const frame = corridor.frames[r]!;
     const h = track.headings[i]!;
     // forward along the track and lateral (right) direction, as in the corridor analysis
     const fx = Math.sin(h);
@@ -151,9 +152,10 @@ export async function buildRoadsideFlora(
       for (let k = 0; k < n; k++) {
         const along = (rng() - 0.5) * rowLength;
         const o = o0 + rng() * (o1 - o0);
-        const x = track.xs[i]! + fx * along + sg * lx * o;
-        const z = track.zs[i]! + fz * along + sg * lz * o;
-        if (field.isWater(x, z) || buildings.blocked(x, z, 0.8)) continue;
+        // from the row's frame: split carriageways are drawn off the lap line
+        const x = frame.x + fx * along + sg * lx * o;
+        const z = frame.z + fz * along + sg * lz * o;
+        if (field.isWater(x, z) || buildings.blocked(x, z, 0.8) || corridor.ringGap(x, z) < 0.3) continue;
         const y = corridor.surface(x, z);
         const forest = field.classAt(x, z) === LAND_CLASS.forest;
         const cell = cellOf(forest);

@@ -138,7 +138,8 @@ export async function buildRoadsideProps(
     const rz = -Math.sin(h);
     const dh = wrapAngle(track.headings[(i + CURVE_HALF) % n]! - track.headings[(i - CURVE_HALF + n) % n]!);
     const radius = CURVE_ARC / Math.max(Math.abs(dh), 1e-3);
-    const eligible = !corridor.urban[r] && !corridor.covered[r];
+    // none on roundabouts and split carriageways (their road edge is not where the lap line says)
+    const eligible = !corridor.urban[r] && !corridor.covered[r] && !corridor.ring[r] && !corridor.twin[r];
     const postGap = radius < BEND_RADIUS ? POST_SPACING_BEND : POST_SPACING;
 
     for (let side = 0; side < 2; side++) {

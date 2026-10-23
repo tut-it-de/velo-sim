@@ -2,7 +2,7 @@ import type { Track } from '@velo/routes';
 import { smoothstep } from '../noise';
 import { routeDistanceField } from './ground';
 import { cellKey, type BuildingIndex, type HeightField } from './heightField';
-import { LAND_CLASS } from './worldData';
+import { LAND_CLASS, type Roundabout } from './worldData';
 
 /** Gravel/curb strip next to the asphalt. */
 export const SHOULDER = 0.5;
@@ -28,6 +28,13 @@ const FRAME_SMOOTH = 4;
 export const TIGHT_RADIUS = 14;
 /** Another pass of the lap farther along than this (m) that overlaps the asphalt is a merge, not a fold. */
 const MERGE_GAP = 60;
+/** Passes in opposite directions closer than this (m) are the two lanes of one road. */
+const SHARED_DIST = 2.2;
+/**
+ * One-way carriageways of an out-and-back road (split around a traffic island before a roundabout):
+ * the other direction's carriageway is at most this far (m) and the split starts on a shared stretch.
+ */
+const TWIN_REACH = 14;
 
 /** Centre point and cross direction (right of travel) of a ribbon row. */
 export interface Frame {
@@ -69,6 +76,13 @@ export class RouteCorridor {
   readonly covered: Uint8Array;
   /** Rows whose asphalt overlaps an earlier, drawn pass (summit loops, roundabouts, double-passed junctions). */
   readonly merged: Uint8Array;
+  /**
+   * Rows on a one-way carriageway next to the other direction's (split out-and-back road): 1 while the two
+   * still form one two-way road (drawn once, on their middle line), 2 where they run apart (one lane each).
+   */
+  readonly twin: Uint8Array;
+  /** Index + 1 of the roundabout whose ring this row runs on (0 = none). */
+  readonly ring: Uint8Array;
   /** Rows in bends tighter than TIGHT_RADIUS. */
   readonly tight: Uint8Array;
   /** Signed turn radius of the ribbon frames per row (> 0 turns right, Infinity = straight). */
@@ -81,6 +95,7 @@ export class RouteCorridor {
     readonly track: Track,
     readonly field: HeightField,
     buildings: BuildingIndex,
+    readonly roundabouts: Roundabout[] = [],
   ) {
     for (let i = 0; i < track.count; i++) {
       const key = cellKey(Math.floor(track.xs[i]! / this.cell), Math.floor(track.zs[i]! / this.cell));
@@ -98,6 +113,8 @@ export class RouteCorridor {
     this.urban = new Uint8Array(rows);
     this.covered = new Uint8Array(rows);
     this.merged = new Uint8Array(rows);
+    this.twin = new Uint8Array(rows);
+    this.ring = new Uint8Array(rows);
     this.tight = new Uint8Array(rows);
     this.radius = new Float32Array(rows);
     this.frames = [];
@@ -284,6 +301,17 @@ export class RouteCorridor {
     return routeDistanceField(this.field.near, this.track).dist;
   }
 
+  /** Distance (m) outside the nearest roundabout carriageway (negative on it); Infinity with none within 40 m. */
+  ringGap(x: number, z: number): number {
+    let best = Infinity;
+    for (const rb of this.roundabouts) {
+      const d = Math.hypot(x - rb.x, z - rb.z);
+      if (d > rb.r + rb.hw + 40) continue;
+      best = Math.min(best, Math.abs(d - rb.r) - rb.hw);
+    }
+    return best;
+  }
+
   /** Distance to the lap from the nearest near-grid vertex (Infinity outside the near raster). */
   routeDistance(x: number, z: number): number {
     const g = this.field.near;
@@ -338,19 +366,25 @@ export class RouteCorridor {
     cleanRuns(this.urban, 25);
 
     // 3) rows that repeat an earlier pass (same road, other direction)
-    for (let r = 0; r < rows; r++) {
-      const i = this.sampleOf(r);
-      const hit = this.nearest(t.xs[i]!, t.zs[i]!, 2.2, (j) => this.lapGap(i, j) > 150);
-      if (hit && hit.i < i) this.covered[r] = 1;
-    }
+    this.findPasses();
     // rows whose asphalt runs onto an earlier pass where the two diverge: drawn on top without markings
     for (let r = 0; r < rows; r++) {
-      if (this.covered[r]) continue;
+      if (this.covered[r] || this.twin[r]) continue;
       const i = this.sampleOf(r);
       const reach = this.hw[0]![r]! + this.hw[1]![r]! + 2 * SHOULDER;
       const hit = this.nearest(t.xs[i]!, t.zs[i]!, reach, (j) => this.lapGap(i, j) > MERGE_GAP && j < i && !this.covered[Math.round(j / ROW_STRIDE) % rows]);
       if (hit && Math.abs(t.ys[i]! - hit.y) < 1.5) this.merged[r] = 1;
     }
+    // rows on a roundabout's ring: the ring is drawn on its own (roundabouts.ts), the ribbon below it plain
+    this.roundabouts.forEach((rb, k) => {
+      for (let r = 0; r < rows; r++) {
+        const f = this.frames[r]!;
+        if (Math.abs(Math.hypot(f.x - rb.x, f.z - rb.z) - rb.r) < 0.8 * rb.hw) {
+          this.ring[r] = k + 1;
+          this.merged[r] = 0;
+        }
+      }
+    });
     // turn radius of the frames over ±2 rows
     for (let r = 0; r < rows; r++) {
       const a = this.frames[(r - 2 + rows) % rows]!;
@@ -446,6 +480,84 @@ export class RouteCorridor {
       const smooth = windowed(h, 3, (a, b) => a + b, 0);
       for (let r = 0; r < rows; r++) {
         if (this.edge[side]![r] === EDGE.wall) h[r] = Math.max(1, smooth[r]! / 7);
+      }
+    }
+    // the inside of a ring is the roundabout's island: a flat verge under it, no walls or rails
+    for (let r = 0; r < rows; r++) {
+      const k = this.ring[r]!;
+      if (!k) continue;
+      const rb = this.roundabouts[k - 1]!;
+      const f = this.frames[r]!;
+      const inner = (rb.x - f.x) * f.rx + (rb.z - f.z) * f.rz > 0 ? 1 : 0;
+      this.edge[inner]![r] = EDGE.verge;
+      this.ext[inner]![r] = this.hw[inner]![r]! + SHOULDER + 1;
+      this.mid[inner]![r] = f.y - 0.3;
+    }
+  }
+
+  /**
+   * Other passes of the same road: rows that repeat an earlier pass (out-and-back, either direction) are
+   * covered, and one-way carriageways split around a traffic island (twin) are drawn as one two-way road
+   * while they run side by side, as one lane each where they part.
+   */
+  private findPasses(): void {
+    const t = this.track;
+    const rows = this.rows;
+    const opposite = (i: number, j: number) => Math.cos(t.headings[i]! - t.headings[j]!) < -0.5;
+    const dist = new Float32Array(rows).fill(Infinity);
+    const partner = new Int32Array(rows).fill(-1);
+    const side = new Int8Array(rows);
+    const cos = new Float32Array(rows);
+    for (let r = 0; r < rows; r++) {
+      const i = this.sampleOf(r);
+      const x = t.xs[i]!;
+      const z = t.zs[i]!;
+      // same road ridden again in the same direction far along the lap (Lake Como's junction)
+      const same = this.nearest(x, z, SHARED_DIST, (j) => this.lapGap(i, j) > 150);
+      if (same && same.i < i) this.covered[r] = 1;
+      // the other direction: anywhere but the next metres of a hairpin
+      const opp = this.nearest(x, z, TWIN_REACH, (j) => this.lapGap(i, j) > 40 && opposite(i, j));
+      if (!opp) continue;
+      const f = this.frames[r]!;
+      const o = (t.xs[opp.i]! - x) * f.rx + (t.zs[opp.i]! - z) * f.rz;
+      dist[r] = Math.abs(opp.offset);
+      partner[r] = opp.i;
+      cos[r] = Math.cos(t.headings[i]! - t.headings[opp.i]!);
+      side[r] = o < 0 ? -1 : 1;
+      if (dist[r]! < SHARED_DIST && opp.i < i) this.covered[r] = 1;
+    }
+    // twin rows: runs of rows near the other direction, nearly parallel to it, that start or end on a shared
+    // stretch (hairpin legs and other roads close by never touch one, streets parting at a junction are not parallel)
+    const cand = (r: number) => dist[r]! >= SHARED_DIST && dist[r]! <= TWIN_REACH && cos[r]! < -0.8;
+    const shared = (r: number) => dist[(r + rows) % rows]! < SHARED_DIST;
+    for (let r = 0; r < rows; r++) {
+      if (!cand(r) || cand((r - 1 + rows) % rows)) continue;
+      let len = 0;
+      while (len < rows && cand((r + len) % rows)) len++;
+      if (!shared(r - 1) && !shared(r + len)) continue;
+      for (let q = 0; q < len; q++) this.twin[(r + q) % rows] = 1;
+    }
+    for (let r = 0; r < rows; r++) {
+      if (!this.twin[r]) continue;
+      // both carriageways must be twins of each other
+      const pr = Math.round(partner[r]! / ROW_STRIDE) % rows;
+      if (!this.twin[pr] && !this.twin[(pr + 1) % rows] && !this.twin[(pr - 1 + rows) % rows]) {
+        this.twin[r] = 0;
+        continue;
+      }
+      const w = this.hw[0]![r]! + this.hw[1]![r]!;
+      const d = dist[r]!;
+      if (d < w / 2) {
+        // still one road: drawn once on the middle line between the carriageways, by the earlier pass
+        const f = this.frames[r]!;
+        f.x += f.rx * side[r]! * d / 2;
+        f.z += f.rz * side[r]! * d / 2;
+        if (partner[r]! < this.sampleOf(r)) this.covered[r] = 1;
+      } else {
+        // apart: one lane each, the island between them
+        this.twin[r] = 2;
+        this.hw[0]![r] = w / 4;
+        this.hw[1]![r] = w / 4;
       }
     }
   }

@@ -305,8 +305,10 @@ export async function buildVegetation(
     // The crown width is approximated by the species' crownWidth (the impostor aspect is only known after the bake).
     const aspect = SPECIES[species]!.crownWidth;
     const hit = corridor.nearest(x, z, 16);
-    if (hit) {
-      const gap = Math.abs(hit.offset) - corridor.hw[hit.offset >= 0 ? 1 : 0][hit.row]! - SHOULDER;
+    // roundabout rings count as road too (they also run where the lap does not)
+    const ring = corridor.ringGap(x, z) - SHOULDER;
+    if (hit || ring < 16) {
+      const gap = Math.min(hit ? Math.abs(hit.offset) - corridor.hw[hit.offset >= 0 ? 1 : 0][hit.row]! - SHOULDER : Infinity, ring);
       if (gap < 1.6) return;
       const fit = gap / (CROWN_FILL * aspect * 0.5);
       if (fit < height) {

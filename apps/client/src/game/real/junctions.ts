@@ -8,6 +8,7 @@ import { smoothstep } from '../noise';
 import { ROW_STRIDE, SHOULDER, VERGE_OUT, type RouteCorridor, type RouteHit } from './corridor';
 import { triSample } from './heightField';
 import { junctionOutline, selfIntersects, subdivide, triangulate, type Arm, type Vec2 } from './roadGeometry';
+import { ringCut } from './roundaboutPlan';
 import { ROAD_JOIN, type SideRoad, type WorldGrid } from './worldData';
 
 /** Side roads float this far above the ground they are draped on. */
@@ -220,6 +221,16 @@ export function planJunctions(roads: SideRoad[], c: RouteCorridor): JunctionPlan
   const groups: Pending[] = [];
   roads.forEach((road, ri) => {
     for (const end of [0, 1] as const) {
+      // ends on a roundabout stop at its outer edge (the ring is drawn by roundabouts.ts)
+      const ring = ringCut(c, road, end);
+      if (ring) {
+        const cs = crossSection(road, end, ring.cut, lengths[ri]!);
+        cuts[ri * 2 + end] = ring.cut;
+        tans[ri * 4 + end * 2] = cs.tx;
+        tans[ri * 4 + end * 2 + 1] = cs.tz;
+        mouthed[ri] = 1;
+        continue;
+      }
       if (!(road.joins & (end === 0 ? ROAD_JOIN.lapStart : ROAD_JOIN.lapEnd))) continue;
       const len = lengths[ri]!;
       if (len < 2) continue;
@@ -320,6 +331,7 @@ export function planJunctions(roads: SideRoad[], c: RouteCorridor): JunctionPlan
     const [x, z] = alongPolyline(roads[first.road]!.pts, first.end, 0);
     // close to the ride's road the mouths take over
     if (c.nearest(x, z, 12)) continue;
+    if (list.some((e) => cuts[e.road * 2 + e.end]! > 0)) continue;
     const arms = list
       .map((e) => {
         const road = roads[e.road]!;
