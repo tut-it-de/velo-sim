@@ -4,7 +4,7 @@ import { LEVELS, SOURCE_LABEL, type FtpAdvice, type WorkoutRating } from '../ftp
 import { addWorkoutFeedback, currentAdvice, currentEstimate, dismissAdvice, ftpStore, setFtp, skipLevelQuestion } from '../ftp/ftpStore';
 import { activitiesStore } from '../state/activities';
 import { pageStore } from '../state/ui';
-import { settingsStore } from '../state/settings';
+import { settingsStore, updateSettings } from '../state/settings';
 import { useStore } from '../state/store';
 import type { WorkoutCategory } from '@velo/workouts';
 import { fmt } from './components';
@@ -15,6 +15,7 @@ const CONF_LABEL: Record<FtpEstimate['confidence'], string> = { niedrig: 'grobe 
 /** "How fit are you?" – the first FTP until rides or a test give a real one. */
 export function FtpSetupDialog({ onDone, onClose, reason }: { onDone: () => void; onClose: () => void; reason?: string }) {
   const { weightKg } = useStore(settingsStore);
+  const [weight, setWeight] = useState(String(weightKg));
   const [own, setOwn] = useState('');
   const ownW = Number(own);
   return (
@@ -25,13 +26,30 @@ export function FtpSetupDialog({ onDone, onClose, reason }: { onDone: () => void
           {reason ?? 'Workouts richten sich nach deiner FTP – der Leistung, die du etwa eine Stunde halten kannst.'} Wähl eine grobe Stufe. Nach ein
           paar Fahrten schätzt Velo Sim deine FTP selbst und passt sie an.
         </p>
+        <div className="row ftp-own">
+          <label className="muted small">Dein Gewicht:</label>
+          <input
+            type="number"
+            min={35}
+            max={160}
+            step={0.5}
+            value={weight}
+            onChange={(e) => {
+              setWeight(e.target.value);
+              const v = Number(e.target.value);
+              if (v >= 35 && v <= 160) updateSettings({ weightKg: v });
+            }}
+            style={{ width: 90 }}
+          />
+          <span className="muted small">kg</span>
+        </div>
         <div className="ftp-levels">
           {LEVELS.map((l) => (
             <button
               key={l.id}
               className="ftp-level"
               onClick={() => {
-                setFtp(l.wkg * weightKg, 'provisional', `Selbsteinschätzung „${l.label}“ (${l.wkg.toFixed(1)} W/kg)`);
+                setFtp(l.wkg * weightKg, 'provisional', `Selbsteinschätzung „${l.label}“ (${l.wkg.toFixed(1)} W/kg)`, l.wkg);
                 onDone();
               }}
             >
@@ -251,6 +269,7 @@ export function FtpCard() {
       </div>
       <div className="muted small">
         {ftp > 0 && state.since ? `seit ${dateDe(state.since)}${state.note ? ` · ${state.note}` : ''}` : 'Grundlage für alle Workouts. Wird nach ein paar Fahrten automatisch geschätzt.'}
+        {state.source === 'provisional' && ' · passt sich deinem Gewicht an'}
       </div>
 
       {advice && advice.kind !== 'auto' && <FtpAdviceCard advice={advice} />}

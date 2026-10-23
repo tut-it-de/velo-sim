@@ -48,14 +48,31 @@ export function hasFtp(): boolean {
   return settingsStore.get().ftp > 0;
 }
 
-export function setFtp(ftp: number, source: FtpSource, note?: string): void {
+export function setFtp(ftp: number, source: FtpSource, note?: string, wkg?: number): void {
   const value = Math.round(ftp);
   const now = Date.now();
   updateSettings({ ftp: value });
   const s = ftpStore.get();
   const history = [...s.history, { ftp: value, source, at: now, note }].slice(-HISTORY_MAX);
-  patch({ source: value > 0 ? source : 'unknown', since: now, note, history, levelAsked: true, dismissedAt: undefined, dismissedFtp: undefined, suggestedAt: now });
+  patch({ source: value > 0 ? source : 'unknown', since: now, note, wkg: source === 'provisional' ? wkg : undefined, history, levelAsked: true, dismissedAt: undefined, dismissedFtp: undefined, suggestedAt: now });
 }
+
+// A self-assessed FTP is a W/kg level: when the weight changes, the watts follow (tests and estimates stay).
+let lastWeight = settingsStore.get().weightKg;
+settingsStore.subscribe(() => {
+  const { weightKg, ftp } = settingsStore.get();
+  if (weightKg === lastWeight) return;
+  const prevWeight = lastWeight;
+  lastWeight = weightKg;
+  const s = ftpStore.get();
+  if (s.source !== 'provisional' || ftp <= 0) return;
+  const wkg = s.wkg ?? ftp / prevWeight;
+  const next = Math.round(wkg * weightKg);
+  if (next === ftp) return;
+  updateSettings({ ftp: next });
+  const history = s.history.map((h, i) => (i === s.history.length - 1 && h.source === 'provisional' ? { ...h, ftp: next } : h));
+  patch({ wkg, history });
+});
 
 /** The rider skipped the first question – ask again only from the workout list. */
 export function skipLevelQuestion(): void {

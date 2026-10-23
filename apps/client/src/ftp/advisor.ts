@@ -37,6 +37,8 @@ export interface FtpState {
   /** When the current FTP was set. */
   since: number;
   note?: string;
+  /** W/kg of the self-assessed level – a provisional FTP follows weight changes. */
+  wkg?: number;
   history: FtpEntry[];
   /** The "how fit are you?" question was answered or skipped. */
   levelAsked: boolean;
