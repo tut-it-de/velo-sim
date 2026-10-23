@@ -11,7 +11,7 @@ import {
   Vector3,
 } from '@babylonjs/core';
 import { getTrack, type RouteStyle, type Track } from '@velo/routes';
-import { buildGate, buildProps, buildSegmentGates, skyDome } from './props';
+import { buildProps, buildRaceGates, skyDome } from './props';
 import { RiderAvatar, type RiderLook } from './rider';
 import { buildRoadMesh } from './road';
 import { TerrainModel, buildTerrainMesh } from './terrain';
@@ -102,8 +102,9 @@ export class GameWorld {
       onProgress?.('Fantasy-Welt wird gebaut …');
       await nextFrame();
       await buildFantasy(world.scene, track, fantasy);
-      buildGate(world.scene, track, 0, 'START · ZIEL', '#ff7a1a');
-      buildSegmentGates(world.scene, track, track.segments);
+      // legs just inside each theme's road edge (kerbs, lava banks, snow walls)
+      const half = { rainbow: 5.0, lava: 4.1, meadow: 4.6, snow: 4.0 }[fantasy];
+      await buildRaceGates(world.scene, track, { legs: () => [half, half] });
     } else await world.buildClassic(onProgress);
     await nextFrame();
     await world.scene.whenReadyAsync();
@@ -185,8 +186,7 @@ export class GameWorld {
       ground.isPickable = false;
     }
     buildProps(scene, model);
-    buildGate(scene, track, 0, 'START · ZIEL', '#ff7a1a');
-    buildSegmentGates(scene, track, track.segments);
+    await buildRaceGates(scene, track, { legs: () => [4.6, 4.6], ground: (x, z) => model.heightAt(x, z) });
     onProgress?.('Shader werden kompiliert …');
   }
 

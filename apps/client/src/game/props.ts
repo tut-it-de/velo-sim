@@ -7,12 +7,13 @@ import {
   MeshBuilder,
   Quaternion,
   StandardMaterial,
+  Texture,
   Vector3,
-  Vector4,
   VertexBuffer,
   type Scene,
 } from '@babylonjs/core';
-import type { RouteSegment, Track } from '@velo/routes';
+import type { Track } from '@velo/routes';
+import { layoutBanner, planGates, type BannerLayout, type GateSpec, type Measure } from './gatePlan';
 import { createRng } from './noise';
 import type { TerrainModel } from './terrain';
 
@@ -204,65 +205,209 @@ function buildVillages(scene: Scene, model: TerrainModel, rng: () => number): Me
   return [m];
 }
 
-function bannerTexture(scene: Scene, text: string, bg: string, fg = '#ffffff'): DynamicTexture {
-  const tex = new DynamicTexture(`banner-${text}`, { width: 1024, height: 128 }, scene, true);
+/** Where the arch legs stand: lateral offsets of the left and right leg and the ground under them. */
+export interface GateSite {
+  legs(d: number): [number, number];
+  /** Ground height; road height when missing. */
+  ground?(x: number, z: number): number;
+}
+
+const TUBE_R = 0.42;
+const CORNER_R = 1.0;
+/** Height of the tube centre above the road. */
+const ARCH_H = 6.9;
+const BANNER_DEPTH = 0.34;
+const PX_PER_M = 150;
+const TITLE_FONT = '"Barlow Condensed", "Arial Narrow", system-ui, sans-serif';
+
+function fontOf(font: 'title' | 'kicker', px: number): string {
+  return font === 'title' ? `italic 700 ${px}px ${TITLE_FONT}` : `600 ${px}px ${TITLE_FONT}`;
+}
+
+let measureCtx: CanvasRenderingContext2D | null = null;
+const measure: Measure = (text, font, px) => {
+  measureCtx ??= document.createElement('canvas').getContext('2d')!;
+  measureCtx.font = fontOf(font, px);
+  if (font === 'kicker') (measureCtx as { letterSpacing?: string }).letterSpacing = `${px * 0.12}px`;
+  else (measureCtx as { letterSpacing?: string }).letterSpacing = '0px';
+  return measureCtx.measureText(text).width;
+};
+
+/** Wait (briefly) for the banner font so the layout measures the real glyphs. */
+async function bannerFontReady(): Promise<void> {
+  if (typeof document === 'undefined' || !document.fonts?.load) return;
+  const timeout = new Promise<void>((resolve) => setTimeout(resolve, 2000));
+  await Promise.race([Promise.all([document.fonts.load(fontOf('title', 64)), document.fonts.load(fontOf('kicker', 64))]).then(() => undefined), timeout]).catch(() => undefined);
+}
+
+function bannerTexture(scene: Scene, layout: BannerLayout, widthM: number, color: string): DynamicTexture {
+  const w = Math.min(2048, Math.max(512, Math.round(widthM * PX_PER_M)));
+  const px = w / widthM;
+  const h = Math.round(layout.heightM * px);
+  const tex = new DynamicTexture(`banner-${layout.lines.join(' ')}`, { width: w, height: h }, scene, true, Texture.TRILINEAR_SAMPLINGMODE);
+  tex.anisotropicFilteringLevel = 8;
+  tex.wrapU = Texture.CLAMP_ADDRESSMODE;
+  tex.wrapV = Texture.CLAMP_ADDRESSMODE;
   const ctx = tex.getContext() as CanvasRenderingContext2D;
+  const bg = ctx.createLinearGradient(0, 0, 0, h);
+  bg.addColorStop(0, '#272b33');
+  bg.addColorStop(1, '#14161b');
   ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, 1024, 128);
-  ctx.fillStyle = fg;
-  ctx.font = 'bold 76px system-ui, sans-serif';
+  ctx.fillRect(0, 0, w, h);
+  // segment colour as a bar along the bottom edge and thin side caps
+  const bar = Math.round(0.13 * px);
+  ctx.fillStyle = color;
+  ctx.fillRect(0, h - bar, w, bar);
+  ctx.fillRect(0, 0, Math.round(0.08 * px), h);
+  ctx.fillRect(w - Math.round(0.08 * px), 0, Math.round(0.08 * px), h);
+
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, 512, 68);
-  tex.update();
+  ctx.textBaseline = 'alphabetic';
+  const spacing = ctx as { letterSpacing?: string };
+  const kickerPx = layout.kickerM * px;
+  const titlePx = layout.titleM * px;
+  // vertical rhythm: kicker cap height, gap, title lines; centred in the space above the bar
+  const capK = kickerPx * 0.7;
+  const capT = titlePx * 0.7;
+  const lineGap = titlePx * 0.22;
+  const gap = layout.kicker ? kickerPx * 0.55 : 0;
+  const block = (layout.kicker ? capK + gap : 0) + layout.lines.length * capT + (layout.lines.length - 1) * lineGap;
+  let y = (h - bar - block) / 2;
+  if (layout.kicker) {
+    y += capK;
+    ctx.font = fontOf('kicker', kickerPx);
+    spacing.letterSpacing = `${kickerPx * 0.12}px`;
+    ctx.fillStyle = Color3.Lerp(Color3.FromHexString(color), Color3.White(), 0.45).toHexString();
+    ctx.fillText(layout.kicker, w / 2, y);
+    y += gap;
+  }
+  ctx.font = fontOf('title', titlePx);
+  spacing.letterSpacing = '0px';
+  ctx.fillStyle = '#ffffff';
+  for (const line of layout.lines) {
+    y += capT;
+    ctx.fillText(line, w / 2, y);
+    y += lineGap;
+  }
+  tex.update(true);
   return tex;
 }
 
-/** An arch across the road with a text banner (start/finish, segment start/end). */
-export function buildGate(scene: Scene, track: Track, distanceM: number, text: string, color: string): Mesh {
-  const s = track.sample(distanceM);
-  const half = 6.2;
-  const height = 6.5;
-  const pillarMat = new StandardMaterial(`gate-pillar-${text}`, scene);
-  pillarMat.diffuseColor = Color3.FromHexString(color).scale(0.7);
-  pillarMat.specularColor = Color3.Black();
-  const parts: Mesh[] = [];
-  for (const side of [-1, 1]) {
-    const p = MeshBuilder.CreateBox('pillar', { width: 0.5, height, depth: 0.5 }, scene);
-    p.position.set(side * half, height / 2, 0);
-    p.material = pillarMat;
-    parts.push(p);
-  }
-  // back side mirrored in u so the text reads correctly from both directions
-  const banner = MeshBuilder.CreatePlane(
-    'banner',
-    { width: half * 2 + 0.5, height: 1.4, sideOrientation: Mesh.DOUBLESIDE, frontUVs: new Vector4(0, 0, 1, 1), backUVs: new Vector4(1, 0, 0, 1) },
-    scene,
-  );
-  banner.position.set(0, height - 0.4, 0);
-  const bm = new StandardMaterial(`gate-banner-${text}`, scene);
-  bm.diffuseTexture = bannerTexture(scene, text, color);
-  bm.emissiveColor = new Color3(0.35, 0.35, 0.35);
-  bm.specularColor = Color3.Black();
-  banner.material = bm;
-  parts.push(banner);
+interface GateMaterials {
+  dark: StandardMaterial;
+  ballast: StandardMaterial;
+  tube: Map<string, StandardMaterial>;
+}
 
-  const root = new Mesh(`gate-${text}`, scene);
-  for (const p of parts) p.parent = root;
+function tubeMaterial(scene: Scene, mats: GateMaterials, color: string): StandardMaterial {
+  let m = mats.tube.get(color);
+  if (!m) {
+    m = new StandardMaterial(`gate-tube-${color}`, scene);
+    m.diffuseColor = Color3.FromHexString(color);
+    // inflated nylon: soft broad sheen
+    m.specularColor = new Color3(0.32, 0.32, 0.32);
+    m.specularPower = 18;
+    m.emissiveColor = Color3.FromHexString(color).scale(0.2);
+    mats.tube.set(color, m);
+  }
+  return m;
+}
+
+/** An inflatable arch across the road with a banner readable from both directions. */
+function buildArch(scene: Scene, track: Track, gate: GateSpec, site: GateSite | undefined, mats: GateMaterials): Mesh {
+  const s = track.sample(gate.d);
+  const [left, right] = site?.legs(gate.d) ?? [4.6, 4.6];
+  const groundAt = (lateral: number) => {
+    if (!site?.ground) return 0;
+    const g = site.ground(s.x + s.rightX * lateral, s.z + s.rightZ * lateral) - s.y;
+    return Math.min(1.5, Math.max(-4, g));
+  };
+  const gl = groundAt(-left);
+  const gr = groundAt(right);
+  const xl = -left;
+  const xr = right;
+  const top = Math.max(0, gl, gr) + ARCH_H;
+
+  const path: Vector3[] = [];
+  path.push(new Vector3(xl, gl - 0.25, 0), new Vector3(xl, top - CORNER_R, 0));
+  const arc = (cx: number, from: number, to: number) => {
+    for (let k = 1; k <= 7; k++) {
+      const a = from + ((to - from) * k) / 7;
+      path.push(new Vector3(cx + Math.cos(a) * CORNER_R, top - CORNER_R + Math.sin(a) * CORNER_R, 0));
+    }
+  };
+  arc(xl + CORNER_R, Math.PI, Math.PI / 2);
+  path.push(new Vector3(xr - CORNER_R, top, 0));
+  arc(xr - CORNER_R, Math.PI / 2, 0);
+  path.push(new Vector3(xr, gr - 0.25, 0));
+  const parts: Mesh[] = [];
+  const tube = MeshBuilder.CreateTube('gate-tube', { path, radius: TUBE_R, tessellation: 16, cap: Mesh.CAP_ALL }, scene);
+  tube.material = tubeMaterial(scene, mats, gate.color);
+  parts.push(tube);
+
+  // ballast blocks holding the legs down, sunk a little into the ground
+  for (const [x, g] of [
+    [xl, gl],
+    [xr, gr],
+  ] as const) {
+    const b = MeshBuilder.CreateBox('gate-ballast', { width: 1.1, height: 0.75, depth: 1.25 }, scene);
+    b.position.set(x, g + 0.08, 0);
+    b.material = mats.ballast;
+    parts.push(b);
+  }
+
+  // banner panel hung between the legs, tucked under the top tube
+  const bw = xr - xl - 2 * TUBE_R + 0.1;
+  const layout = layoutBanner(measure, gate.kicker, gate.title, bw);
+  const bh = layout.heightM;
+  const cy = top - TUBE_R * 0.75 - bh / 2;
+  const cx = (xl + xr) / 2;
+  const panel = MeshBuilder.CreateBox('gate-panel', { width: bw, height: bh, depth: BANNER_DEPTH }, scene);
+  panel.position.set(cx, cy, 0);
+  panel.material = mats.dark;
+  parts.push(panel);
+  const bm = new StandardMaterial(`gate-banner-${gate.d}`, scene);
+  const tex = bannerTexture(scene, layout, bw, gate.color);
+  bm.diffuseColor = Color3.Black();
+  bm.specularColor = Color3.Black();
+  bm.emissiveTexture = tex;
+  bm.disableLighting = true;
+  // pulled forward in depth: with a 16-bit depth buffer (some iPads) the face would flicker against the panel
+  bm.zOffset = -2;
+  for (const side of [-1, 1]) {
+    // the plane faces −z; the back one is turned round so its text reads correctly from behind
+    const face = MeshBuilder.CreatePlane('gate-banner', { width: bw - 0.02, height: bh - 0.02 }, scene);
+    face.position.set(cx, cy, side * (BANNER_DEPTH / 2 + 0.04));
+    if (side > 0) face.rotation.y = Math.PI;
+    face.material = bm;
+    parts.push(face);
+  }
+
+  const root = new Mesh(`gate-${gate.d}`, scene);
+  for (const p of parts) {
+    p.parent = root;
+    p.isPickable = false;
+  }
   root.position.set(s.x, s.y, s.z);
   root.rotation.y = s.heading;
   return root;
 }
 
-export function buildSegmentGates(scene: Scene, track: Track, segments: RouteSegment[]): Mesh[] {
-  const colors: Record<RouteSegment['type'], string> = { climb: '#c62828', sprint: '#2e7d32', descent: '#1565c0' };
-  const label: Record<RouteSegment['type'], string> = { climb: 'BERGWERTUNG', sprint: 'SPRINT', descent: 'ABFAHRT' };
-  const out: Mesh[] = [];
-  for (const seg of segments) {
-    out.push(buildGate(scene, track, seg.startM, `${label[seg.type]} · ${seg.name.toUpperCase()}`, colors[seg.type]));
-    out.push(buildGate(scene, track, seg.endM, `${seg.name.toUpperCase()} · ZIEL`, colors[seg.type]));
-  }
-  return out;
+/**
+ * All race arches of a lap: start/finish and the start and end of every segment (arches that would
+ * stand within a few metres of each other are merged). `site` places the legs at the road edge
+ * of this world and on its ground; without one they stand 4.6 m from the centre line at road height.
+ */
+export async function buildRaceGates(scene: Scene, track: Track, site?: GateSite): Promise<Mesh[]> {
+  await bannerFontReady();
+  const dark = new StandardMaterial('gate-dark', scene);
+  dark.diffuseColor = new Color3(0.08, 0.09, 0.1);
+  dark.specularColor = Color3.Black();
+  const ballast = new StandardMaterial('gate-ballast', scene);
+  ballast.diffuseColor = new Color3(0.42, 0.42, 0.4);
+  ballast.specularColor = Color3.Black();
+  const mats: GateMaterials = { dark, ballast, tube: new Map() };
+  return planGates(track.length, track.name, track.segments).map((g) => buildArch(scene, track, g, site, mats));
 }
 
 export function skyDome(scene: Scene, top: Color3, horizon: Color3): Mesh {

@@ -11,12 +11,12 @@ import {
   type Scene,
 } from '@babylonjs/core';
 import type { Track } from '@velo/routes';
-import { buildGate, buildSegmentGates } from '../props';
+import { buildRaceGates, type GateSite } from '../props';
 import type { RiderAvatar } from '../rider';
 import { buildBuildings } from './buildings';
 import { buildLandmarks } from './landmarks';
 import { LakeTraffic } from './lakeTraffic';
-import { RouteCorridor } from './corridor';
+import { EDGE, ROW_STRIDE, RouteCorridor, SHOULDER } from './corridor';
 import { FOG_DENSITY, SKY, SUN_DIR } from './env';
 import { fitGroundModel } from './ground';
 import { BuildingIndex, HeightField } from './heightField';
@@ -140,8 +140,7 @@ export class RealWorld {
     await step('Felsen, Hecken und Weiden …');
     const scatter = await buildLandscapeScatter(scene, data, corridor, buildingIndex, quality);
 
-    buildGate(scene, track, 0, 'START · ZIEL', '#ff7a1a');
-    buildSegmentGates(scene, track, track.segments);
+    await buildRaceGates(scene, track, gateSite(corridor));
 
     await step(data.lake.length > 0 ? 'See und Himmel …' : 'Himmel und Wolken …');
     const water = new LakeWater(scene, data, quality);
@@ -263,4 +262,25 @@ export class RealWorld {
     this.shadow?.dispose();
     this.nearTrees?.dispose();
   }
+}
+
+/**
+ * Arch legs on the real road: just outside the asphalt on open verges, on the shoulder in front of walls,
+ * parapets, guardrails and in towns (houses may stand close to the kerb there).
+ */
+function gateSite(corridor: RouteCorridor): GateSite {
+  const track = corridor.track;
+  return {
+    legs(d) {
+      const i = Math.round(track.wrap(d) / track.step) % track.count;
+      const row = Math.round(i / ROW_STRIDE) % corridor.rows;
+      return [0, 1].map((side) => {
+        let hw = 0;
+        for (let k = -1; k <= 1; k++) hw = Math.max(hw, corridor.hw[side]![(row + k + corridor.rows) % corridor.rows]!);
+        const open = corridor.edge[side]![row] === EDGE.verge && !corridor.urban[row];
+        return hw + (open ? SHOULDER + 0.45 : 0.05);
+      }) as [number, number];
+    },
+    ground: (x, z) => corridor.surface(x, z),
+  };
 }
