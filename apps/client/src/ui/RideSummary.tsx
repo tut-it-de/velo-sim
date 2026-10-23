@@ -10,6 +10,7 @@ import { balance, garageStore } from '../state/garage';
 import { activitiesStore } from '../state/activities';
 import { StravaStatusLine } from './StravaStatusLine';
 import { TestResultCard } from './TestResultCard';
+import { fitnessChange } from './FitnessCard';
 import { isLoggedIn } from '../net/api';
 import { useStore } from '../state/store';
 
@@ -89,6 +90,7 @@ export function RideSummary({ result, activity, ftpAdvice, onClose }: { result: 
             {Math.round(result.workout.compliance * 100)} % der ERG-Zeit im Zielbereich
           </div>
         )}
+        <FitnessLine activityId={activity.id} />
         {result.workout?.test && <TestResultCard test={result.workout.test} summary={s} />}
         {result.workout && !result.workout.test && !result.simulated && <WorkoutFeedbackCard workout={result.workout} at={s.startTime} />}
         {ftpAdvice && <FtpAdviceCard advice={ftpAdvice} />}
@@ -127,6 +129,21 @@ export function RideSummary({ result, activity, ftpAdvice, onClose }: { result: 
           Die Fahrt ist unter „Aktivitäten“ gespeichert. Die FIT-Datei kannst du bei Strava über „Hochladen → Datei“ importieren.
         </p>
       </div>
+    </div>
+  );
+}
+
+/** "Fitness 42 (+0.8) · Form −5 (im Training)" – what the ride did to the training load. */
+function FitnessLine({ activityId }: { activityId: string }) {
+  const all = useStore(activitiesStore);
+  const c = fitnessChange(all, activityId);
+  if (!c || c.dCtl <= 0) return null;
+  const sign = (v: number) => (v > 0 ? '+' : v < 0 ? '−' : '');
+  return (
+    <div className="notice info" style={{ marginTop: 12 }}>
+      📈 Fitness {fmt(c.ctl)} ({sign(c.dCtl)}
+      {Math.abs(c.dCtl).toFixed(1).replace('.', ',')}) · Form {sign(c.tsb)}
+      {fmt(Math.abs(c.tsb))} – mehr unter „Aktivitäten“
     </div>
   );
 }

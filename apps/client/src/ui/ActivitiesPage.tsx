@@ -8,6 +8,7 @@ import { activityFit, syncActivitiesQuietly } from '../net/activitySync';
 import { activitiesStore, deleteActivity, fitFileName, loadActivities } from '../state/activities';
 import { useStore } from '../state/store';
 import { fmt, formatDuration } from './components';
+import { FitnessCard } from './FitnessCard';
 
 export function ActivitiesPage() {
   const activities = useStore(activitiesStore);
@@ -39,6 +40,7 @@ export function ActivitiesPage() {
             <div className="stat"><span className="stat-label">Belastung</span><span className="stat-value">{fmt(totals.tss)}<small>TSS</small></span></div>
           </div>
         )}
+        <FitnessCard />
         <div className="card">
           <h2>Persönliche Bestzeiten</h2>
           <div className="pb-grid">

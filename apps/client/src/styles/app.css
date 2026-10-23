@@ -3296,3 +3296,104 @@ button.strava-connect:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- Fitness & Form ---------- */
+.fitness-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fitness-card h2 {
+  margin: 0;
+}
+.stat-row.stat-row-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+.stat-row-3 .stat {
+  background: var(--surface-2);
+}
+.form-frisch,
+.form-erholt {
+  color: var(--ok);
+}
+.form-im-Training {
+  color: var(--warn);
+}
+.form-ermüdet {
+  color: var(--err);
+}
+.fitness-state {
+  margin: 0;
+}
+.fitness-chart {
+  display: block;
+  width: 100%;
+  height: 140px;
+}
+.fitness-axis {
+  display: flex;
+  justify-content: space-between;
+}
+.fitness-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.fitness-legend .lg::before {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  margin-right: 6px;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+.lg-ctl::before {
+  background: var(--accent);
+}
+.lg-atl::before {
+  background: var(--info);
+}
+.lg-tsb::before {
+  background: linear-gradient(90deg, var(--ok) 50%, var(--warn) 50%);
+}
+.fitness-sub {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.week-bars {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 6px;
+  height: 120px;
+}
+.week-bar {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  min-width: 0;
+}
+.week-bar-fill {
+  background: var(--accent-dim);
+  border-top: 2px solid var(--accent);
+  border-radius: 3px 3px 0 0;
+  min-height: 2px;
+}
+.week-bar-fill.current {
+  background: var(--accent);
+}
+.week-bar-value,
+.week-bar-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.week-bar-label {
+  margin-top: 4px;
+}
