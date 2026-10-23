@@ -82,6 +82,24 @@ function storageSuite(name: string, make: () => Promise<Storage>) {
       expect(g.routesWithLap).toEqual(['kuestenrunde']);
       expect(g.ledger.map((e) => e.amount)).toEqual([5000, -4000]);
     });
+
+    it('syncs activities with a cursor, keeps the FIT file and leaves tombstones', async () => {
+      const u = await storage.createUser(`act+${Date.now()}@example.com`, 'Ali', 'hash');
+      const fit = new Uint8Array([1, 2, 3]);
+      const a = await storage.saveActivity(u.id, { id: '1-r', startTime: 1, meta: { title: 'A' }, fit });
+      await storage.saveActivity(u.id, { id: '2-r', startTime: 2, meta: { title: 'B' } });
+      expect((await storage.listActivities(u.id, 0, 10)).map((x) => x.id)).toEqual(['1-r', '2-r']);
+      expect((await storage.listActivities(u.id, a.updatedAt, 10)).map((x) => x.id)).toEqual(['2-r']);
+      // a metadata update keeps the FIT file and moves the activity to the end
+      await storage.saveActivity(u.id, { id: '1-r', startTime: 1, meta: { title: 'A2' } });
+      expect(await storage.getActivityFit(u.id, '1-r')).toEqual(fit);
+      const after = await storage.listActivities(u.id, a.updatedAt, 10);
+      expect(after.map((x) => [x.id, (x.meta as { title: string }).title])).toEqual([['2-r', 'B'], ['1-r', 'A2']]);
+      await storage.deleteActivity(u.id, '1-r');
+      const last = (await storage.listActivities(u.id, 0, 10)).at(-1)!;
+      expect(last).toMatchObject({ id: '1-r', deleted: true });
+      expect(await storage.getActivityFit(u.id, '1-r')).toBeUndefined();
+    });
   });
 }
 
@@ -142,6 +160,25 @@ describe('server', () => {
     const buy = await api(server, '/api/garage/buy', { itemId: 'bike-treck-domano' }, login.json.token);
     expect(buy.status).toBe(409);
     expect((await api(server, '/api/me')).status).toBe(401);
+  });
+
+  it('stores activities per account and pages through changes', async () => {
+    const reg = await api(server, '/api/auth/register', { email: 'akt@b.de', name: 'Akt', password: 'supergeheim' });
+    const t = reg.json.token as string;
+    const fit = Buffer.concat([Buffer.from([14, 16, 0, 0, 0, 0, 0, 0]), Buffer.from('.FIT'), Buffer.from([0, 0])]).toString('base64');
+    expect((await api(server, '/api/activities', { id: '1-r', startTime: 1, meta: { a: 1 }, fit: 'bm9wZQ==' }, t)).status).toBe(400);
+    expect((await api(server, '/api/activities', { id: '../x', startTime: 1, meta: { a: 1 } }, t)).status).toBe(400);
+    expect((await api(server, '/api/activities', { id: '1-r', startTime: 1, meta: { a: 1 }, fit }, t)).status).toBe(200);
+    const list = await api(server, '/api/activities?since=0', undefined, t);
+    expect(list.json.activities).toEqual([{ id: '1-r', startTime: 1, meta: { a: 1 }, deleted: false, hasFit: true }]);
+    expect((await api(server, `/api/activities?since=${list.json.cursor}`, undefined, t)).json.activities).toEqual([]);
+    expect((await api(server, '/api/activities/1-r/fit', undefined, t)).json.fit).toBe(fit);
+    // another account sees nothing
+    const other = await api(server, '/api/auth/register', { email: 'akt2@b.de', name: 'Akt2', password: 'supergeheim' });
+    expect((await api(server, '/api/activities?since=0', undefined, other.json.token)).json.activities).toEqual([]);
+    expect((await api(server, '/api/activities/1-r/fit', undefined, other.json.token)).status).toBe(404);
+    expect((await api(server, '/api/activities/1-r/delete', {}, t)).status).toBe(200);
+    expect((await api(server, `/api/activities?since=${list.json.cursor}`, undefined, t)).json.activities).toMatchObject([{ id: '1-r', deleted: true }]);
   });
 
   it('relays positions between riders, chat and kudos', async () => {

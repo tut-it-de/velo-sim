@@ -1,6 +1,7 @@
 import type { FtpAdvice } from '../ftp/advisor';
 import { FtpAdviceCard, WorkoutFeedbackCard } from './FtpUi';
 import { exportFile } from '../devices/files';
+import { activityFit } from '../net/activitySync';
 import type { RideResult } from '../ride/rideSession';
 import { fitFileName, type StoredActivity } from '../state/activities';
 import { fmt, formatDuration } from './components';
@@ -117,7 +118,7 @@ export function RideSummary({ result, activity, ftpAdvice, onClose }: { result: 
           </div>
         )}
         <div className="row" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
-          <button onClick={() => exportFile(fitFileName(activity), activity.fit)}>FIT-Datei exportieren</button>
+          <button onClick={() => void activityFit(live).then((fit) => exportFile(fitFileName(live), fit)).catch((err) => alert(err instanceof Error ? err.message : String(err)))}>FIT-Datei exportieren</button>
           <button className="primary" onClick={onClose}>
             Fertig
           </button>

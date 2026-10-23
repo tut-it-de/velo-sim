@@ -1,6 +1,6 @@
 import { encodeFitActivity, powerCurve, type ActivitySummary } from '@velo/metrics';
 import type { RideResult } from '../ride/rideSession';
-import { Store } from './store';
+import { Store, loadJson, saveJson } from './store';
 
 export interface StoredActivity {
   id: string;
@@ -10,7 +10,14 @@ export interface StoredActivity {
   startTime: number;
   summary: Omit<ActivitySummary, 'laps'> & { lapCount: number };
   simulated: boolean;
-  fit: Uint8Array;
+  /** Missing on rides pulled from another device until it is needed (fetched from the server then). */
+  fit?: Uint8Array;
+  /** Account the ride belongs to; older rides get the first account that syncs them. */
+  owner?: string;
+  /** The server has the current version (metadata). */
+  synced?: boolean;
+  /** The server has the FIT file. */
+  serverFit?: boolean;
   /** Best power for each of CURVE_DURATIONS – the input for the FTP estimate (missing on older rides). */
   curve?: number[];
   segments?: Array<{ id: string; name: string; type: string; timeS: number; isPb: boolean }>;
@@ -47,12 +54,24 @@ async function tx<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBReq
   });
 }
 
+/** The rides of the signed-in account (and rides of no account yet) – the device may hold several accounts' rides. */
 export const activitiesStore = new Store<StoredActivity[]>([]);
+
+// start with the stored account, so the list is right before the first sync (no import of net/api: cycle)
+let owner: string | undefined = loadJson<{ user?: { id?: string } }>('velo.account.v1', {}).user?.id;
+const mine = (a: StoredActivity) => !a.owner || a.owner === owner;
+
+/** Called by the account sync whenever the signed-in account changes. */
+export async function setActivityOwner(id: string | undefined): Promise<void> {
+  if (id === owner) return;
+  owner = id;
+  await loadActivities();
+}
 
 export async function loadActivities(): Promise<void> {
   try {
     const all = await tx<StoredActivity[]>('readonly', (s) => s.getAll() as IDBRequest<StoredActivity[]>);
-    activitiesStore.set(all.sort((a, b) => b.startTime - a.startTime));
+    activitiesStore.set(all.filter(mine).sort((a, b) => b.startTime - a.startTime));
   } catch (err) {
     console.warn('Aktivitäten konnten nicht geladen werden', err);
   }
@@ -73,6 +92,8 @@ export async function saveActivity(result: RideResult, simulated: boolean, title
     startTime: result.summary.startTime,
     summary: { ...rest, lapCount: laps.length },
     simulated,
+    owner,
+    synced: false,
     fit: encodeFitActivity(result.samples, result.summary),
     curve: powerCurve(result.samples.map((x) => x.power)),
     segments: result.segments.map((r) => ({ id: r.segment.id, name: r.segment.name, type: r.segment.type, timeS: r.timeS, isPb: r.saved })),
@@ -86,11 +107,15 @@ export async function saveActivity(result: RideResult, simulated: boolean, title
   return activity;
 }
 
-/** Merges a patch into a stored activity (e.g. its Strava upload status). */
+/** Fields that only describe this device's copy – changing them does not need a new upload. */
+const LOCAL_FIELDS = new Set<keyof StoredActivity>(['fit', 'owner', 'synced', 'serverFit']);
+
+/** Merges a patch into a stored activity (e.g. its Strava upload status); other devices get it with the next sync. */
 export async function updateActivity(id: string, patch: Partial<StoredActivity>): Promise<StoredActivity | undefined> {
   const current = activitiesStore.get().find((a) => a.id === id);
   if (!current) return undefined;
-  const next = { ...current, ...patch };
+  const shared = (Object.keys(patch) as Array<keyof StoredActivity>).some((k) => !LOCAL_FIELDS.has(k));
+  const next = { ...current, ...(shared ? { synced: false } : {}), ...patch };
   activitiesStore.set(activitiesStore.get().map((a) => (a.id === id ? next : a)));
   try {
     await tx('readwrite', (s) => s.put(next));
@@ -100,13 +125,34 @@ export async function updateActivity(id: string, patch: Partial<StoredActivity>)
   return next;
 }
 
-export async function deleteActivity(id: string): Promise<void> {
+/** Stores a ride that came from the server (another device). */
+export async function putSyncedActivity(a: StoredActivity): Promise<void> {
+  try {
+    await tx('readwrite', (s) => s.put(a));
+  } catch {
+    // keep in memory even if IndexedDB is unavailable
+  }
+  if (!mine(a)) return;
+  const rest = activitiesStore.get().filter((x) => x.id !== a.id);
+  activitiesStore.set([...rest, a].sort((x, y) => y.startTime - x.startTime));
+}
+
+const DELETES_KEY = 'velo.activityDeletes.v1';
+/** Deletions the server has not heard of yet (offline): account id → activity ids. */
+export const pendingDeletes = new Store<Record<string, string[]>>(loadJson(DELETES_KEY, {}));
+pendingDeletes.subscribe(() => saveJson(DELETES_KEY, pendingDeletes.get()));
+
+export async function deleteActivity(id: string, opts: { remote?: boolean } = {}): Promise<void> {
+  const a = activitiesStore.get().find((x) => x.id === id);
   try {
     await tx('readwrite', (s) => s.delete(id));
   } catch {
     // ignore
   }
-  activitiesStore.set(activitiesStore.get().filter((a) => a.id !== id));
+  activitiesStore.set(activitiesStore.get().filter((x) => x.id !== id));
+  // deleted here: tell the server (and so the other devices), unless the deletion came from there
+  const acc = a?.owner ?? owner;
+  if (!opts.remote && acc) pendingDeletes.set((p) => ({ ...p, [acc]: [...new Set([...(p[acc] ?? []), id])] }));
 }
 
 export function fitFileName(a: StoredActivity): string {

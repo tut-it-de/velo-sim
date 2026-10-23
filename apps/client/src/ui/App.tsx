@@ -6,6 +6,7 @@ import { accountStore, isAdminUser, refreshAccount } from '../net/api';
 import { deviceManager } from '../devices/deviceManager';
 import { refreshStravaStatus, syncPendingStrava } from '../net/strava';
 import { activitiesStore, loadActivities } from '../state/activities';
+import { syncActivitiesQuietly } from '../net/activitySync';
 import { useStore } from '../state/store';
 import { pageStore, uiStore, type Page } from '../state/ui';
 import { ActivitiesPage } from './ActivitiesPage';
@@ -54,6 +55,7 @@ export function App() {
   useEffect(() => {
     // Sync wallet/garage and Strava link from the server when logged in.
     void Promise.all([refreshAccount().catch(() => undefined), loadActivities()])
+      .then(() => syncActivitiesQuietly())
       .then(() => refreshStravaStatus())
       .then(() => syncPendingStrava());
     // iPad app: find the trainer and the strap without a chooser.

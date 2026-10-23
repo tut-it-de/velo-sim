@@ -4,6 +4,7 @@ import { recordKey, recordsStore } from '../state/records';
 import { refreshStravaStatus, stravaStore, uploadToStrava } from '../net/strava';
 import { StravaStatusLine } from './StravaStatusLine';
 import { exportFile } from '../devices/files';
+import { activityFit, syncActivitiesQuietly } from '../net/activitySync';
 import { activitiesStore, deleteActivity, fitFileName, loadActivities } from '../state/activities';
 import { useStore } from '../state/store';
 import { fmt, formatDuration } from './components';
@@ -91,11 +92,11 @@ export function ActivitiesPage() {
                   </button>
                 )
               )}
-              <button onClick={() => exportFile(fitFileName(a), a.fit)}>FIT</button>
+              <button onClick={() => void activityFit(a).then((fit) => exportFile(fitFileName(a), fit)).catch((err) => alert(err instanceof Error ? err.message : String(err)))}>FIT</button>
               <button
                 className="danger"
                 onClick={() => {
-                  if (confirm('Aktivität wirklich löschen?')) void deleteActivity(a.id);
+                  if (confirm('Aktivität wirklich löschen? Sie wird auch auf deinen anderen Geräten gelöscht.')) void deleteActivity(a.id).then(() => syncActivitiesQuietly());
                 }}
               >
                 Löschen

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { accountStore, fetchOnline, isLoggedIn, refreshAccount, serverBase } from '../net/api';
 import { MultiplayerClient } from '../net/multiplayer';
 import { maybeAutoUpload } from '../net/strava';
+import { syncActivitiesQuietly } from '../net/activitySync';
 import { ROUTES, getTrack, type RouteStyle, type Track } from '@velo/routes';
 import { estimateTime, setupFor } from '@velo/equipment';
 import type { Workout } from '@velo/workouts';
@@ -57,6 +58,7 @@ export function RidePage({ view }: { view: 'ride' | 'workouts' }) {
             creditRide(result.earnings, result.routeId, result.lapsCompleted, activity.title);
           }
           void maybeAutoUpload(activity.id);
+          syncActivitiesQuietly();
           // The new ride may change the FTP estimate (taken over at once while the FTP is unknown).
           const ftpAdvice = result.simulated ? undefined : adviceAfterRide();
           setPhase({ kind: 'summary', result, activity, ftpAdvice });

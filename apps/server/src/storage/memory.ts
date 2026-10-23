@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { CATALOG, STARTER_LOADOUT, type Loadout } from '@velo/equipment';
 import {
+  type ActivityRecord,
   DuplicateEmailError,
   type Garage,
   type LedgerEntry,
@@ -18,6 +19,7 @@ interface UserData {
   ledger: LedgerEntry[];
   routesWithLap: Set<string>;
   rides: RideRecord[];
+  activities: Map<string, ActivityRecord & { fit?: Uint8Array }>;
 }
 
 const STARTER_ITEMS = CATALOG.filter((i) => i.price === 0).map((i) => i.id);
@@ -37,7 +39,7 @@ export class MemoryStorage implements Storage {
     const normalized = email.trim().toLowerCase();
     if ([...this.users.values()].some((d) => d.user.email === normalized)) throw new DuplicateEmailError(normalized);
     const user: User = { id: randomUUID(), email: normalized, name, passwordHash, createdAt: Date.now() };
-    this.users.set(user.id, { user, owned: new Set(STARTER_ITEMS), loadout: { ...STARTER_LOADOUT }, ledger: [], routesWithLap: new Set(), rides: [] });
+    this.users.set(user.id, { user, owned: new Set(STARTER_ITEMS), loadout: { ...STARTER_LOADOUT }, ledger: [], routesWithLap: new Set(), rides: [], activities: new Map() });
     return user;
   }
 
@@ -52,6 +54,40 @@ export class MemoryStorage implements Storage {
 
   async setUserName(userId: string, name: string): Promise<void> {
     this.data(userId).user.name = name;
+  }
+
+  private clock = 0;
+  /** Strictly increasing, so two changes in the same millisecond still sort apart. */
+  private tick(): number {
+    this.clock = Math.max(this.clock + 1, Date.now());
+    return this.clock;
+  }
+
+  async saveActivity(userId: string, a: { id: string; startTime: number; meta: unknown; fit?: Uint8Array }): Promise<ActivityRecord> {
+    const map = this.data(userId).activities;
+    const fit = a.fit ?? map.get(a.id)?.fit;
+    const rec = { id: a.id, startTime: a.startTime, meta: a.meta, updatedAt: this.tick(), deleted: false, hasFit: !!fit, fit };
+    map.set(a.id, rec);
+    const { fit: _fit, ...out } = rec;
+    return out;
+  }
+
+  async listActivities(userId: string, since: number, limit: number): Promise<ActivityRecord[]> {
+    return [...this.data(userId).activities.values()]
+      .filter((a) => a.updatedAt > since)
+      .sort((a, b) => a.updatedAt - b.updatedAt)
+      .slice(0, limit)
+      .map(({ fit: _fit, ...a }) => a);
+  }
+
+  async getActivityFit(userId: string, id: string): Promise<Uint8Array | undefined> {
+    const a = this.data(userId).activities.get(id);
+    return a && !a.deleted ? a.fit : undefined;
+  }
+
+  async deleteActivity(userId: string, id: string): Promise<void> {
+    const map = this.data(userId).activities;
+    map.set(id, { id, startTime: map.get(id)?.startTime ?? 0, meta: null, updatedAt: this.tick(), deleted: true, hasFit: false });
   }
 
   async getFitness(userId: string): Promise<unknown> {

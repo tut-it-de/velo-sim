@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { CATALOG, STARTER_LOADOUT, type Loadout } from '@velo/equipment';
-import { DuplicateEmailError, type Garage, type RideRecord, type Storage, type StravaConnectionRecord, type User } from './types';
+import { type ActivityRecord, DuplicateEmailError, type Garage, type RideRecord, type Storage, type StravaConnectionRecord, type User } from './types';
 
 const STARTER_ITEMS = CATALOG.filter((i) => i.price === 0).map((i) => i.id);
 
@@ -53,6 +53,18 @@ CREATE TABLE IF NOT EXISTS rides (
   reason text
 );
 CREATE INDEX IF NOT EXISTS rides_user_idx ON rides(user_id, started_at DESC);
+CREATE SEQUENCE IF NOT EXISTS activity_version;
+CREATE TABLE IF NOT EXISTS activities (
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  id text NOT NULL,
+  start_time bigint NOT NULL,
+  meta jsonb,
+  fit bytea,
+  deleted boolean NOT NULL DEFAULT false,
+  version bigint NOT NULL,
+  PRIMARY KEY (user_id, id)
+);
+CREATE INDEX IF NOT EXISTS activities_sync_idx ON activities(user_id, version);
 CREATE TABLE IF NOT EXISTS strava_connections (
   user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   athlete_id bigint NOT NULL,
@@ -128,6 +140,46 @@ export class PostgresStorage implements Storage {
 
   async setUserName(userId: string, name: string): Promise<void> {
     await this.pool.query('UPDATE users SET name = $2 WHERE id = $1', [userId, name]);
+  }
+
+  // `version` comes from a sequence: strictly increasing, so "everything after my last sync" never misses a change.
+  async saveActivity(userId: string, a: { id: string; startTime: number; meta: unknown; fit?: Uint8Array }): Promise<ActivityRecord> {
+    const res = await this.pool.query(
+      `INSERT INTO activities (user_id, id, start_time, meta, fit, deleted, version)
+       VALUES ($1, $2, $3, $4, $5, false, nextval('activity_version'))
+       ON CONFLICT (user_id, id) DO UPDATE SET start_time = EXCLUDED.start_time, meta = EXCLUDED.meta,
+         fit = COALESCE(EXCLUDED.fit, activities.fit), deleted = false, version = EXCLUDED.version
+       RETURNING id, start_time, meta, deleted, version, fit IS NOT NULL AS has_fit`,
+      [userId, a.id, Math.round(a.startTime), JSON.stringify(a.meta), a.fit ? Buffer.from(a.fit) : null],
+    );
+    return this.mapActivity(res.rows[0]);
+  }
+
+  async listActivities(userId: string, since: number, limit: number): Promise<ActivityRecord[]> {
+    const res = await this.pool.query(
+      'SELECT id, start_time, meta, deleted, version, fit IS NOT NULL AS has_fit FROM activities WHERE user_id = $1 AND version > $2 ORDER BY version LIMIT $3',
+      [userId, Math.floor(since), limit],
+    );
+    return res.rows.map((r) => this.mapActivity(r));
+  }
+
+  async getActivityFit(userId: string, id: string): Promise<Uint8Array | undefined> {
+    const res = await this.pool.query('SELECT fit FROM activities WHERE user_id = $1 AND id = $2 AND NOT deleted', [userId, id]);
+    const fit = res.rows[0]?.fit as Buffer | null | undefined;
+    return fit ? new Uint8Array(fit) : undefined;
+  }
+
+  async deleteActivity(userId: string, id: string): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO activities (user_id, id, start_time, meta, fit, deleted, version)
+       VALUES ($1, $2, 0, NULL, NULL, true, nextval('activity_version'))
+       ON CONFLICT (user_id, id) DO UPDATE SET meta = NULL, fit = NULL, deleted = true, version = EXCLUDED.version`,
+      [userId, id],
+    );
+  }
+
+  private mapActivity(r: { id: string; start_time: string | number; meta: unknown; deleted: boolean; version: string | number; has_fit: boolean }): ActivityRecord {
+    return { id: r.id, startTime: Number(r.start_time), meta: r.meta, deleted: r.deleted, updatedAt: Number(r.version), hasFit: r.has_fit };
   }
 
   async getFitness(userId: string): Promise<unknown> {

@@ -49,6 +49,10 @@ export function isLoggedIn(): boolean {
   return !!accountStore.get().token && !!serverBase();
 }
 
+export async function apiCall<T>(path: string, body?: unknown): Promise<T> {
+  return call<T>(path, body);
+}
+
 async function call<T>(path: string, body?: unknown): Promise<T> {
   const base = serverBase();
   if (!base) throw new ApiError(0, 'Kein Server eingestellt');

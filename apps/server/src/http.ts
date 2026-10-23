@@ -24,6 +24,10 @@ class HttpError extends Error {
 }
 
 const MAX_BODY = 16 * 1024;
+const MAX_FIT_BYTES = 6 * 1024 * 1024;
+const MAX_ACTIVITY_META = 64 * 1024;
+const ACTIVITY_PAGE = 200;
+const ACTIVITY_ID_RE = /^[\w.-]{1,100}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 async function readJson(req: IncomingMessage, maxBytes = MAX_BODY): Promise<Record<string, unknown>> {
@@ -177,8 +181,52 @@ export async function handleHttp(ctx: ApiContext, req: IncomingMessage, res: Ser
         return send(res, 200, { rides: await ctx.storage.listRides(user.id, 50) });
       }
 
-      default:
+      case 'POST /api/activities': {
+        const user = await requireUser(ctx, req);
+        const b = await readJson(req, Math.ceil(MAX_FIT_BYTES * 1.4) + MAX_ACTIVITY_META);
+        const id = String(b.id ?? '');
+        const startTime = Number(b.startTime);
+        if (!ACTIVITY_ID_RE.test(id) || !Number.isFinite(startTime) || startTime <= 0) throw new HttpError(400, 'Ungültige Aktivität');
+        if (!b.meta || typeof b.meta !== 'object' || JSON.stringify(b.meta).length > MAX_ACTIVITY_META) throw new HttpError(400, 'Ungültige Aktivitätsdaten');
+        let fit: Uint8Array | undefined;
+        if (b.fit !== undefined) {
+          const buf = Buffer.from(String(b.fit), 'base64');
+          if (buf.length > MAX_FIT_BYTES || buf.length < 14 || buf.subarray(8, 12).toString('latin1') !== '.FIT') throw new HttpError(400, 'Keine gültige FIT-Datei');
+          fit = new Uint8Array(buf);
+        }
+        const rec = await ctx.storage.saveActivity(user.id, { id, startTime, meta: b.meta, fit });
+        return send(res, 200, { id: rec.id, cursor: rec.updatedAt });
+      }
+
+      case 'GET /api/activities': {
+        const user = await requireUser(ctx, req);
+        const since = Number(url.searchParams.get('since') ?? 0) || 0;
+        const list = await ctx.storage.listActivities(user.id, since, ACTIVITY_PAGE);
+        return send(res, 200, {
+          activities: list.map((a) => ({ id: a.id, startTime: a.startTime, meta: a.meta, deleted: a.deleted, hasFit: a.hasFit })),
+          cursor: list.length ? list[list.length - 1]!.updatedAt : since,
+          more: list.length === ACTIVITY_PAGE,
+        });
+      }
+
+      default: {
+        const m = /^(GET|POST) \/api\/activities\/([^/]+)\/(fit|delete)$/.exec(route);
+        if (m) {
+          const user = await requireUser(ctx, req);
+          const id = decodeURIComponent(m[2]!);
+          if (!ACTIVITY_ID_RE.test(id)) throw new HttpError(400, 'Ungültige Aktivität');
+          if (m[1] === 'GET' && m[3] === 'fit') {
+            const fit = await ctx.storage.getActivityFit(user.id, id);
+            if (!fit) throw new HttpError(404, 'Keine FIT-Datei');
+            return send(res, 200, { fit: Buffer.from(fit).toString('base64') });
+          }
+          if (m[1] === 'POST' && m[3] === 'delete') {
+            await ctx.storage.deleteActivity(user.id, id);
+            return send(res, 200, { ok: true });
+          }
+        }
         throw new HttpError(404, 'Nicht gefunden');
+      }
     }
   } catch (err) {
     if (err instanceof HttpError) return send(res, err.status, { error: err.message });
@@ -188,7 +236,6 @@ export async function handleHttp(ctx: ApiContext, req: IncomingMessage, res: Ser
   }
 }
 
-const MAX_FIT_BYTES = 6 * 1024 * 1024;
 
 async function handleStrava(ctx: ApiContext, req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
   const strava = ctx.strava;

@@ -2,6 +2,7 @@ import { Capacitor } from '@capacitor/core';
 import { activitiesStore, updateActivity, type StoredActivity } from '../state/activities';
 import { Store, loadJson, saveJson } from '../state/store';
 import { accountStore, isLoggedIn, serverBase } from './api';
+import { activityFit, toBase64 } from './activitySync';
 
 export interface StravaStatus {
   configured: boolean;
@@ -83,12 +84,6 @@ export async function disconnectStrava(): Promise<void> {
   stravaStore.set(await call<StravaStatus>('/api/strava/disconnect', {}));
 }
 
-function toBase64(bytes: Uint8Array): string {
-  let s = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(s);
-}
-
 function describeRide(a: StoredActivity): string {
   const s = a.summary;
   const parts = [
@@ -112,7 +107,7 @@ export async function uploadToStrava(a: StoredActivity): Promise<StravaUpload> {
   let result: StravaUpload;
   try {
     result = await call<StravaUpload>('/api/strava/upload', {
-      fit: toBase64(a.fit),
+      fit: toBase64(await activityFit(a)),
       name: a.title.replace(/ – \d{2}\.\d{2}\.\d{4}.*$/, ''),
       description: describeRide(a),
       externalId: `velo-sim-${a.id}`,
