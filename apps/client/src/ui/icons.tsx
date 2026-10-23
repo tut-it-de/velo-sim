@@ -15,6 +15,7 @@ const PATHS = {
     </>
   ),
   workouts: <path d="M3 12h4l3-8 4 16 3-8h4" />,
+  trophy: <path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H4.5a3 3 0 0 0 3.7 4M16 6h3.5a3 3 0 0 1-3.7 4M12 13v4M8 21h8M9.5 17h5v4h-5z" />,
   activities: <path d="M5 20V11M11 20V4M17 20v-6M3 20h18" />,
   garage: <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z" />,
   devices: <path d="m7 7 10 10-5 5V2l5 5L7 17" />,

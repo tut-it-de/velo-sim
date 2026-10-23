@@ -11,6 +11,8 @@ import { activitiesStore } from '../state/activities';
 import { StravaStatusLine } from './StravaStatusLine';
 import { TestResultCard } from './TestResultCard';
 import { fitnessChange } from './FitnessCard';
+import { unlockedBy } from '../net/achievements';
+import { pageStore } from '../state/ui';
 import { isLoggedIn } from '../net/api';
 import { useStore } from '../state/store';
 
@@ -91,6 +93,7 @@ export function RideSummary({ result, activity, ftpAdvice, onClose }: { result: 
           </div>
         )}
         <FitnessLine activityId={activity.id} />
+        <UnlockedNotice activityId={activity.id} />
         {result.workout?.test && <TestResultCard test={result.workout.test} summary={s} />}
         {result.workout && !result.workout.test && !result.simulated && <WorkoutFeedbackCard workout={result.workout} at={s.startTime} />}
         {ftpAdvice && <FtpAdviceCard advice={ftpAdvice} />}
@@ -144,6 +147,33 @@ function FitnessLine({ activityId }: { activityId: string }) {
       📈 Fitness {fmt(c.ctl)} ({sign(c.dCtl)}
       {Math.abs(c.dCtl).toFixed(1).replace('.', ',')}) · Form {sign(c.tsb)}
       {fmt(Math.abs(c.tsb))} – mehr unter „Aktivitäten“
+    </div>
+  );
+}
+
+/** "🏅 Abzeichen freigeschaltet" – badges and monthly goals this ride unlocked. */
+function UnlockedNotice({ activityId }: { activityId: string }) {
+  const all = useStore(activitiesStore);
+  const unlocked = unlockedBy(all, activityId);
+  if (!unlocked.length) return null;
+  const coins = unlocked.reduce((s, u) => s + u.reward, 0);
+  return (
+    <div className="notice unlocked" style={{ marginTop: 12 }}>
+      <strong>🏅 {unlocked.length === 1 ? 'Erfolg freigeschaltet' : `${unlocked.length} Erfolge freigeschaltet`}</strong>
+      <ul>
+        {unlocked.map((u) => (
+          <li key={u.key}>
+            {u.label}
+            {u.reward > 0 && <span className="muted"> · +{formatCoins(u.reward)} Taler</span>}
+          </li>
+        ))}
+      </ul>
+      <span className="muted small">
+        {coins > 0 && (isLoggedIn() ? 'Der Server bucht die Taler beim nächsten Abgleich. ' : 'Die Taler gibt es mit Konto. ')}
+        <button className="link" onClick={() => pageStore.set('achievements')}>
+          Alle Erfolge
+        </button>
+      </span>
     </div>
   );
 }

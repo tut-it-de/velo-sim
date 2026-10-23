@@ -9,6 +9,7 @@ import { activitiesStore, loadActivities } from '../state/activities';
 import { syncActivitiesQuietly } from '../net/activitySync';
 import { useStore } from '../state/store';
 import { pageStore, uiStore, type Page } from '../state/ui';
+import { AchievementsPage } from './AchievementsPage';
 import { ActivitiesPage } from './ActivitiesPage';
 import { BluetoothChooser } from './BluetoothChooser';
 import { DevicesPage } from './DevicesPage';
@@ -26,6 +27,7 @@ const PAGES: Array<{ id: Exclude<Page, 'login'>; label: string; icon: IconName }
   { id: 'ride', label: 'Fahren', icon: 'routes' },
   { id: 'workouts', label: 'Workouts', icon: 'workouts' },
   { id: 'activities', label: 'Aktivitäten', icon: 'activities' },
+  { id: 'achievements', label: 'Erfolge', icon: 'trophy' },
   { id: 'garage', label: 'Garage', icon: 'garage' },
   { id: 'devices', label: 'Geräte', icon: 'devices' },
   { id: 'shifting', label: 'Virtuelle Schaltung', icon: 'shift' },
@@ -124,6 +126,7 @@ export function App() {
         {ridePage && <RidePage view={page} />}
         {page === 'garage' && <GaragePage />}
         {page === 'activities' && <ActivitiesPage />}
+        {page === 'achievements' && <AchievementsPage />}
         {page === 'devices' && <DevicesPage />}
         {page === 'shifting' && <ShiftingPage />}
         {page === 'settings' && <SettingsPage />}

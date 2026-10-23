@@ -65,6 +65,13 @@ CREATE TABLE IF NOT EXISTS activities (
   PRIMARY KEY (user_id, id)
 );
 CREATE INDEX IF NOT EXISTS activities_sync_idx ON activities(user_id, version);
+CREATE TABLE IF NOT EXISTS achievement_claims (
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  key text NOT NULL,
+  amount integer NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, key)
+);
 CREATE TABLE IF NOT EXISTS strava_connections (
   user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   athlete_id bigint NOT NULL,
@@ -213,6 +220,32 @@ export class PostgresStorage implements Storage {
     await this.pool.query('INSERT INTO ledger (id, user_id, amount, label) VALUES ($1, $2, $3, $4)', [randomUUID(), userId, Math.round(amount), label]);
     const res = await this.pool.query('SELECT COALESCE(SUM(amount), 0)::int AS balance FROM ledger WHERE user_id = $1', [userId]);
     return res.rows[0].balance as number;
+  }
+
+  async claimAchievement(userId: string, key: string, amount: number, label: string): Promise<number | undefined> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const ins = await client.query('INSERT INTO achievement_claims (user_id, key, amount) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [userId, key, Math.round(amount)]);
+      if (!ins.rowCount) {
+        await client.query('ROLLBACK');
+        return undefined;
+      }
+      await client.query('INSERT INTO ledger (id, user_id, amount, label) VALUES ($1, $2, $3, $4)', [randomUUID(), userId, Math.round(amount), label]);
+      const res = await client.query('SELECT COALESCE(SUM(amount), 0)::int AS balance FROM ledger WHERE user_id = $1', [userId]);
+      await client.query('COMMIT');
+      return res.rows[0].balance as number;
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async listAchievementClaims(userId: string): Promise<string[]> {
+    const res = await this.pool.query('SELECT key FROM achievement_claims WHERE user_id = $1', [userId]);
+    return res.rows.map((r) => r.key as string);
   }
 
   async buy(userId: string, itemId: string, price: number, label: string) {

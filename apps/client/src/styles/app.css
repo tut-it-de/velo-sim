@@ -3397,3 +3397,160 @@ button.strava-connect:disabled {
 .week-bar-label {
   margin-top: 4px;
 }
+
+/* ---------- Erfolge: Monatsziele und Abzeichen ---------- */
+.page-inner > .card + .card {
+  margin-top: 16px;
+}
+.ach-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.ach-head h2 {
+  margin: 0;
+}
+.challenges {
+  display: grid;
+  gap: 18px;
+}
+.challenge-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+}
+.challenge-bar {
+  position: relative;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  overflow: visible;
+}
+.challenge-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 5px;
+  background: var(--accent);
+}
+.challenge-mark {
+  position: absolute;
+  top: -3px;
+  width: 4px;
+  height: 16px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+.challenge-mark.tier-3 {
+  margin-left: -4px;
+}
+.challenge-mark.done {
+  background: var(--text);
+}
+.challenge-tiers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.tier-chip {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.tier-chip.done.tier-1 {
+  border-color: #c9834f;
+  color: #e7a877;
+}
+.tier-chip.done.tier-2 {
+  border-color: #b8c2cf;
+  color: #dfe6ef;
+}
+.tier-chip.done.tier-3 {
+  border-color: #e9c046;
+  color: #f5d76e;
+}
+.badge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
+}
+.badge-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  min-width: 0;
+}
+.badge-tile:not(.done) {
+  opacity: 0.6;
+}
+.badge-tile:not(.done) .badge-icon {
+  filter: grayscale(1);
+}
+.badge-tile.done {
+  border-color: var(--accent-dim);
+  background: linear-gradient(180deg, var(--accent-dim), transparent 70%), var(--surface-2);
+}
+.badge-icon {
+  font-size: 28px;
+  line-height: 1.2;
+}
+.badge-foot {
+  margin-top: auto;
+  padding-top: 6px;
+}
+.badge-tile.done .badge-foot {
+  color: var(--accent-2);
+}
+.badge-progress {
+  display: block;
+  height: 4px;
+  margin-top: 6px;
+  border-radius: 2px;
+  background: var(--bg-elev-2);
+  overflow: hidden;
+}
+.badge-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.route-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.route-badge {
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 13px;
+}
+.route-badge.done {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.notice.unlocked ul {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+.notice.unlocked button.link {
+  color: var(--accent);
+  font-weight: 600;
+  padding: 0;
+  background: none;
+  border: 0;
+}

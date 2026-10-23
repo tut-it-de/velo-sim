@@ -83,6 +83,9 @@ export interface Storage {
   setLoadout(userId: string, loadout: Loadout): Promise<void>;
   markRouteLap(userId: string, routeId: string): Promise<void>;
   saveRide(ride: RideRecord): Promise<void>;
+  /** Books a challenge or badge reward once per key; returns the new balance, or undefined when it was booked before. */
+  claimAchievement(userId: string, key: string, amount: number, label: string): Promise<number | undefined>;
+  listAchievementClaims(userId: string): Promise<string[]>;
   listRides(userId: string, limit: number): Promise<RideRecord[]>;
   /** Insert or replace (the FIT file is kept when `fit` is undefined). */
   saveActivity(userId: string, a: { id: string; startTime: number; meta: unknown; fit?: Uint8Array }): Promise<ActivityRecord>;

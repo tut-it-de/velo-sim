@@ -20,6 +20,7 @@ interface UserData {
   routesWithLap: Set<string>;
   rides: RideRecord[];
   activities: Map<string, ActivityRecord & { fit?: Uint8Array }>;
+  claims: Set<string>;
 }
 
 const STARTER_ITEMS = CATALOG.filter((i) => i.price === 0).map((i) => i.id);
@@ -39,7 +40,7 @@ export class MemoryStorage implements Storage {
     const normalized = email.trim().toLowerCase();
     if ([...this.users.values()].some((d) => d.user.email === normalized)) throw new DuplicateEmailError(normalized);
     const user: User = { id: randomUUID(), email: normalized, name, passwordHash, createdAt: Date.now() };
-    this.users.set(user.id, { user, owned: new Set(STARTER_ITEMS), loadout: { ...STARTER_LOADOUT }, ledger: [], routesWithLap: new Set(), rides: [], activities: new Map() });
+    this.users.set(user.id, { user, owned: new Set(STARTER_ITEMS), loadout: { ...STARTER_LOADOUT }, ledger: [], routesWithLap: new Set(), rides: [], activities: new Map(), claims: new Set() });
     return user;
   }
 
@@ -113,6 +114,17 @@ export class MemoryStorage implements Storage {
     const d = this.data(userId);
     d.ledger.push({ id: randomUUID(), at: Date.now(), amount, label });
     return d.ledger.reduce((a, e) => a + e.amount, 0);
+  }
+
+  async claimAchievement(userId: string, key: string, amount: number, label: string): Promise<number | undefined> {
+    const d = this.data(userId);
+    if (d.claims.has(key)) return undefined;
+    d.claims.add(key);
+    return this.addLedger(userId, amount, label);
+  }
+
+  async listAchievementClaims(userId: string): Promise<string[]> {
+    return [...this.data(userId).claims];
   }
 
   async buy(userId: string, itemId: string, price: number, label: string) {

@@ -181,6 +181,25 @@ describe('server', () => {
     expect((await api(server, `/api/activities?since=${list.json.cursor}`, undefined, t)).json.activities).toMatchObject([{ id: '1-r', deleted: true }]);
   });
 
+  it('books challenge and badge rewards once, from the synced rides only', async () => {
+    const reg = await api(server, '/api/auth/register', { email: 'erfolg@b.de', name: 'Erfolg', password: 'supergeheim' });
+    const t = reg.json.token as string;
+    const start = (await api(server, '/api/me', undefined, t)).json.garage.balance as number;
+    const meta = (p: object) => ({ routeId: 'huegelrunde', simulated: false, summary: { distanceM: 30_000, durationS: 3600, ascentM: 200, lapCount: 0 }, ...p });
+    const now = Date.now();
+    await api(server, '/api/activities', { id: 'sim', startTime: now - 3000, meta: meta({ simulated: true }) }, t);
+    expect((await api(server, '/api/achievements/claim', {}, t)).json.booked).toEqual([]);
+    await api(server, '/api/activities', { id: 'r1', startTime: now - 2000, meta: meta({ workout: { test: true } }) }, t);
+    const first = await api(server, '/api/achievements/claim', {}, t);
+    expect(first.json.booked.map((b: { key: string }) => b.key).sort()).toEqual(['badge:first-ride', 'badge:ftp-test']);
+    expect(first.json.balance).toBe(start + 400);
+    // asking again books nothing
+    const again = await api(server, '/api/achievements/claim', {}, t);
+    expect(again.json.booked).toEqual([]);
+    expect(again.json.claimed).toContain('badge:ftp-test');
+    expect(again.json.balance).toBe(start + 400);
+  });
+
   it('relays positions between riders, chat and kudos', async () => {
     const a = new TestClient(server.url);
     const b = new TestClient(server.url);

@@ -20,7 +20,10 @@ export interface StoredActivity {
   serverFit?: boolean;
   /** Best power for each of CURVE_DURATIONS – the input for the FTP estimate (missing on older rides). */
   curve?: number[];
-  segments?: Array<{ id: string; name: string; type: string; timeS: number; isPb: boolean }>;
+  /** `improved`: beat an earlier best time (not just the first time on the segment). */
+  segments?: Array<{ id: string; name: string; type: string; timeS: number; isPb: boolean; improved?: boolean }>;
+  /** Workout ridden in this ride; `test`: a finished FTP test. */
+  workout?: { name: string; completed: boolean; test?: boolean };
   strava?: {
     status: 'pending' | 'uploading' | 'processing' | 'ready' | 'duplicate' | 'error' | 'skipped';
     uploadId?: number;
@@ -96,7 +99,15 @@ export async function saveActivity(result: RideResult, simulated: boolean, title
     synced: false,
     fit: encodeFitActivity(result.samples, result.summary),
     curve: powerCurve(result.samples.map((x) => x.power)),
-    segments: result.segments.map((r) => ({ id: r.segment.id, name: r.segment.name, type: r.segment.type, timeS: r.timeS, isPb: r.saved })),
+    segments: result.segments.map((r) => ({
+      id: r.segment.id,
+      name: r.segment.name,
+      type: r.segment.type,
+      timeS: r.timeS,
+      isPb: r.saved,
+      improved: r.saved && r.previousBestS !== undefined && r.timeS < r.previousBestS,
+    })),
+    workout: result.workout && { name: result.workout.name, completed: result.workout.completed, test: !!result.workout.test?.ftp },
   };
   try {
     await tx('readwrite', (s) => s.put(activity));

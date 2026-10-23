@@ -8,6 +8,7 @@ import {
   type StoredActivity,
 } from '../state/activities';
 import { loadJson, saveJson } from '../state/store';
+import { claimAchievements } from './achievements';
 import { accountStore, apiCall, isLoggedIn } from './api';
 
 /**
@@ -111,6 +112,9 @@ async function syncOnce(): Promise<void> {
     saveJson(CURSOR_KEY, cursors);
     if (!r.more) break;
   }
+
+  // 4. Watt-Taler for challenges and badges, booked by the server from the rides it now has
+  await claimAchievements().catch((err) => console.warn('Erfolge konnten nicht gebucht werden', err));
 }
 
 async function applyRemote(user: string, remote: RemoteActivity): Promise<void> {

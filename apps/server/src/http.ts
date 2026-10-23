@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { getItem, itemName } from '@velo/equipment';
+import { evaluateAchievements, toAchievementRide, type AchievementSource } from '@velo/metrics';
+import { ROUTES } from '@velo/routes';
 import { hashPassword, signToken, verifyPassword, verifyToken } from './auth';
 import type { Game } from './rooms';
 import { StravaError } from './strava';
@@ -209,6 +211,11 @@ export async function handleHttp(ctx: ApiContext, req: IncomingMessage, res: Ser
         });
       }
 
+      case 'POST /api/achievements/claim': {
+        const user = await requireUser(ctx, req);
+        return send(res, 200, await claimAchievements(ctx.storage, user.id));
+      }
+
       default: {
         const m = /^(GET|POST) \/api\/activities\/([^/]+)\/(fit|delete)$/.exec(route);
         if (m) {
@@ -236,6 +243,34 @@ export async function handleHttp(ctx: ApiContext, req: IncomingMessage, res: Ser
   }
 }
 
+/**
+ * Books the Watt-Taler for every challenge tier and badge the synced rides have earned and that
+ * was not booked yet. The server reads only its own copy of the rides, so the rules decide, not the client.
+ */
+async function claimAchievements(storage: Storage, userId: string) {
+  const sources: AchievementSource[] = [];
+  for (let since = 0; ; ) {
+    const page = await storage.listActivities(userId, since, 1000);
+    for (const a of page) if (!a.deleted && a.meta && typeof a.meta === 'object') sources.push({ ...(a.meta as AchievementSource), id: a.id, startTime: a.startTime });
+    if (page.length < 1000) break;
+    since = page[page.length - 1]!.updatedAt;
+  }
+  const routeIds = ROUTES.map((r) => r.id);
+  const names = Object.fromEntries(ROUTES.map((r) => [r.id, r.name]));
+  const { earned } = evaluateAchievements(sources.map(toAchievementRide), routeIds, names);
+  const claimed = new Set(await storage.listAchievementClaims(userId));
+  const booked: Array<{ key: string; label: string; amount: number }> = [];
+  let balance: number | undefined;
+  for (const [key, e] of earned) {
+    if (claimed.has(key) || e.reward <= 0) continue;
+    const b = await storage.claimAchievement(userId, key, e.reward, e.label);
+    claimed.add(key);
+    if (b === undefined) continue;
+    balance = b;
+    booked.push({ key, label: e.label, amount: e.reward });
+  }
+  return { booked, claimed: [...claimed], balance: balance ?? (await storage.getGarage(userId)).balance };
+}
 
 async function handleStrava(ctx: ApiContext, req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
   const strava = ctx.strava;
