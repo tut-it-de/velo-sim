@@ -6,6 +6,17 @@ import { connectStrava, disconnectStrava, refreshStravaStatus, setStravaAutoUplo
 import { accountStore, isAdminUser, logout, refreshAccount, renameAccount } from '../net/api';
 import { deviceManager } from '../devices/deviceManager';
 import { GRAPHICS_QUALITY_OPTIONS } from '../game/real/quality';
+import {
+  DEFAULT_HUD_LAYOUT,
+  MAX_HUD_FIELDS,
+  addField,
+  availableFields,
+  fieldDef,
+  moveField,
+  removeField,
+  type HudFieldId,
+  type HudLayoutMode,
+} from '../ride/hudFields';
 import { settingsStore, updateSettings, type Settings } from '../state/settings';
 import { useStore } from '../state/store';
 import { COUNTRIES, Flag } from './Flag';
@@ -97,6 +108,7 @@ export function SettingsPage() {
             </label>
           </div>
         </div>
+        <HudFieldsCard />
         <div className="card">
           <h2>Grafik</h2>
           <div className="form">
@@ -279,6 +291,72 @@ function StravaCard() {
       )}
       {message && <div className="small" style={{ marginTop: 8 }}>{message}</div>}
       <PoweredByStrava />
+    </div>
+  );
+}
+
+/** Picks and orders the HUD data fields, separately for free rides and workouts (buttons, no drag & drop – works on the iPad). */
+function HudFieldsCard() {
+  const layout = useStore(settingsStore).hudFields;
+  const set = (mode: HudLayoutMode, list: HudFieldId[]) => updateSettings({ hudFields: { ...layout, [mode]: list } });
+  return (
+    <div className="card">
+      <h2>Datenfelder</h2>
+      <div className="muted small" style={{ marginBottom: 10 }}>
+        Welche Werte unten in der Fahrt stehen und in welcher Reihenfolge – bis zu {MAX_HUD_FIELDS} Felder, die erste Hälfte links vom
+        Höhenprofil, der Rest rechts. Auf dem iPhone hochkant passen höchstens 3 pro Seite.
+      </div>
+      <div className="hud-fields-grid">
+        <HudFieldColumn title="Freie Fahrt" mode="free" list={layout.free} onChange={(l) => set('free', l)} />
+        <HudFieldColumn title="Workout" mode="workout" list={layout.workout} onChange={(l) => set('workout', l)} />
+      </div>
+    </div>
+  );
+}
+
+function HudFieldColumn({ title, mode, list, onChange }: { title: string; mode: HudLayoutMode; list: HudFieldId[]; onChange: (l: HudFieldId[]) => void }) {
+  const rest = availableFields(mode).filter((f) => !list.includes(f.id));
+  const full = list.length >= MAX_HUD_FIELDS;
+  const isDefault = list.join() === DEFAULT_HUD_LAYOUT[mode].join();
+  return (
+    <div>
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <h3 style={{ margin: 0 }}>{title}</h3>
+        <span className="muted small">
+          {list.length} / {MAX_HUD_FIELDS}
+        </span>
+      </div>
+      <ol className="hud-field-list">
+        {list.map((id, i) => (
+          <li key={id}>
+            <span className="pos">{i + 1}</span>
+            <span className="name">{fieldDef(id).name}</span>
+            <button onClick={() => onChange(moveField(list, i, -1))} disabled={i === 0} aria-label={`${fieldDef(id).name} nach oben`}>
+              ↑
+            </button>
+            <button onClick={() => onChange(moveField(list, i, 1))} disabled={i === list.length - 1} aria-label={`${fieldDef(id).name} nach unten`}>
+              ↓
+            </button>
+            <button onClick={() => onChange(removeField(list, id))} aria-label={`${fieldDef(id).name} entfernen`}>
+              ✕
+            </button>
+          </li>
+        ))}
+        {list.length === 0 && <li className="muted small">Keine Felder – die Leiste zeigt nur das Höhenprofil.</li>}
+      </ol>
+      <div className="muted small" style={{ marginBottom: 6 }}>
+        {full ? 'Voll – erst ein Feld entfernen.' : 'Hinzufügen:'}
+      </div>
+      <div className="hud-field-add">
+        {rest.map((f) => (
+          <button key={f.id} disabled={full} onClick={() => onChange(addField(list, f.id))}>
+            + {f.name}
+          </button>
+        ))}
+      </div>
+      <button style={{ marginTop: 10 }} disabled={isDefault} onClick={() => onChange([...DEFAULT_HUD_LAYOUT[mode]])}>
+        Standard wiederherstellen
+      </button>
     </div>
   );
 }

@@ -16,6 +16,8 @@ import type { RideSummaryDTO } from '@velo/protocol';
 import type { RiderLook } from '../game/rider';
 import type { RiderFrame } from '../game/world';
 import { botPosition, planBots, type BotPlan } from './bots';
+import { LiveStats } from './liveStats';
+import { WattLock, wattLockAllowed, type WattLockReleaseReason } from './wattLock';
 import { getBest, submitResult } from '../state/records';
 import { settingsStore, type Settings } from '../state/settings';
 import { referenceFtp } from '../ftp/advisor';
@@ -71,6 +73,15 @@ export interface RideSnapshot {
   autoPaused: boolean;
   /** Ramp test: the rider could no longer keep pedalling – the ride ends with the result. */
   testAborted: boolean;
+  /** Average of the last 10 recorded seconds. */
+  power10s: number;
+  /** Average power of the current lap (route lap, in a workout the current block) and its length in s. */
+  lapPower: number;
+  lapPowerS: number;
+  /** Watts held by the Watt-Lock (free ride, ERG), undefined when off. */
+  wattLock?: number;
+  /** Watt-Lock can be switched on right now (free ride, ERG trainer, riding). */
+  canWattLock: boolean;
 }
 
 export interface SegmentOutcome {
@@ -178,6 +189,8 @@ export class RideSession {
   private lastErgTarget?: number;
   private lastErgSent = 0;
   private gear = NEUTRAL_GEAR;
+  private readonly live = new LiveStats();
+  readonly wattLock = new WattLock();
   /** Actual power per recorded second against workout time, for the chart overlay. */
   readonly workoutTrace: Array<[number, number]> = [];
   readonly player?: WorkoutPlayer;
@@ -225,14 +238,53 @@ export class RideSession {
     this.lastErgTarget = undefined;
   }
 
-  /** Virtual shifting: +1 heavier, −1 easier. The trainer gets the new resistance at once. */
+  /** Virtual shifting: +1 heavier, −1 easier. The trainer gets the new resistance at once. With Watt-Lock on, ±5 W instead. */
   shift(delta: number): void {
+    if (this.wattLock.active) {
+      this.adjustWattLock(delta);
+      return;
+    }
     const next = Math.min(GEARS.length, Math.max(1, this.gear + delta));
     if (next === this.gear) return;
     this.gear = next;
     this.lastTrainerUpdate = 0;
     this.lastTrainerGrade = undefined;
     this.snapshot.set({ ...this.snapshot.get(), gear: next });
+  }
+
+  /** Free ride with an ERG trainer: Watt-Lock may be switched on. */
+  get canWattLock(): boolean {
+    const p = this.player;
+    return wattLockAllowed({ riding: this.runState === 'riding', canErg: deviceManager.canErg, workoutActive: !!p && !p.state.finished });
+  }
+
+  /** Watt-Lock on (at the current 3-s power, rounded to 5 W) or off. */
+  toggleWattLock(): void {
+    if (this.wattLock.active) {
+      this.releaseWattLock('toggle');
+      return;
+    }
+    if (!this.canWattLock) return;
+    this.wattLock.engage(deviceManager.metrics.get().power3s);
+    this.lastErgTarget = undefined;
+    this.updateErg(performance.now(), this.wattLock.watts);
+    this.snapshot.set({ ...this.snapshot.get(), wattLock: this.wattLock.watts });
+  }
+
+  /** Locked watts ± steps × 5 W. */
+  adjustWattLock(steps: number): void {
+    if (this.wattLock.adjust(steps) === undefined) return;
+    this.snapshot.set({ ...this.snapshot.get(), wattLock: this.wattLock.watts });
+  }
+
+  /** Watt-Lock off: the trainer goes back to SIM (grade + gear) at once. */
+  private releaseWattLock(reason: WattLockReleaseReason): void {
+    if (!this.wattLock.release(reason)) return;
+    this.lastErgTarget = undefined;
+    this.lastTrainerGrade = undefined;
+    this.lastTrainerUpdate = 0;
+    this.updateTrainer(this.track.sample(this.state.distanceM).gradePercent, performance.now());
+    this.snapshot.set({ ...this.snapshot.get(), wattLock: undefined });
   }
 
   setIntensity(value: number): void {
@@ -286,6 +338,7 @@ export class RideSession {
 
   pause(auto = false): void {
     if (this.runState !== 'riding') return;
+    this.releaseWattLock('paused');
     this.runState = 'paused';
     this.autoPaused = auto;
     this.snapshot.set({ ...this.snapshot.get(), state: 'paused', autoPaused: auto });
@@ -307,6 +360,7 @@ export class RideSession {
 
   finish(): RideResult {
     clearInterval(this.timer);
+    this.releaseWattLock('finished');
     this.runState = 'finished';
     this.snapshot.set({ ...this.snapshot.get(), state: 'finished' });
     const summary = this.recorder.summary();
@@ -333,6 +387,7 @@ export class RideSession {
 
   dispose(): void {
     clearInterval(this.timer);
+    this.releaseWattLock('finished');
   }
 
   private tick(): void {
@@ -351,6 +406,10 @@ export class RideSession {
     const cadence = m.cadence;
     // Auto-pause a few seconds after the pedals stop (only once the ride has really started).
     this.idleS = power > 0 || cadence > 0 ? 0 : this.idleS + dt;
+    // Watt-Lock ends when the pedals stop (also with auto-pause off) or ERG is no longer possible.
+    if (this.wattLock.active && (this.idleS >= AUTO_PAUSE_S || !this.canWattLock)) {
+      this.releaseWattLock(this.idleS >= AUTO_PAUSE_S ? 'stopped' : 'unavailable');
+    }
     if (this.idleS >= AUTO_PAUSE_S && this.movingMs > 0 && this.autoPauseAllowed) {
       this.pause(true);
       return;
@@ -367,10 +426,12 @@ export class RideSession {
     if (this.player && moving && !this.player.state.finished) {
       const { state: ws, segmentChanged } = this.player.advance(dt, { power, cadence });
       if (segmentChanged && this.recorder.samples.length > 0) this.recorder.lap();
+      if (segmentChanged) this.live.lap();
       if (segmentChanged) this.lastErgTarget = undefined;
       if (ws.finished) this.lastTrainerGrade = undefined; // hand control back to SIM immediately
     }
-    if (this.mode === 'erg') this.updateErg(now);
+    if (this.mode === 'erg') this.updateErg(now, this.player?.state.targetWatts);
+    else if (this.wattLock.active) this.updateErg(now, this.wattLock.watts);
     else this.updateTrainer(sample.gradePercent, now);
 
     const elev = this.track.sample(this.state.distanceM).y;
@@ -395,6 +456,7 @@ export class RideSession {
         const cur = this.track.sample(this.state.distanceM);
         const avg = Math.round(acc.power / s);
         this.powerSum += avg;
+        this.live.addSecond(avg);
         this.recorder.record({
           timestamp: Date.now(),
           distanceM: this.state.distanceM - this.skippedM,
@@ -426,7 +488,10 @@ export class RideSession {
       this.addOutcome({ id: 'lap', name: `Runde ${this.lapTimes.length}`, type: 'lap' }, movingS - this.lapStartMovingS);
       this.lapStartMovingS = movingS;
       // In a workout the FIT laps follow the workout blocks instead of the route.
-      if (!this.player) this.recorder.lap();
+      if (!this.player) {
+        this.recorder.lap();
+        this.live.lap();
+      }
     }
 
     this.snapshot.set(this.buildSnapshot(power, m.power3s, cadence, m.heartRate, m.stale));
@@ -493,8 +558,7 @@ export class RideSession {
     }
   }
 
-  private updateErg(now: number): void {
-    const target = this.player?.state.targetWatts;
+  private updateErg(now: number, target: number | undefined): void {
     if (target === undefined || !deviceManager.canErg) return;
     const changed = this.lastErgTarget === undefined || Math.abs(target - this.lastErgTarget) >= 1;
     // New blocks are sent at once; ramps at most once per second.
@@ -575,6 +639,11 @@ export class RideSession {
       teleported: this.teleported,
       autoPaused: this.autoPaused,
       testAborted: !!this.player?.rampAbortedByRider,
+      power10s: this.live.power10s,
+      lapPower: this.live.lapPower,
+      lapPowerS: this.live.lapSeconds,
+      wattLock: this.wattLock.watts,
+      canWattLock: this.canWattLock,
     };
   }
 
