@@ -168,6 +168,11 @@ export class WorkoutPlayer {
     return { state: this.last, segmentChanged: changed };
   }
 
+  /** The ramp test ended because the rider could no longer keep pedalling. */
+  get rampAbortedByRider(): boolean {
+    return this.rampAborted;
+  }
+
   /** What the rider has done of the test so far — the input for evaluateTest(). */
   get testProgress(): TestProgress {
     const steps = this.timeline.filter(isRampStep);

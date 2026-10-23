@@ -17,7 +17,7 @@ import type { RiderLook } from '../game/rider';
 import type { RiderFrame } from '../game/world';
 import { botPosition, planBots, type BotPlan } from './bots';
 import { getBest, submitResult } from '../state/records';
-import type { Settings } from '../state/settings';
+import { settingsStore, type Settings } from '../state/settings';
 import { Store } from '../state/store';
 
 export type RideState = 'riding' | 'paused' | 'finished';
@@ -66,6 +66,10 @@ export interface RideSnapshot {
   coinsDisabled: boolean;
   /** The rider was moved with the admin teleport: no Taler, no best times. */
   teleported: boolean;
+  /** Paused because the rider stopped pedalling; pedalling again resumes. */
+  autoPaused: boolean;
+  /** Ramp test: the rider could no longer keep pedalling – the ride ends with the result. */
+  testAborted: boolean;
 }
 
 export interface SegmentOutcome {
@@ -94,6 +98,8 @@ export interface RideResult {
 }
 
 const TICK_MS = 100;
+/** Seconds without pedalling before a ride pauses itself. */
+const AUTO_PAUSE_S = 3;
 
 /**
  * Virtual shifting (as in Zwift): 24 gear ratios from 0.75 to 5.0. The trainer feels the gear as an
@@ -155,6 +161,8 @@ export class RideSession {
   private timer?: ReturnType<typeof setInterval>;
   private lastTick = 0;
   private movingMs = 0;
+  private idleS = 0;
+  private autoPaused = false;
   private secondAcc = { ms: 0, power: 0, cadence: 0, cadenceN: 0, hr: 0, hrN: 0 };
   private lapStartMovingS = 0;
   private lapTimes: number[] = [];
@@ -275,16 +283,25 @@ export class RideSession {
     this.timer = setInterval(() => this.tick(), TICK_MS);
   }
 
-  pause(): void {
+  pause(auto = false): void {
     if (this.runState !== 'riding') return;
     this.runState = 'paused';
-    this.snapshot.set({ ...this.snapshot.get(), state: 'paused' });
+    this.autoPaused = auto;
+    this.snapshot.set({ ...this.snapshot.get(), state: 'paused', autoPaused: auto });
   }
 
   resume(): void {
     if (this.runState !== 'paused') return;
     this.runState = 'riding';
+    this.autoPaused = false;
+    this.idleS = 0;
     this.lastTick = performance.now();
+  }
+
+  /** Auto-pause is on in the settings – except during the ramp steps, where stopping ends the test. */
+  private get autoPauseAllowed(): boolean {
+    const p = this.player;
+    return settingsStore.get().autoPause && !(p && p.workout.test === 'ramp' && !p.state.finished);
   }
 
   finish(): RideResult {
@@ -317,6 +334,11 @@ export class RideSession {
   }
 
   private tick(): void {
+    if (this.runState === 'paused' && this.autoPaused) {
+      const live = deviceManager.metrics.get();
+      if (live.stale || (live.power <= 0 && live.cadence <= 0)) return;
+      this.resume();
+    }
     const now = performance.now();
     const dt = Math.min(0.5, (now - this.lastTick) / 1000);
     this.lastTick = now;
@@ -325,6 +347,12 @@ export class RideSession {
     const m = deviceManager.metrics.get();
     const power = m.stale ? 0 : m.power;
     const cadence = m.cadence;
+    // Auto-pause a few seconds after the pedals stop (only once the ride has really started).
+    this.idleS = power > 0 || cadence > 0 ? 0 : this.idleS + dt;
+    if (this.idleS >= AUTO_PAUSE_S && this.movingMs > 0 && this.autoPauseAllowed) {
+      this.pause(true);
+      return;
+    }
     const sample = this.track.sample(this.state.distanceM);
 
     // Drafting: nearest rider ahead of me.
@@ -543,6 +571,8 @@ export class RideSession {
       coins: total(this.earningLines()),
       coinsDisabled: this.noCredit,
       teleported: this.teleported,
+      autoPaused: this.autoPaused,
+      testAborted: !!this.player?.rampAbortedByRider,
     };
   }
 

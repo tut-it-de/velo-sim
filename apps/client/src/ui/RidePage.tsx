@@ -461,7 +461,7 @@ function RideView({
         if (DEV_RIDE && DEV.get('km')) s.teleport(Number(DEV.get('km')) * 1000);
         setWorld(created);
         setSession(s);
-        (window as unknown as { __velo?: unknown }).__velo = { world: created, session: s };
+        (window as unknown as { __velo?: unknown }).__velo = { world: created, session: s, devices: deviceManager };
         void keepAwake(true);
       })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));

@@ -16,6 +16,8 @@ export interface Settings {
   useSimulator: boolean;
   /** Prefer a dedicated cadence sensor over the trainer's estimated cadence. */
   preferCadenceSensor: boolean;
+  /** Pause the ride automatically when the pedals stop. */
+  autoPause: boolean;
   /** Game server, e.g. https://velo.example.de — empty = offline only. */
   serverUrl: string;
   /** Join the multiplayer room when starting a ride (if a server is configured). */
@@ -25,7 +27,7 @@ export interface Settings {
   /** Admin tools in the ride (teleport along the route). Rides with a teleport earn nothing. */
   adminMode: boolean;
   /** Last trainer and heart rate strap, found again automatically in the iPad app. */
-  knownDevices: { trainer?: string; hrm?: string; shifter?: string };
+  knownDevices: { trainer?: string; hrm?: string; cadence?: string; shifter?: string };
   /** Virtual shifting with the mouse while riding: left click heavier, right click lighter. */
   shiftMouse: boolean;
   /** Virtual shifting with the keys − and +. */
@@ -43,6 +45,7 @@ export const DEFAULT_SETTINGS: Settings = {
   trainerDifficulty: 0.5,
   useSimulator: false,
   preferCadenceSensor: true,
+  autoPause: true,
   serverUrl: '',
   rideOnline: true,
   graphicsQuality: 'auto',

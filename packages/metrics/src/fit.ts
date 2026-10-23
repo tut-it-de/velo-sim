@@ -260,6 +260,9 @@ export interface FitOptions {
   utcOffsetMinutes?: number;
 }
 
+/** Records further apart than this mark a pause (auto-pause or the pause button). */
+const PAUSE_GAP_MS = 3000;
+
 /** Encodes a recorded ride as a FIT activity file. */
 export function encodeFitActivity(samples: ActivitySample[], summary: ActivitySummary, options: FitOptions = {}): Uint8Array {
   const w = new FitWriter();
@@ -275,7 +278,14 @@ export function encodeFitActivity(samples: ActivitySample[], summary: ActivitySu
   });
   w.write('event', { 253: toFitTimestamp(start), 0: EVENT.timer, 1: EVENT_TYPE.start });
 
+  let prev: ActivitySample | undefined;
   for (const s of samples) {
+    // A gap in the 1 Hz records is a pause: stop and restart the timer so moving time leaves it out.
+    if (prev && s.timestamp - prev.timestamp > PAUSE_GAP_MS) {
+      w.write('event', { 253: toFitTimestamp(prev.timestamp), 0: EVENT.timer, 1: EVENT_TYPE.stopAll });
+      w.write('event', { 253: toFitTimestamp(s.timestamp), 0: EVENT.timer, 1: EVENT_TYPE.start });
+    }
+    prev = s;
     w.write('record', {
       253: toFitTimestamp(s.timestamp),
       5: u(s.distanceM, 100, 0, 0xfffffffe),

@@ -1,4 +1,5 @@
 import {
+  CADENCE_REQUEST,
   HEART_RATE_REQUEST,
   SimulatedTransport,
   TRAINER_REQUEST,
@@ -111,13 +112,18 @@ class DeviceManager {
           .catch(() => null);
         if (found?.id === known.shifter) await this.connectShifter(found);
       }
-      for (const slot of ['trainer', 'hrm'] as const) {
+      for (const slot of ['trainer', 'hrm', 'cadence'] as const) {
         if (this.slots.get()[slot].state !== 'disconnected') continue;
+        // An own cadence sensor only when one was connected before – otherwise the trainer is the source.
+        if (slot === 'cadence' && !known.cadence) continue;
         this.patchSlot(slot, { state: 'connecting', error: undefined });
         const found = await transport
-          .scan(slot === 'trainer' ? TRAINER_REQUEST : HEART_RATE_REQUEST, { preferIds: known[slot] ? [known[slot]] : [], timeoutMs: 4000 })
+          .scan(slot === 'trainer' ? TRAINER_REQUEST : slot === 'hrm' ? HEART_RATE_REQUEST : CADENCE_REQUEST, {
+            preferIds: known[slot] ? [known[slot]] : [],
+            timeoutMs: 4000,
+          })
           .catch(() => null);
-        if (found) await this.connect(slot, found);
+        if (found && (slot !== 'cadence' || found.id === known.cadence)) await this.connect(slot, found);
         else this.patchSlot(slot, { state: 'disconnected' });
       }
     })().finally(() => (this.autoConnecting = undefined));
@@ -157,7 +163,12 @@ class DeviceManager {
         this.remember('hrm', h.device.id, simulated);
       } else {
         await this.cadenceSensor?.disconnect();
-        const c = await requestCadenceSensor(transport, { log });
+        // The trainer also advertises Cycling Power and shows up in the chooser – it already delivers cadence.
+        const picked = found ?? (await transport.requestDevice(CADENCE_REQUEST));
+        if (this.trainer && picked.id === this.trainer.device.id) {
+          throw new Error('Das ist dein Trainer – der liefert die Trittfrequenz schon. Wähle einen eigenen Kadenzsensor oder Powermeter.');
+        }
+        const c = await requestCadenceSensor(transport, { log }, picked);
         this.cadenceSensor = c;
         c.on('data', (d) => {
           this.sensorCadence = { value: d.cadence, t: Date.now() };
@@ -165,6 +176,7 @@ class DeviceManager {
         });
         c.on('connection', (state) => this.patchSlot('cadence', { state }));
         this.patchSlot('cadence', { state: 'connected', name: c.name });
+        this.remember('cadence', c.device.id, simulated);
       }
     } catch (err) {
       const msg = errorMessage(err);
@@ -208,7 +220,7 @@ class DeviceManager {
     this.shifterSlot.set(disconnected);
   }
 
-  private remember(slot: 'trainer' | 'hrm' | 'shifter', id: string, simulated: boolean): void {
+  private remember(slot: DeviceSlot | 'shifter', id: string, simulated: boolean): void {
     if (simulated) return;
     updateSettings({ knownDevices: { ...settingsStore.get().knownDevices, [slot]: id } });
   }
@@ -227,6 +239,9 @@ class DeviceManager {
     if (slot === 'cadence') {
       this.cadenceSensor = undefined;
       this.sensorCadence = undefined;
+      // Disconnected by hand: back to the trainer's cadence, also on the next start.
+      const { cadence: _forgotten, ...known } = settingsStore.get().knownDevices;
+      updateSettings({ knownDevices: known });
     }
     this.patchSlot(slot, { state: 'disconnected', name: undefined });
     this.recompute({});

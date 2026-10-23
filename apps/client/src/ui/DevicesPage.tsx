@@ -9,7 +9,7 @@ import { StatusDot, Tile, Toggle, fmt } from './components';
 const SLOT_INFO: Record<DeviceSlot, { title: string; hint: string }> = {
   trainer: { title: 'Smart-Trainer', hint: 'KICKR Core oder jeder FTMS-Trainer' },
   hrm: { title: 'Herzfrequenz', hint: 'Brustgurt oder Uhr im Broadcast-Modus' },
-  cadence: { title: 'Trittfrequenz', hint: 'Kommt vom Smart-Trainer – ein eigener Kadenzsensor ist optional' },
+  cadence: { title: 'Trittfrequenz', hint: 'Vom Smart-Trainer, einem Kadenzsensor oder Powermeter (Pedale, Kurbel)' },
 };
 
 export function DevicesPage() {
@@ -65,10 +65,17 @@ export function DevicesPage() {
                   {SLOT_INFO[slot].hint}
                 </div>
                 {slot === 'cadence' && !connected && trainerConnected ? (
-                  <div className="row" style={{ justifyContent: 'space-between' }}>
-                    <StatusDot state="connected" label={`vom ${slots.trainer.name ?? 'Trainer'}`} />
-                    <strong>{fmt(metrics.cadence)} rpm</strong>
-                  </div>
+                  <>
+                    <div className="row" style={{ justifyContent: 'space-between' }}>
+                      <StatusDot state="connected" label={`vom ${slots.trainer.name ?? 'Trainer'}`} />
+                      <strong>{fmt(metrics.cadence)} rpm</strong>
+                    </div>
+                    {!settings.useSimulator && (
+                      <button className="link" style={{ marginTop: 8 }} disabled={busy} onClick={() => deviceManager.connect('cadence')}>
+                        {busy ? 'Verbinde …' : 'Eigenen Kadenzsensor oder Powermeter verbinden'}
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <div className="row" style={{ justifyContent: 'space-between' }}>
                     <StatusDot state={s.state} label={s.name ? `${s.name}${s.simulated ? ' (Simulator)' : ''}` : undefined} />

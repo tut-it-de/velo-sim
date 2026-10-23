@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { formatCoins } from '@velo/equipment';
 import { powerZone } from '@velo/metrics';
 import { MAX_DRAFT_REDUCTION } from '@velo/physics';
@@ -54,6 +54,15 @@ export function Hud({
   const avgKmh = s.movingS > 0 ? (s.distanceM / s.movingS) * 3.6 : 0;
   const [teleportOpen, setTeleportOpen] = useState(false);
   const admin = settings.adminMode;
+  // Ramp test: stopping the pedals ends the test – straight to the result.
+  const finishRef = useRef(onFinish);
+  finishRef.current = onFinish;
+  const autoFinished = useRef(false);
+  useEffect(() => {
+    if (!s.testAborted || s.state !== 'riding' || autoFinished.current) return;
+    autoFinished.current = true;
+    void finishRef.current();
+  }, [s.testAborted, s.state]);
   useEffect(() => {
     if (!admin) return;
     const onKey = (e: KeyboardEvent) => {
@@ -155,7 +164,9 @@ export function Hud({
       {session.net && <RideOnToast session={session} />}
 
       {s.noTrainerData && !paused && <div className="hud-warning">Keine Leistungsdaten – ist der Trainer verbunden? (Geräte-Seite)</div>}
-      {paused && <div className="hud-warning paused">Pausiert – „Weiter“ oder Taste P</div>}
+      {paused && (
+        <div className="hud-warning paused">{s.autoPaused ? 'Pausiert – einfach weitertreten' : 'Pausiert – „Weiter“ oder Taste P'}</div>
+      )}
 
       <div className="hud-bottom">
         <div className="hud-metrics hud-metrics-left">

@@ -93,6 +93,11 @@ export function SettingsPage() {
               <input type="checkbox" checked={s.preferCadenceSensor} onChange={(e) => updateSettings({ preferCadenceSensor: e.target.checked })} />
               Kadenzsensor bevorzugen, wenn verbunden
             </label>
+            <label>Auto-Pause</label>
+            <label className="row" style={{ color: 'var(--text)' }}>
+              <input type="checkbox" checked={s.autoPause} onChange={(e) => updateSettings({ autoPause: e.target.checked })} />
+              Fahrt pausieren, wenn ich aufhöre zu treten (weiter geht’s mit dem nächsten Tritt)
+            </label>
           </div>
         </div>
         <div className="card">

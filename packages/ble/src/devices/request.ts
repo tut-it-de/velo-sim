@@ -40,12 +40,14 @@ export async function requestHeartRateMonitor(transport: BleTransport, options: 
   return hrm;
 }
 
-export async function requestCadenceSensor(transport: BleTransport, options: ManagedDeviceOptions = {}): Promise<CadenceSensor> {
-  const device = await transport.requestDevice({
-    services: [SERVICE.cyclingSpeedCadence, SERVICE.cyclingPower],
-    optionalServices: [SERVICE.deviceInformation],
-  });
-  const sensor = new CadenceSensor(device, options);
+/** Cadence sensors (Speed & Cadence) and power meters such as pedals or crank arms. */
+export const CADENCE_REQUEST: DeviceRequest = {
+  services: [SERVICE.cyclingSpeedCadence, SERVICE.cyclingPower],
+  optionalServices: [SERVICE.deviceInformation],
+};
+
+export async function requestCadenceSensor(transport: BleTransport, options: ManagedDeviceOptions = {}, found?: BleDevice): Promise<CadenceSensor> {
+  const sensor = new CadenceSensor(found ?? (await transport.requestDevice(CADENCE_REQUEST)), options);
   await sensor.start();
   return sensor;
 }
