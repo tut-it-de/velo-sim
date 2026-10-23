@@ -1,10 +1,13 @@
 /**
  * Roundabouts: the ring carriageway around a central island, its heights along the ring and the
  * approaches joining it. Each approach is one asphalt area from the joining road(s) into the ring with
- * rounded outer corners (fillets); a pair of one-way carriageways (or the lap's split branches) becomes
- * one approach with a raised splitter island between entry and exit. The outer edge line of the ring
- * is open across each approach, give-way dashes cross the entering lane. The ride's rows on a ring are
- * not drawn (corridor.ts, roadRibbon.ts); side roads end where their approach area begins.
+ * rounded outer corners (fillets). Paved approaches follow one template: the two-lane road flares round a
+ * triangular splitter island (base at the ring, tip out along the road), whose painted outline meets the
+ * centre line beyond the tip with hatching between; entry on the island's counter-clockwise side, exit on
+ * the other (right-hand traffic). A pair of one-way carriageways (or the lap's split branches) becomes one
+ * such approach. Give-way dashes cross the entry, thin dashes carry the outer edge line across the exit.
+ * The ride moves right beside the island (laneShifts). The ride's rows on a ring are not drawn
+ * (corridor.ts, roadRibbon.ts); side roads end where their approach area begins.
  * Babylon-free so the tests can check the plan; the meshes come from roundabouts.ts.
  */
 import { smoothstep } from '../noise';
@@ -24,18 +27,34 @@ const FILLET = 12;
 const FILLET_TRACK = 4;
 /** Carriageways whose edges are closer than this (m) at the ring form one approach (splitter island between). */
 const PAIR_GAP = 9;
-/** The splitter island starts this far outside the ring's outer edge and keeps this far from the lanes, m. */
+/** The splitter island's base lies this far outside the ring's outer edge; it keeps this far from mapped lanes, m. */
 const ISLAND_NOSE = 1.5;
 const ISLAND_INSET = 0.5;
 /** A pair's area (and its splitter island) runs at most this far (m) out along the carriageways. */
 const PAIR_REACH = 30;
-/** Splitter islands: length and half width at the widest of the standard teardrop, m. */
+/** Splitter island: a triangle with its base at the ring (half width) and its tip out along the road, m. */
 const ISLAND_LEN = 14;
-const ISLAND_HALF = 1.1;
+const ISLAND_HALF = 2.2;
+/** Beyond the tip the island's painted outline meets the centre line after this far, the flare of the edges ends after this far again, m. */
+const HATCH_LEN = 6;
+const FLARE_OUT = 10;
+/** Painted outline this far outside the island; hatch stripes spacing and width; centre dashes, m. */
+const OUTLINE = 0.3;
+const HATCH_STEP = 1.4;
+const HATCH_W = 0.3;
+const CENTRE_DASH = 3;
+const CENTRE_GAP = 3;
+/** Side roads narrower than this (half width, m) join without an island. */
+const ISLAND_MIN_HALF = 2.4;
+/** Edge lines: width and distance of their centre from the asphalt edge, m. */
+export const LINE_W = 0.15;
+export const LINE_IN = 0.3;
 /** Approach areas reach this far (m) past the end of their fillets along the roads. */
 const APPROACH_PAST = 1;
 /** Inner apron (paved, slightly raised) between the ring carriageway and the island, m. */
 export const APRON = 1.2;
+/** Riders move back from beside the island to their line over this distance inside the ring, m. */
+const SHIFT_IN = 8;
 
 /** Angular interval [a, a + span] (rad, span < 2π). */
 export interface Arc {
@@ -51,8 +70,11 @@ export interface RingEnd {
   /** Half widths to the left (counter-clockwise round the ring) and right of `t`, incl. shoulder. */
   hl: number;
   hr: number;
-  /** Lap ends: rows from the ring outwards (their walls are opened), entering the ring or not, one-way. */
-  lap: { row: number; step: number; entering: boolean; oneWay: boolean } | null;
+  /**
+   * Lap ends: rows from the ring outwards (their walls are opened), entering the ring or not, one-way;
+   * every pass of the lap along this end (out-and-back roads are passed twice).
+   */
+  lap: { row: number; step: 1 | -1; entering: boolean; oneWay: boolean; passes: Array<{ row: number; step: 1 | -1 }> } | null;
   road: number;
   end: 0 | 1;
   /** Distance along the side road from its end to the ring's outer edge. */
@@ -72,6 +94,10 @@ export interface RingApproach {
   gap: Arc;
   /** Give-way dashes across entering lanes. */
   dashes: Arc[];
+  /** Thin dashes continuing the ring's outer edge line across the exits. */
+  exits: Arc[];
+  /** Markings on the approach (edge lines, the island's outline, hatching, centre dashes): polylines and their width. */
+  paint: Array<{ pts: Vec2[]; w: number }>;
   /** Approach area height falls back to the joining roads over this distance from the ring, m. */
   reach: number;
 }
@@ -83,6 +109,17 @@ export interface RingPlan {
   /** Whether the ride runs on the ring at step k. */
   ridden: Uint8Array;
   approaches: RingApproach[];
+  /** How far riders move right on the lap's ends here (they pass beside the splitter island). */
+  lanes: LaneShift[];
+}
+
+/** Sideways shift of the ride along one pass of the lap out of a ring, per metre from the ring's outer edge. */
+export interface LaneShift {
+  row: number;
+  step: 1 | -1;
+  /** Distance of the row's frame from the ring's outer edge, m. */
+  d0: number;
+  shift: Float32Array;
 }
 
 const TAU = Math.PI * 2;
@@ -249,10 +286,15 @@ export function ringEnds(c: RouteCorridor, k: number, roads: SideRoad[], lengths
     const hl = c.hw[here ? 1 : 0]![row]! + SHOULDER;
     const hr = c.hw[here ? 0 : 1]![row]! + SHOULDER;
     const p = onCircle(o, ro, [f.x, f.z], t);
+    const step = here ? -1 : 1;
     // the same road passed both ways (out-and-back): one end
-    if (ends.some((e) => e.lap && Math.hypot(e.p[0] - p[0], e.p[1] - p[1]) < 3 && e.t[0] * t[0] + e.t[1] * t[1] > 0.8)) continue;
+    const same = ends.find((e) => e.lap && Math.hypot(e.p[0] - p[0], e.p[1] - p[1]) < 3 && e.t[0] * t[0] + e.t[1] * t[1] > 0.8);
+    if (same) {
+      same.lap!.passes.push({ row, step });
+      continue;
+    }
     const oneWay = c.twin[row] === 2;
-    ends.push({ p, t, hl, hr, lap: { row, step: here ? -1 : 1, entering: here, oneWay }, road: -1, end: 0, cut: 0, track: false, ang: ang(p) });
+    ends.push({ p, t, hl, hr, lap: { row, step, entering: here, oneWay, passes: [{ row, step }] }, road: -1, end: 0, cut: 0, track: false, ang: ang(p) });
   }
   roads.forEach((road, ri) => {
     for (const end of [0, 1] as const) {
@@ -311,16 +353,103 @@ export function planRoundabouts(c: RouteCorridor, roads: SideRoad[], ground: (x:
       }
     }
 
+    // the edge of a carriageway s m out from the ring (side > 0: left of the way out)
+    const at = (e: RingEnd, side: 1 | -1, s: number): Vec2 => {
+      if (!e.lap) {
+        const cs = crossSection(roads[e.road]!, e.end, Math.min(e.cut + s, lengths[e.road]! - 0.5), lengths[e.road]!);
+        // cs.left is left of the polyline's direction, i.e. right of the way out at the polyline's end
+        return side > 0 === (e.end === 0) ? cs.left : cs.right;
+      }
+      // the lap: along its rows (the branches curve), the left of the way out is the right of an entry
+      const f0 = c.frames[e.lap.row]!;
+      const d0 = (f0.x - e.p[0]) * e.t[0] + (f0.z - e.p[1]) * e.t[1];
+      const u = (s - d0) / c.rowLength;
+      if (u <= 0) return add(add(e.p, e.t, s), side > 0 ? left(e.t) : right(e.t), side > 0 ? e.hl : e.hr);
+      const q0 = Math.floor(u);
+      const w = u - q0;
+      const R = c.rows;
+      const point = (q: number): Vec2 => {
+        const row = (((e.lap!.row + e.lap!.step * q) % R) + R) % R;
+        const f = c.frames[row]!;
+        const sideIdx = side > 0 === e.lap!.entering ? 1 : 0;
+        const o = (c.hw[sideIdx]![row]! + SHOULDER) * (sideIdx === 1 ? 1 : -1);
+        return [f.x + f.rx * o, f.z + f.rz * o];
+      };
+      const pa = point(q0);
+      const pb = point(q0 + 1);
+      return [pa[0] + (pb[0] - pa[0]) * w, pa[1] + (pb[1] - pa[1]) * w];
+    };
+
+    // room between the inner edges of a pair of carriageways
+    const across = (a: RingEnd, b: RingEnd, s: number) => {
+      const pa = at(a, 1, s);
+      const pb = at(b, -1, s);
+      const n0 = left(a.t);
+      return (pb[0] - pa[0]) * n0[0] + (pb[1] - pa[1]) * n0[1];
+    };
+
+    // every approach after the same template: the road's edges flare round a triangular splitter island
+    // (base at the ring, tip out along the road), entry on its left (counter-clockwise side), exit on its right
+    const tpls = groups.map((g) => {
+      const a = g[0]!;
+      const b = g[g.length - 1]!;
+      const avail = Math.min(...g.map((e) => (e.lap ? Infinity : lengths[e.road]! - e.cut - 1)));
+      // a pair: the width of one carriageway; one road: its lanes keep their width beside the island
+      const lane = g.length === 2 ? (a.hl + a.hr + b.hl + b.hr) / 2 : 0;
+      // the template shrinks on small rings and short side roads; too small, no island
+      const k = Math.min(1, ro / ISLAND_LEN, (avail - APPROACH_PAST - ISLAND_NOSE) / (ISLAND_LEN + HATCH_LEN + FLARE_OUT));
+      const len = ISLAND_LEN * k;
+      const s1 = ISLAND_NOSE + len;
+      const sH = s1 + HATCH_LEN * k;
+      const sF = sH + FLARE_OUT * k;
+      const paved = !g.some((e) => e.track);
+      const wide = g.length === 2 || (!a.lap?.oneWay && Math.min(a.hl, a.hr) >= ISLAND_MIN_HALF);
+      const half = paved && wide && k >= 0.4 ? Math.min(ISLAND_HALF, 0.12 * ro, ISLAND_HALF * (0.4 + k) / 1.4) : 0;
+      // a pair: where its carriageways meet (from there on one road with two lanes)
+      let meet = Infinity;
+      if (g.length === 2) {
+        const cap = Math.min(avail, PAIR_REACH);
+        for (let s = ISLAND_NOSE; s <= cap; s += 0.5) {
+          if (across(a, b, s) < 0.4) {
+            meet = s;
+            break;
+          }
+        }
+      }
+      return { a, b, avail, lane, len, s1, sH, sF, half, paved, meet };
+    });
+    type Tpl = (typeof tpls)[number];
+    // arm frame s m out: middle between the outer edges, unit vector across (towards the entry side), half width
+    const frame = (t: Tpl, s: number) => {
+      const r = at(t.a, -1, s);
+      const l = at(t.b, 1, s);
+      const dx = l[0] - r[0];
+      const dz = l[1] - r[1];
+      const d = Math.hypot(dx, dz);
+      const C: Vec2 = [(r[0] + l[0]) / 2, (r[1] + l[1]) / 2];
+      const N: Vec2 = d > 0.05 ? [dx / d, dz / d] : left(t.a.t);
+      return { C, N, h: d / 2 };
+    };
+    // room the island takes in the middle of the road, and the flared half width
+    const flare = (t: Tpl, s: number) => t.half * (1 - smoothstep(t.s1, t.sF, s));
+    const halfWidth = (t: Tpl, s: number, h: number) => (t.lane && s < t.meet ? Math.max(h, flare(t, s) + t.lane) : h + flare(t, s));
+    const edge = (t: Tpl, s: number, side: 1 | -1): Vec2 => {
+      const f = frame(t, s);
+      return add(f.C, f.N, side * halfWidth(t, s, f.h));
+    };
+    const point = (t: Tpl, s: number, x: number): Vec2 => {
+      const f = frame(t, s);
+      return add(f.C, f.N, x);
+    };
+
     // fillets per group; shrunk where two groups' corners would overlap
     // small rings get tighter corners (the openings would otherwise take the whole outer edge)
     const radius: number[] = groups.map((g) => Math.min(g.some((e) => e.track) ? FILLET_TRACK : FILLET, 0.5 * ro));
     const corners = (gi: number) => {
-      const g = groups[gi]!;
-      const a = g[0]!;
-      const b = g[g.length - 1]!;
+      const t = tpls[gi]!;
       const r = radius[gi]!;
-      const cw = fillet(o, ro, add(a.p, right(a.t), a.hr), a.t, right(a.t), r);
-      const cc = fillet(o, ro, add(b.p, left(b.t), b.hl), b.t, left(b.t), r);
+      const cw = fillet(o, ro, edge(t, 0, -1), t.a.t, right(t.a.t), r);
+      const cc = fillet(o, ro, edge(t, 0, 1), t.b.t, left(t.b.t), r);
       return { cw, cc };
     };
     for (let it = 0; it < 4 && groups.length > 1; it++) {
@@ -345,12 +474,13 @@ export function planRoundabouts(c: RouteCorridor, roads: SideRoad[], ground: (x:
     }
 
     const approaches: RingApproach[] = [];
+    const lanes: LaneShift[] = [];
+    const ringPlan: RingPlan = { rb, ys, ridden, approaches, lanes };
     groups.forEach((g, gi) => {
-      const a = g[0]!;
-      const b = g[g.length - 1]!;
+      const t = tpls[gi]!;
+      const { a, b, avail } = t;
       // the area reaches past both corners along every carriageway of the approach: tighter corners
       // where a side road is too short for that
-      const avail = Math.min(...g.map((e) => (e.lap ? Infinity : lengths[e.road]! - e.cut - 1)));
       let { cw, cc } = corners(gi);
       while (Math.max(cw?.s ?? 0, cc?.s ?? 0) + APPROACH_PAST > avail && radius[gi]! > 1.5) {
         radius[gi] = radius[gi]! * 0.7;
@@ -361,67 +491,28 @@ export function planRoundabouts(c: RouteCorridor, roads: SideRoad[], ground: (x:
         cc = null;
       }
       const r = radius[gi]!;
-      const at = (e: RingEnd, side: 1 | -1, s: number): Vec2 => {
-        if (!e.lap) {
-          const cs = crossSection(roads[e.road]!, e.end, Math.min(e.cut + s, lengths[e.road]! - 0.5), lengths[e.road]!);
-          // cs.left is left of the polyline's direction, i.e. right of the way out at the polyline's end
-          return side > 0 === (e.end === 0) ? cs.left : cs.right;
-        }
-        // the lap: along its rows (the branches curve), the left of the way out is the right of an entry
-        const f0 = c.frames[e.lap.row]!;
-        const d0 = (f0.x - e.p[0]) * e.t[0] + (f0.z - e.p[1]) * e.t[1];
-        const u = (s - d0) / c.rowLength;
-        if (u <= 0) return add(add(e.p, e.t, s), side > 0 ? left(e.t) : right(e.t), side > 0 ? e.hl : e.hr);
-        const q0 = Math.floor(u);
-        const w = u - q0;
-        const R = c.rows;
-        const point = (q: number): Vec2 => {
-          const row = (((e.lap!.row + e.lap!.step * q) % R) + R) % R;
-          const f = c.frames[row]!;
-          const sideIdx = side > 0 === e.lap!.entering ? 1 : 0;
-          const o = (c.hw[sideIdx]![row]! + SHOULDER) * (sideIdx === 1 ? 1 : -1);
-          return [f.x + f.rx * o, f.z + f.rz * o];
-        };
-        const pa = point(q0);
-        const pb = point(q0 + 1);
-        return [pa[0] + (pb[0] - pa[0]) * w, pa[1] + (pb[1] - pa[1]) * w];
-      };
-      let end = Math.max(0.3, Math.min(avail, Math.max(cw?.s ?? 0, cc?.s ?? 0) + APPROACH_PAST));
+      let end = Math.max(0.3, Math.min(avail, Math.max(cw?.s ?? 0, cc?.s ?? 0, t.half > 0 ? t.sF : 0) + APPROACH_PAST));
       // a pair of carriageways: one area up to where they meet (the splitter island fills the wedge)
-      const across = (s: number) => {
-        const pa = at(a, 1, s);
-        const pb = at(b, -1, s);
-        const n0 = left(a.t);
-        return (pb[0] - pa[0]) * n0[0] + (pb[1] - pa[1]) * n0[1];
-      };
-      let meet = Infinity;
-      if (g.length === 2) {
-        const cap = Math.min(avail, PAIR_REACH);
-        for (let s = end; s <= cap; s += 0.5) {
-          if (across(s) < 0.4) {
-            meet = s;
-            break;
-          }
-        }
-        // room for a standard island beyond where the mapped ways meet
-        end = Math.max(end, Math.min(meet + ISLAND_LEN * 0.5, cap));
-      }
+      const { meet } = t;
+      if (g.length === 2) end = Math.max(end, Math.min(Math.max(meet, t.s1) + ISLAND_LEN * 0.5, avail, PAIR_REACH));
       const poly: Vec2[] = [];
       const fillets: RingApproach['fillets'] = [];
       // clockwise corner: from the ring out to the road edge
-      const cwRing = cw ? cw.onRing : onCircle(o, ro, add(a.p, right(a.t), a.hr), a.t);
+      const cwRing = cw ? cw.onRing : onCircle(o, ro, edge(t, 0, -1), a.t);
       if (cw) {
         const pts = arcPts(cw.c, r, cw.onRing, cw.onEdge);
         fillets.push({ pts, c: cw.c, r });
         poly.push(...pts);
       } else poly.push(cwRing);
-      // out along the outer edges and across the road ends
-      for (let s = (cw?.s ?? 0) + 2; s < end - 1; s += 2) poly.push(at(a, -1, s));
-      for (const e of g) poly.push(at(e, -1, end), at(e, 1, end));
+      // out along the (flared) outer edges and across the road ends
+      for (let s = (cw?.s ?? 0) + 1; s < end - 0.5; s += 1) poly.push(edge(t, s, -1));
+      poly.push(edge(t, end, -1));
+      if (g.length === 2 && across(a, b, end) > 0.5) poly.push(at(a, 1, end), at(b, -1, end));
+      poly.push(edge(t, end, 1));
       const back: Vec2[] = [];
-      for (let s = (cc?.s ?? 0) + 2; s < end - 1; s += 2) back.push(at(b, 1, s));
+      for (let s = (cc?.s ?? 0) + 1; s < end - 0.5; s += 1) back.push(edge(t, s, 1));
       poly.push(...back.reverse());
-      const ccRing = cc ? cc.onRing : onCircle(o, ro, add(b.p, left(b.t), b.hl), b.t);
+      const ccRing = cc ? cc.onRing : onCircle(o, ro, edge(t, 0, 1), b.t);
       if (cc) {
         const pts = arcPts(cc.c, r, cc.onEdge, cc.onRing);
         fillets.push({ pts: pts.slice().reverse(), c: cc.c, r });
@@ -432,92 +523,123 @@ export function planRoundabouts(c: RouteCorridor, roads: SideRoad[], ground: (x:
       const span = norm(a0 - ang(cwRing));
       const steps = Math.max(2, Math.ceil((span * ro) / 0.8));
       for (let s = 0; s <= steps; s++) {
-        const t = a0 - (span * s) / steps;
-        poly.push([o[0] + (ro - 0.4) * Math.cos(t), o[1] + (ro - 0.4) * Math.sin(t)]);
+        const u = a0 - (span * s) / steps;
+        poly.push([o[0] + (ro - 0.4) * Math.cos(u), o[1] + (ro - 0.4) * Math.sin(u)]);
       }
       const area = ccw(poly);
       if (selfIntersects(area)) return;
 
-      // splitter island between the two carriageways of a pair: between their inner edges, at least a
-      // teardrop of standard size on the line halfway between them (the mapped ways often touch)
+      // splitter island: the template's triangle, for a pair at least the room between its carriageways
+      const tri = (s: number) => t.half * Math.max(0, Math.min(1, (t.s1 - s) / t.len));
+      const isleHalf = (s: number) => (g.length === 2 ? Math.max(tri(s), Math.min(across(a, b, s), 2 * PAIR_GAP) / 2 - ISLAND_INSET) : tri(s));
       const islands: Vec2[][] = [];
-      let entryInner: Vec2 | null = null;
-      if (g.length === 2) {
-        const s0 = ISLAND_NOSE;
-        const s1 = Math.min(end, meet + ISLAND_LEN) - 0.5;
-        const len = Math.min(ISLAND_LEN, s1 - s0);
-        if (len > 2) {
-          const sideA: Vec2[] = [];
-          const sideB: Vec2[] = [];
-          const steps2 = Math.max(4, Math.ceil((s1 - s0) / 1.0));
-          let last = steps2;
-          for (let q = 0; q <= steps2; q++) {
-            const s = s0 + ((s1 - s0) * q) / steps2;
-            const pa = at(a, 1, s);
-            const pb = at(b, -1, s);
-            const m: Vec2 = [(pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2];
-            const tx = pb[0] - pa[0];
-            const tz = pb[1] - pa[1];
-            const tl = Math.hypot(tx, tz);
-            // across the pair, from a's side to b's side (a's left as fallback where the edges cross)
-            const n0: Vec2 = tl > 0.05 && across(s) > 0 ? [tx / tl, tz / tl] : left(a.t);
-            const u = (s - s0) / len;
-            const tear = u < 1 ? ISLAND_HALF * Math.sqrt(Math.min(1, u * 4 + 0.15)) * (1 - u * u) : 0;
-            const half = Math.max(across(s) / 2 - ISLAND_INSET, tear);
-            if (half < 0.08) {
-              last = q;
-              sideA.push(m);
-              break;
-            }
-            sideA.push(add(m, n0, -half));
-            sideB.push(add(m, n0, half));
+      const sI = g.length === 2 ? Math.min(end - 0.5, Math.max(t.s1, meet)) : t.s1;
+      // no sliver between two mapped carriageways: an island at least as wide as a kerb on both sides
+      if (isleHalf(ISLAND_NOSE) > 0.6) {
+        const sideR: Vec2[] = [];
+        const sideL: Vec2[] = [];
+        let tip: Vec2 | null = null;
+        for (let s = ISLAND_NOSE; s <= sI + 1e-6; s += 0.5) {
+          const w = isleHalf(s);
+          if (w < 0.08) {
+            tip = point(t, s, 0);
+            break;
           }
-          if (last > 1 && sideB.length > 1) {
-            const m0: Vec2 = [(sideA[0]![0] + sideB[0]![0]) / 2, (sideA[0]![1] + sideB[0]![1]) / 2];
-            const tm: Vec2 = [(a.t[0] + b.t[0]) / 2, (a.t[1] + b.t[1]) / 2];
-            const tl = Math.hypot(tm[0], tm[1]) || 1;
-            const w0 = Math.hypot(sideB[0]![0] - sideA[0]![0], sideB[0]![1] - sideA[0]![1]) / 2;
-            // rounded nose towards the ring
-            const nose: Vec2[] = [];
-            for (let q = 1; q < 6; q++) {
-              const phi = (Math.PI * q) / 6;
-              const along = -Math.sin(phi) * w0;
-              const acr = -Math.cos(phi) * w0;
-              const nx = (sideB[0]![0] - sideA[0]![0]) / (2 * w0 || 1);
-              const nz = (sideB[0]![1] - sideA[0]![1]) / (2 * w0 || 1);
-              nose.push([m0[0] + (tm[0] / tl) * along + nx * acr, m0[1] + (tm[1] / tl) * along + nz * acr]);
+          sideR.push(point(t, s, -w));
+          sideL.push(point(t, s, w));
+        }
+        if (!tip && isleHalf(sI) < 0.08) tip = point(t, sI, 0);
+        const isle = ccw([...sideR, ...(tip ? [tip] : []), ...sideL.reverse()]);
+        if (sideR.length > 1 && !selfIntersects(isle)) islands.push(isle);
+      }
+      const isle0 = islands.length ? isleHalf(ISLAND_NOSE) : 0;
+
+      // markings on the approach
+      const paint: RingApproach['paint'] = [];
+      if (t.paved) {
+        // edge lines along the flared edges, on from the corners' edge lines
+        for (const side of [-1, 1] as const) {
+          const pts: Vec2[] = [];
+          for (let s = (side < 0 ? cw?.s : cc?.s) ?? 0; s <= end; s += 1) {
+            const f = frame(t, s);
+            pts.push(add(f.C, f.N, side * (halfWidth(t, s, f.h) - LINE_IN)));
+          }
+          if (pts.length > 1) paint.push({ pts, w: LINE_W });
+        }
+      }
+      // white outline round the island; where it ends in a tip (one road, or a pair whose carriageways
+      // meet) the outline meets on the centre line beyond it, hatching between, the centre line dashed on
+      if (islands.length) {
+        const closed = g.length === 1 || meet < end - 1;
+        const sA = Math.min(end - 0.5, Math.max(t.sH, sI + t.sH - t.s1));
+        const line = (s: number) => (closed ? (Math.max(t.half, isle0) + OUTLINE) * Math.max(0, (sA - s) / (sA - ISLAND_NOSE)) : 0);
+        const outline = (s: number) => (s >= sA ? 0 : Math.max(line(s), s <= sI ? isleHalf(s) + OUTLINE : 0));
+        const sideR: Vec2[] = [];
+        const sideL: Vec2[] = [];
+        const last = closed ? sA : sI;
+        for (let s = ISLAND_NOSE; s < last; s += 0.5) {
+          sideR.push(point(t, s, -outline(s)));
+          sideL.push(point(t, s, outline(s)));
+        }
+        if (closed) paint.push({ pts: [...sideR, point(t, sA, 0), ...sideL.reverse()], w: LINE_W });
+        else paint.push({ pts: sideR, w: LINE_W }, { pts: sideL, w: LINE_W });
+        if (closed) {
+          // diagonal stripes in the outline beyond the island's tip
+          const wide = Math.max(t.half, isle0) + OUTLINE;
+          for (let sk = sI - 2 - wide; sk < sA + wide; sk += HATCH_STEP) {
+            let run: Vec2[] = [];
+            const flush = () => {
+              if (run.length > 1) paint.push({ pts: [run[0]!, run[run.length - 1]!], w: HATCH_W });
+              run = [];
+            };
+            for (let x = -wide; x <= wide; x += 0.05) {
+              const s = sk + 0.9 * x;
+              if (s >= Math.max(ISLAND_NOSE, sI - 2) && s < sA && Math.abs(x) < outline(s) - 0.12) run.push(point(t, s, x));
+              else flush();
             }
-            const isle = ccw([...sideA, ...sideB.slice().reverse(), ...nose.reverse()]);
-            if (!selfIntersects(isle)) {
-              islands.push(isle);
-              entryInner = sideB[0]!;
-            }
+            flush();
+          }
+          for (let s = sA + 0.5; s + 0.5 < end; s += CENTRE_DASH + CENTRE_GAP) {
+            const s2 = Math.min(end, s + CENTRE_DASH);
+            paint.push({ pts: [point(t, s, 0), point(t, (s + s2) / 2, 0), point(t, s2, 0)], w: LINE_W });
           }
         }
       }
-      // give-way dashes across the lanes entering the ring
+
+      // give-way dashes across the entering lanes, thin dashes across the exits (the outer edge line goes on)
       const dashes: Arc[] = [];
-      const lane = (e: RingEnd, l0: number, l1: number) => {
-        const pa = onCircle(o, ro, add(e.p, left(e.t), l0), e.t);
-        const pb = onCircle(o, ro, add(e.p, left(e.t), l1), e.t);
-        dashes.push(arcBetween(ang(pa), ang(pb)));
+      const exits: Arc[] = [];
+      const T0 = add(a.t, b.t);
+      const tl = Math.hypot(T0[0], T0[1]) || 1;
+      const T: Vec2 = [T0[0] / tl, T0[1] / tl];
+      const w0 = frame(t, 0);
+      const W0 = halfWidth(t, 0, w0.h) - LINE_IN;
+      const mouth = (x0: number, x1: number): Arc | null => {
+        if (x1 - x0 < 0.3) return null;
+        return arcBetween(ang(onCircle(o, ro, add(w0.C, w0.N, x0), T)), ang(onCircle(o, ro, add(w0.C, w0.N, x1), T)));
       };
-      for (const e of g) {
-        if (e.track) continue;
-        const inner = e.lap ? SHOULDER : 0;
-        const oneWay = e.lap ? e.lap.oneWay || g.length === 2 : g.length === 2;
-        // a pair of one-way carriageways: traffic enters on the counter-clockwise one (right-hand traffic)
-        const entering = e.lap ? e.lap.entering : e === b;
-        if (oneWay) {
-          if (!entering) continue;
-          if (entryInner && g.length === 2) {
-            // from the splitter island's edge to the lane's outer edge
-            const pa = onCircle(o, ro, entryInner, e.t);
-            const pb = onCircle(o, ro, add(e.p, left(e.t), e.hl - inner), e.t);
-            dashes.push(arcBetween(ang(pa), ang(pb)));
-          } else lane(e, -e.hr + inner, e.hl - inner);
-        } else lane(e, 0.2, e.hl - inner);
+      // only within the opening of the outer edge line (oblique or curving arms reach a little past it)
+      const gap = arcBetween(ang(cwRing), ang(ccRing));
+      const push = (list: Arc[], arc: Arc | null) => {
+        if (!arc) return;
+        let d0 = norm(arc.a - gap.a);
+        if (d0 > gap.span) d0 -= TAU;
+        const lo = Math.max(0, d0);
+        const hi = Math.min(gap.span, d0 + arc.span);
+        if ((hi - lo) * ro > 0.3) list.push({ a: norm(gap.a + lo), span: hi - lo });
+      };
+      if (t.paved) {
+        const oneWay = g.length === 1 && a.lap?.oneWay;
+        if (oneWay) push(a.lap!.entering ? dashes : exits, mouth(-W0, W0));
+        else {
+          // right-hand traffic: entry on the counter-clockwise side, unless the lap's own pair says otherwise
+          const entry = g.length === 2 && a.lap?.entering && !b.lap?.entering ? -1 : 1;
+          const inner = Math.max(isle0, 0.2);
+          push(dashes, entry > 0 ? mouth(inner, W0) : mouth(-W0, -inner));
+          push(exits, entry > 0 ? mouth(-W0, -inner) : mouth(inner, W0));
+        }
       }
+
       if (plan) {
         for (const e of g) {
           if (e.lap) continue;
@@ -529,20 +651,79 @@ export function planRoundabouts(c: RouteCorridor, roads: SideRoad[], ground: (x:
           plan.mouthed[e.road] = 1;
         }
       }
-      // no wall or rail where the lap's road widens into the approach
       for (const e of g) {
         if (!e.lap) continue;
-        const rows = Math.ceil(end / c.rowLength) + 2;
-        for (let q = 0; q <= rows; q++) {
-          const row = (((e.lap.row + e.lap.step * q) % c.rows) + c.rows) % c.rows;
-          c.openEdge(0, row, row);
-          c.openEdge(1, row, row);
+        // no wall or rail where the lap's road widens into the approach
+        for (const pass of e.lap.passes) {
+          const rows = Math.ceil(end / c.rowLength) + 2;
+          for (let q = 0; q <= rows; q++) {
+            const row = (((pass.row + pass.step * q) % c.rows) + c.rows) % c.rows;
+            c.openEdge(0, row, row);
+            c.openEdge(1, row, row);
+          }
+        }
+        // the ride keeps right of the island: as far right as the edges flare
+        if (!islands.length) continue;
+        const shift = new Float32Array(Math.ceil(end) + 1);
+        for (let s = 0; s < shift.length; s++) {
+          const f = frame(t, s);
+          if (g.length === 1) shift[s] = halfWidth(t, s, f.h) - f.h;
+          else {
+            // one carriageway of a pair: the ride (0.4 m right of its line at least) clear of the island
+            const l = at(e, 1, s);
+            const r = at(e, -1, s);
+            const side = e === a ? -1 : 1;
+            const xc = side * (((l[0] + r[0]) / 2 - f.C[0]) * f.N[0] + ((l[1] + r[1]) / 2 - f.C[1]) * f.N[1]);
+            shift[s] = s > sI ? 0 : Math.max(0, isleHalf(s) + OUTLINE - (xc + 0.4));
+          }
+        }
+        for (const pass of e.lap.passes) {
+          const f0 = c.frames[pass.row]!;
+          lanes.push({ row: pass.row, step: pass.step, d0: (f0.x - e.p[0]) * e.t[0] + (f0.z - e.p[1]) * e.t[1], shift });
         }
       }
-      approaches.push({ poly: area, islands, fillets, gap: arcBetween(ang(cwRing), ang(ccRing)), dashes, reach: end });
+      const approach: RingApproach = { poly: area, islands, fillets, gap, dashes, exits, paint, reach: end };
+      approaches.push(approach);
+      // the terrain lies under the area (it is wider than the roads joining it)
+      c.addFloor(area, (x, z) => approachHeight(c, ground, ringPlan, approach, x, z));
     });
-    return { rb, ys, ridden, approaches };
+    return ringPlan;
   });
+}
+
+/** Sideways shift (m, to the right) of the ride per corridor row: beside the splitter islands of the roundabouts. */
+export function laneShifts(c: RouteCorridor, plans: RingPlan[]): Float32Array {
+  const R = c.rows;
+  const out = new Float32Array(R);
+  for (const p of plans) {
+    const { rb } = p;
+    const ro = rb.r + rb.hw;
+    // on the ring the shifted ride must not leave it between the approaches
+    const offRing = (x: number, z: number) => {
+      const d = Math.hypot(x - rb.x, z - rb.z);
+      if (d < ro - 0.3 || d > ro + 3) return false;
+      const t = Math.atan2(z - rb.z, x - rb.x);
+      return !p.approaches.some((a) => inArc(a.gap, t));
+    };
+    for (const l of p.lanes) {
+      const n = l.shift.length;
+      for (let s = -SHIFT_IN; s < n - 1; s += c.rowLength / 2) {
+        const row = (((Math.round(l.row + (l.step * (s - l.d0)) / c.rowLength)) % R) + R) % R;
+        let v = s < 0 ? l.shift[0]! * smoothstep(-SHIFT_IN, 0, s) : l.shift[Math.floor(s)]! + (l.shift[Math.floor(s) + 1]! - l.shift[Math.floor(s)]!) * (s - Math.floor(s));
+        if (s < 3) {
+          // every rider (0.4–3 m right of the line) stays on the ring or in an approach
+          const off = (lat: number) => {
+            const q = c.track.positionAt(row * c.rowLength, lat + v);
+            return offRing(q.x, q.z);
+          };
+          while (v > 0 && (off(0.4) || off(1.4) || off(3))) v -= 0.1;
+          v = Math.max(0, v);
+        }
+        out[row] = Math.max(out[row]!, v);
+      }
+    }
+  }
+  return out;
 }
 
 /** Ring height at angle t (interpolated between the planned steps). */

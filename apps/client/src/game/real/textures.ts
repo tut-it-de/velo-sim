@@ -36,11 +36,11 @@ export const roadTextureRepeat = (style: Architecture) => 2 * ROAD_MARKINGS[styl
 /**
  * Asphalt across the full road width (u: 0–0.06 shoulder, 0.06–0.94 asphalt, 0.94–1 shoulder) over
  * two dash periods of the country's centre line. Open road: white edge lines and centre dashes.
- * Town: kerbstones, patched asphalt, no centre line.
+ * Town: kerbstones and patched asphalt. Every road has two lanes, so the centre line is always painted.
  */
-export function roadTexture(scene: Scene, town: boolean, style: Architecture = 'italian', lines: RoadLines = town ? 'edges' : 'all'): DynamicTexture {
+export function roadTexture(scene: Scene, town: boolean, style: Architecture = 'italian', lines: RoadLines = 'all'): DynamicTexture {
   const { dash: dashM, period } = ROAD_MARKINGS[style];
-  return canvasTexture(scene, `${town ? 'road-town-tex' : `road-tex-${style}`}-${lines}`, 512, 1024, (ctx, w, h) => {
+  return canvasTexture(scene, `${town ? 'road-town-tex' : 'road-tex'}-${style}-${lines}`, 512, 1024, (ctx, w, h) => {
     const rng = createRng(town ? 77 : 42);
     const px = (u: number) => Math.round(u * w);
     const a0 = px(0.06);
@@ -93,7 +93,7 @@ export function roadTexture(scene: Scene, town: boolean, style: Architecture = '
       ctx.fillRect(px(0.075), 0, lw, h);
       ctx.fillRect(px(0.925) - lw, 0, lw, h);
     }
-    if (!town && lines === 'all') {
+    if (lines === 'all') {
       const dash = (dashM / (2 * period)) * h;
       for (let k = 0; k < 2; k++) ctx.fillRect(w / 2 - lw / 2, k * (h / 2) + h / 8, lw, dash);
     }

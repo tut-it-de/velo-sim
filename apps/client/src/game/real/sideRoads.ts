@@ -6,14 +6,14 @@ import { GIVE_WAY_WIDTH, SIDE_LIFT as LIFT, mouthMesh, mouthPoint, nodeMesh, pol
 import { MeshData } from './meshData';
 import type { QualityProfile } from './quality';
 import type { Vec2 } from './roadGeometry';
-import { asphaltTexture, gravelTexture, roadTexture } from './textures';
+import { asphaltTexture, gravelTexture, roadTexture, roadTextureRepeat } from './textures';
 import type { Architecture, WorldData } from './worldData';
 
 const TILE = 768;
 const MAX_STEP = 6;
 /** Lanes stop this far outside the ride's road (asphalt + shoulder). */
 const JOIN_GAP = 0.15;
-/** Length of one repeat of the side road textures along the road, m. */
+/** Length of one repeat of the gravel texture along the road, m (paved roads use the road texture's dash period). */
 const TEX_ALONG = 8;
 /** Size of one repeat of the plain asphalt on junction areas, m. */
 const PATCH_TILE = 6;
@@ -72,7 +72,9 @@ export function buildSideRoads(
     m.zOffset = zOffset;
     return m;
   };
-  const pavedTex = roadTexture(scene, false, style, 'none');
+  // paved side roads have two lanes too: edge lines and centre line like the ride's road
+  const pavedTex = roadTexture(scene, false, style);
+  const pavedAlong = roadTextureRepeat(style);
   pavedTex.wrapU = Texture.CLAMP_ADDRESSMODE;
   pavedTex.wrapV = Texture.WRAP_ADDRESSMODE;
   // arms first, junction areas on top of their ends, give-way lines on top of both
@@ -165,7 +167,7 @@ export function buildSideRoads(
       const cur = tileOf(kind, x, z);
       if (cur !== md) prev = null; // start a fresh strip in the new tile
       md = cur;
-      const v = along / TEX_ALONG;
+      const v = along / (kind === 'paved' ? pavedAlong : TEX_ALONG);
       const l = md.vertex(lx, height(lx, lz) + LIFT, lz, 0, 1, 0, 0, v, shade, shade, shade);
       const r = md.vertex(qx, height(qx, qz) + LIFT, qz, 0, 1, 0, 1, v, shade, shade, shade);
       if (prev) md.stripQuad(prev[0], prev[1], l, r);

@@ -104,12 +104,12 @@ export function buildRouteRibbon(
   const texRepeat = roadTextureRepeat(markings);
   const t = c.track;
   const field = c.field;
-  // four asphalt looks: open road, town, open road without centre line (hairpins), and plain asphalt drawn
-  // on top where a later pass of the lap runs onto an earlier one (summit loops, roundabouts)
+  // four asphalt looks: open road, town, one lane of a split carriageway (edge lines only), and plain asphalt
+  // drawn on top where a later pass of the lap runs onto an earlier one (summit loops, roundabouts)
   const openMat = new StandardMaterial('road-open', scene);
   openMat.diffuseTexture = roadTexture(scene, false, markings);
   const townMat = new StandardMaterial('road-town', scene);
-  townMat.diffuseTexture = roadTexture(scene, true);
+  townMat.diffuseTexture = roadTexture(scene, true, markings);
   const bendMat = new StandardMaterial('road-bend', scene);
   bendMat.diffuseTexture = roadTexture(scene, false, markings, 'edges');
   const mergeMat = new StandardMaterial('road-merge', scene);
@@ -178,8 +178,8 @@ export function buildRouteRibbon(
         const r = rows[k]!.r;
         // on a roundabout the ring (roundabouts.ts) is the road: no asphalt of the lap's own there
         if (c.ring[r] && c.ring[rows[k + 1]!.r]) continue;
-        // split lanes keep only their edge lines
-        const which = c.merged[r] || c.ring[r] ? 3 : c.twin[r] === 2 || c.tight[r] ? 2 : c.urban[r] ? 1 : 0;
+        // every road has two lanes and a centre line, also in towns and hairpins; split lanes keep only their edge lines
+        const which = c.merged[r] || c.ring[r] ? 3 : c.twin[r] === 2 ? 2 : c.urban[r] ? 1 : 0;
         const md = mds[which]!;
         const map = emitted[which]!;
         let a = map.get(k);

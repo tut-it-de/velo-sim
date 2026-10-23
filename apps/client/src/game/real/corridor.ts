@@ -16,6 +16,19 @@ export const VERGE_BLEND = 12;
  */
 export const PUSH_RADIUS = 21;
 export const PUSH_DEPTH = 2.5;
+
+/** A roundabout's approach area: outline, bounds and surface height. */
+interface Floor {
+  poly: Array<[number, number]>;
+  x0: number;
+  x1: number;
+  z0: number;
+  z1: number;
+  height: (x: number, z: number) => number;
+}
+/** The terrain lies this far below roundabout approach areas and rises back to its own height over this distance outside them, m. */
+const FLOOR_DEPTH = 0.2;
+const FLOOR_MARGIN = 2;
 export const DEFAULT_HALF_WIDTH = 3.3;
 export const WALL_THICK = 0.45;
 /** What borders the road on one side. */
@@ -90,6 +103,8 @@ export class RouteCorridor {
   readonly frames: Frame[];
   private readonly cell = 16;
   private readonly cells = new Map<number, number[]>();
+  /** Roundabout approach areas (roundaboutPlan.ts). */
+  private readonly floors: Floor[] = [];
 
   constructor(
     readonly track: Track,
@@ -288,8 +303,47 @@ export class RouteCorridor {
     return this.profile(hit.row, side, Math.abs(hit.offset), dem, hit.y);
   }
 
-  /** Terrain-grid vertex height: lowered under the ribbon near the road. */
+  /** A roundabout's approach area: the terrain stays under it, nothing grows on it. */
+  addFloor(poly: Array<[number, number]>, height: (x: number, z: number) => number): void {
+    let [x0, x1, z0, z1] = [Infinity, -Infinity, Infinity, -Infinity];
+    for (const [x, z] of poly) [x0, x1, z0, z1] = [Math.min(x0, x), Math.max(x1, x), Math.min(z0, z), Math.max(z1, z)];
+    this.floors.push({ poly, x0, x1, z0, z1, height });
+  }
+
+  /** Distance (m) outside the nearest approach area (negative inside) within `reach`, with its height there. */
+  private floorAt(x: number, z: number, reach: number): { d: number; f: Floor } | null {
+    let best: { d: number; f: Floor } | null = null;
+    for (const f of this.floors) {
+      if (x < f.x0 - reach || x > f.x1 + reach || z < f.z0 - reach || z > f.z1 + reach) continue;
+      let d2 = Infinity;
+      let inside = false;
+      const n = f.poly.length;
+      for (let k = 0, j = n - 1; k < n; j = k++) {
+        const [ax, az] = f.poly[k]!;
+        const [bx, bz] = f.poly[j]!;
+        if (az > z !== bz > z && x < ((bx - ax) * (z - az)) / (bz - az) + ax) inside = !inside;
+        const ex = bx - ax;
+        const ez = bz - az;
+        const t = Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / (ex * ex + ez * ez || 1)));
+        d2 = Math.min(d2, (x - ax - ex * t) ** 2 + (z - az - ez * t) ** 2);
+      }
+      const d = inside ? -Math.sqrt(d2) : Math.sqrt(d2);
+      if (d < reach && (!best || d < best.d)) best = { d, f };
+    }
+    return best;
+  }
+
+  /** Ground height y kept below a roundabout approach area at x/z (rising back to y just outside it). */
+  underFloor(x: number, z: number, y: number): number {
+    const floor = this.floorAt(x, z, FLOOR_MARGIN);
+    if (!floor) return y;
+    const top = floor.f.height(x, z) - FLOOR_DEPTH;
+    return Math.min(y, top + Math.max(0, y - top) * smoothstep(0, FLOOR_MARGIN, floor.d));
+  }
+
+  /** Terrain-grid vertex height: lowered under the ribbon near the road and under roundabout approaches. */
   gridHeight(x: number, z: number, dem: number): number {
+    dem = this.underFloor(x, z, dem);
     const hit = this.nearest(x, z, PUSH_RADIUS);
     if (!hit) return dem;
     const side = hit.offset >= 0 ? 1 : 0;
@@ -301,7 +355,7 @@ export class RouteCorridor {
     return routeDistanceField(this.field.near, this.track).dist;
   }
 
-  /** Distance (m) outside the nearest roundabout carriageway (negative on it); Infinity with none within 40 m. */
+  /** Distance (m) outside the nearest roundabout carriageway or approach area (negative on it); Infinity with none within 40 m. */
   ringGap(x: number, z: number): number {
     let best = Infinity;
     for (const rb of this.roundabouts) {
@@ -309,7 +363,8 @@ export class RouteCorridor {
       if (d > rb.r + rb.hw + 40) continue;
       best = Math.min(best, Math.abs(d - rb.r) - rb.hw);
     }
-    return best;
+    if (best === Infinity) return best;
+    return Math.min(best, this.floorAt(x, z, 40)?.d ?? Infinity);
   }
 
   /** Distance to the lap from the nearest near-grid vertex (Infinity outside the near raster). */

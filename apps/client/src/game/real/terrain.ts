@@ -290,6 +290,16 @@ export class RealTerrain {
         for (let ii = Math.max(0, ci - reach); ii <= Math.min(near.nx - 1, ci + reach); ii++) mark[jj * near.nx + ii] = 1;
       }
     }
+    // roundabouts: their approach areas reach further from the lap than the push radius
+    for (const rb of corridor.roundabouts) {
+      const rad = rb.r + rb.hw + 45;
+      const ci = Math.round((rb.x - near.x0) / near.step);
+      const cj = Math.round((rb.z - near.z0) / near.step);
+      const rr = Math.ceil(rad / near.step);
+      for (let jj = Math.max(0, cj - rr); jj <= Math.min(near.nz - 1, cj + rr); jj++) {
+        for (let ii = Math.max(0, ci - rr); ii <= Math.min(near.nx - 1, ci + rr); ii++) mark[jj * near.nx + ii] = 1;
+      }
+    }
     for (let k = 0; k < mark.length; k++) {
       if (!mark[k]) continue;
       const x = near.x0 + (k % near.nx) * near.step;

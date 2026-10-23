@@ -173,7 +173,8 @@ export function runGeometry(c: RouteCorridor, run: Row[], noise: Noise2D): RunGe
         let x = f.x + sg * f.rx * o;
         let z = f.z + sg * f.rz * o;
         const sink = 0.15 * smoothstep(o0 + 2, ext, o);
-        const y = c.profile(r, side, o, field.dem(x, z), f.y, edge) - sink;
+        // under a roundabout's approach area the verge (the median between split lanes) lies below it
+        const y = c.underFloor(x, z, c.profile(r, side, o, field.dem(x, z), f.y, edge) - sink);
         const w = Number.isNaN(mid) ? smoothstep(o0 + 1, o0 + VERGE_BLEND, o) : 0;
         // cut weight: a few metres into a cutting, fading out where the verge blends into the terrain
         const cut = edge0 === EDGE.verge

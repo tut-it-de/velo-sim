@@ -36,8 +36,8 @@ const TMP_S = new Vector3();
 const TMP_ARR = new Float32Array(16);
 
 const DIRT: [number, number, number] = [0.5, 0.5, 0.47];
-const SHRUB_DARK: [number, number, number] = [0.16, 0.3, 0.13];
-const SHRUB_MID: [number, number, number] = [0.3, 0.46, 0.2];
+export const SHRUB_DARK: [number, number, number] = [0.16, 0.3, 0.13];
+export const SHRUB_MID: [number, number, number] = [0.3, 0.46, 0.2];
 const HEDGE_GREEN: [number, number, number] = [0.18, 0.34, 0.14];
 const WOOD: [number, number, number] = [0.45, 0.34, 0.24];
 const STRAW: [number, number, number] = [0.85, 0.7, 0.32];
@@ -50,14 +50,14 @@ interface Spot {
 }
 
 /** Appends one instance matrix: scale, then tilt (pitch, roll), then yaw, then translation. */
-function pushMatrix(out: number[], x: number, y: number, z: number, yaw: number, pitch: number, roll: number, sx: number, sy: number, sz: number): void {
+export function pushMatrix(out: number[], x: number, y: number, z: number, yaw: number, pitch: number, roll: number, sx: number, sy: number, sz: number): void {
   Quaternion.RotationYawPitchRollToRef(yaw, pitch, roll, TMP_Q);
   Matrix.ComposeToRef(TMP_S.set(sx, sy, sz), TMP_Q, TMP_P.set(x, y, z), TMP_M);
   TMP_M.copyToArray(TMP_ARR);
   for (let k = 0; k < 16; k++) out.push(TMP_ARR[k]!);
 }
 
-function material(scene: Scene, name: string, rgb: [number, number, number]): StandardMaterial {
+export function material(scene: Scene, name: string, rgb: [number, number, number]): StandardMaterial {
   const mat = new StandardMaterial(name, scene);
   mat.diffuseColor = Color3.FromArray(rgb);
   mat.specularColor = new Color3(0.03, 0.03, 0.03);
@@ -67,7 +67,7 @@ function material(scene: Scene, name: string, rgb: [number, number, number]): St
 }
 
 /** Thin-instance mesh with the given matrices; an empty list gives no mesh. */
-function finish(mesh: Mesh, matrices: number[], mat: StandardMaterial): Mesh | null {
+export function finish(mesh: Mesh, matrices: number[], mat: StandardMaterial): Mesh | null {
   if (matrices.length === 0) {
     mesh.dispose();
     return null;
@@ -82,7 +82,7 @@ function finish(mesh: Mesh, matrices: number[], mat: StandardMaterial): Mesh | n
 }
 
 /** Icosphere of radius 0.5 with a lumpy surface; the displacement depends on position only, so shared vertices stay joined. */
-function lumpySphere(scene: Scene, name: string, subdivisions: number, seed: number, amp: number): Mesh {
+export function lumpySphere(scene: Scene, name: string, subdivisions: number, seed: number, amp: number): Mesh {
   const mesh = MeshBuilder.CreateIcoSphere(name, { radius: 0.5, subdivisions, flat: false }, scene);
   const vd = VertexData.ExtractFromMesh(mesh);
   const pos = vd.positions!;

@@ -229,19 +229,24 @@ export class GameWorld {
     this.others.delete(id);
   }
 
+  /** Point beside the route; on real-world routes riders keep right of the roundabouts' splitter islands. */
+  private positionAt(distanceM: number, lateralM: number) {
+    return this.track.positionAt(distanceM, lateralM + (this.real?.laneOffset(distanceM) ?? 0));
+  }
+
   private renderFrame(): void {
     if (this.disposed) return;
     const dt = Math.min(0.1, this.engine.getDeltaTime() / 1000);
     const frame = this.frameProvider?.(dt);
     if (frame) {
       const me = frame.me;
-      const p = this.track.positionAt(me.distanceM, me.lateralM);
+      const p = this.positionAt(me.distanceM, me.lateralM);
       this.rider.setPose(p.x, p.y, p.z, p.heading, p.gradePercent);
       this.rider.animate(dt, me.cadence, me.speedMps);
       for (const o of frame.others) {
         const avatar = this.others.get(o.id);
         if (!avatar) continue;
-        const q = this.track.positionAt(o.distanceM, o.lateralM);
+        const q = this.positionAt(o.distanceM, o.lateralM);
         avatar.setPose(q.x, q.y, q.z, q.heading, q.gradePercent);
         avatar.animate(dt, o.cadence, o.speedMps);
       }
@@ -256,8 +261,7 @@ export class GameWorld {
   private camDistance = 0;
 
   private updateCamera(dt: number, me: RiderFrame): void {
-    const t = this.track;
-    const p = t.positionAt(me.distanceM, me.lateralM);
+    const p = this.positionAt(me.distanceM, me.lateralM);
     const fx = Math.sin(p.heading);
     const fz = Math.cos(p.heading);
     let pos: Vector3;
@@ -266,20 +270,20 @@ export class GameWorld {
     let k = 1;
     switch (this.cameraMode) {
       case 'side': {
-        const ahead = t.positionAt(me.distanceM + 3, me.lateralM + 7);
+        const ahead = this.positionAt(me.distanceM + 3, me.lateralM + 7);
         pos = new Vector3(ahead.x, ahead.y + 1.6, ahead.z);
         look = new Vector3(p.x, p.y + 0.9, p.z);
         break;
       }
       case 'top': {
-        const behind = t.positionAt(me.distanceM - 28, me.lateralM);
+        const behind = this.positionAt(me.distanceM - 28, me.lateralM);
         pos = new Vector3(behind.x, behind.y + 32, behind.z);
         look = new Vector3(p.x + fx * 12, p.y, p.z + fz * 12);
         break;
       }
       case 'pov': {
-        const eye = t.positionAt(me.distanceM + 0.35, me.lateralM);
-        const ahead = t.positionAt(me.distanceM + 25, me.lateralM);
+        const eye = this.positionAt(me.distanceM + 0.35, me.lateralM);
+        const ahead = this.positionAt(me.distanceM + 25, me.lateralM);
         pos = new Vector3(eye.x, eye.y + 1.55, eye.z);
         look = new Vector3(ahead.x, ahead.y + 1.2, ahead.z);
         break;
@@ -288,13 +292,13 @@ export class GameWorld {
         // In hairpins the road 7 m back and 8 m ahead lies far to the side: the camera moves in closer
         // and follows faster, so it stays above the asphalt instead of cutting through the trees on the
         // inside of the bend and looking across it.
-        const turn = t.positionAt(me.distanceM + 8, me.lateralM).heading - t.positionAt(me.distanceM - 7, me.lateralM).heading;
+        const turn = this.positionAt(me.distanceM + 8, me.lateralM).heading - this.positionAt(me.distanceM - 7, me.lateralM).heading;
         const sharp = Math.min(1, Math.max(0, (Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn))) - 0.5) / 1.1));
         bend = sharp * sharp * (3 - 2 * sharp);
         // Low and close, looking down the road: the rider fills the lower middle of the frame and the
         // road runs towards the centre of the picture.
-        const behind = t.positionAt(me.distanceM - 4.6 + 1.6 * bend, me.lateralM - 0.25);
-        const ahead = t.positionAt(me.distanceM + 20 - 9 * bend, me.lateralM);
+        const behind = this.positionAt(me.distanceM - 4.6 + 1.6 * bend, me.lateralM - 0.25);
+        const ahead = this.positionAt(me.distanceM + 20 - 9 * bend, me.lateralM);
         pos = new Vector3(behind.x, Math.max(behind.y, p.y) + 1.75, behind.z);
         // aim partly along the rider's heading rather than across the bend at the road ahead
         const w = 0.6 * bend;

@@ -27,7 +27,7 @@ import { buildLandscapeScatter } from './landscapeScatter';
 import { buildRoadsideProps } from './roadsideProps';
 import { buildParking } from './parking';
 import { planJunctions, sideRoadGround } from './junctions';
-import { planRoundabouts } from './roundaboutPlan';
+import { laneShifts, planRoundabouts } from './roundaboutPlan';
 import { buildRoundabouts } from './roundabouts';
 import { buildSideRoads } from './sideRoads';
 import { SkyDome } from './sky';
@@ -74,6 +74,8 @@ export class RealWorld {
   private nearTrees: NearTrees | null = null;
   /** Sailing boats and the ferry on the lake (all levels except niedrig). */
   lakeTraffic: LakeTraffic | null = null;
+  /** Sideways shift of the ride per corridor row (right, beside the roundabouts' splitter islands), m. */
+  private laneShift: Float32Array | null = null;
 
   private constructor(
     private readonly scene: Scene,
@@ -85,6 +87,17 @@ export class RealWorld {
     private readonly vegetation: Vegetation,
     private readonly flora: RoadsideFlora | null,
   ) {}
+
+  /** How far riders keep further right than their lateral offset at this distance (splitter islands), m. */
+  laneOffset(distanceM: number): number {
+    const shift = this.laneShift;
+    if (!shift) return 0;
+    const R = shift.length;
+    const u = distanceM / this.corridor.rowLength;
+    const k = Math.floor(u);
+    const w = u - k;
+    return shift[((k % R) + R) % R]! * (1 - w) + shift[(((k + 1) % R) + R) % R]! * w;
+  }
 
   static async build(scene: Scene, track: Track, quality: QualityProfile, onProgress?: (msg: string) => void): Promise<RealWorld> {
     const step = async (msg: string) => {
@@ -158,6 +171,7 @@ export class RealWorld {
     const sky = new SkyDome(scene, REAL_CAMERA_MAX_Z * 0.85);
     const world = new RealWorld(scene, data, corridor, sun, water, sky, vegetation, flora);
     world.lakeTraffic = lakeTraffic;
+    world.laneShift = laneShifts(corridor, rings);
     if (quality.cascades > 0) {
       // Cascades cover trees, walls and houses near the rider: their shadows fall over the road.
       const csm = new CascadedShadowGenerator(quality.shadowMap, sun);

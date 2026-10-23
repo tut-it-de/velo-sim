@@ -1,8 +1,10 @@
 import { Color3, StandardMaterial, Texture, VertexBuffer, type Material, type Mesh, type Scene } from '@babylonjs/core';
+import { createRng } from '../noise';
 import type { RouteCorridor } from './corridor';
 import { MeshData } from './meshData';
 import { subdivide, triangulate, type Vec2 } from './roadGeometry';
-import { APRON, RING_LIFT, approachHeight, inArc, ringHeight, type Arc, type RingPlan } from './roundaboutPlan';
+import { SHRUB_DARK, SHRUB_MID, finish, lumpySphere, material as plantMaterial, pushMatrix } from './landscapeScatter';
+import { APRON, LINE_IN, LINE_W, RING_LIFT, approachHeight, inArc, ringHeight, type Arc, type RingPlan } from './roundaboutPlan';
 import { asphaltTexture, stoneTexture } from './textures';
 
 /** Size of one repeat of the plain asphalt on the ring, m. */
@@ -14,21 +16,31 @@ const APRON_H = 0.04;
 const APRON_TILE = 1.6;
 /** Grey shoulder strip along the ring's outer edge and the approaches' corners, m. */
 const STRIP_W = 0.35;
-/** Edge lines: width and distance of their centre from the asphalt edge, m. */
-const LINE_W = 0.15;
-const LINE_IN = 0.3;
-/** Give-way dashes: length along the ring, gap, width across, m. */
+/** Give-way dashes: length along the ring, gap, width across; thin dashes across the exits, m. */
 const DASH = 0.5;
-const DASH_GAP = 0.3;
-const DASH_W = 0.3;
+const DASH_GAP = 0.25;
+const DASH_W = 0.45;
+const EXIT_DASH = 1;
+const EXIT_GAP = 1;
+/** Carriageway left beside the apron at least, m. */
+const RING_MIN_WIDTH = 4.6;
+/** Planting on the central island: shrubs and flower clumps per m², flower colours. */
+const SHRUBS_PER_M2 = 0.12;
+const FLOWERS_PER_M2 = 0.35;
+const FLOWERS: Array<[number, number, number]> = [
+  [0.85, 0.2, 0.25],
+  [0.95, 0.75, 0.2],
+  [0.6, 0.35, 0.75],
+  [0.95, 0.93, 0.9],
+];
 /** The island rises this much towards its middle, m. */
 const MOUND = 0.45;
 
 /**
- * Roundabouts: ring carriageway in plain asphalt with edge lines, a cobbled apron and a grass island
- * behind a kerb; approach areas with rounded corners and splitter islands; the outer edge line runs
- * between the approaches, give-way dashes cross the entering lanes. Drawn above the ride's road and
- * the side roads' ends.
+ * Roundabouts: ring carriageway in plain asphalt with solid edge lines, a lighter cobbled apron and a
+ * planted island (grass, shrubs, flowers) behind a kerb; approach areas with rounded corners, raised
+ * splitter islands and their markings; the outer edge line runs between the approaches, broad give-way
+ * dashes cross the entries and thin dashes the exits. Drawn above the ride's road and the side roads' ends.
  */
 export function buildRoundabouts(scene: Scene, plans: RingPlan[], c: RouteCorridor, ground: (x: number, z: number) => number, grass: Material): Mesh[] {
   const material = (name: string, color: Color3, zOffset: number) => {
@@ -52,10 +64,13 @@ export function buildRoundabouts(scene: Scene, plans: RingPlan[], c: RouteCorrid
   const kerbMat = material('ring-kerb', new Color3(0.68, 0.67, 0.64), -3.5);
 
   const meshes: Mesh[] = [];
+  const shrubDark: number[] = [];
+  const shrubMid: number[] = [];
+  const flowers: number[][] = FLOWERS.map(() => []);
   plans.forEach((plan, id) => {
     const { rb } = plan;
     const n = plan.ys.length;
-    const apron = rb.hw >= 3.6 ? APRON : 0;
+    const apron = Math.min(APRON, Math.max(0, 2 * rb.hw - RING_MIN_WIDTH));
     const ri = rb.r - rb.hw;
     const ro = rb.r + rb.hw;
     const y = (t: number, dy = 0) => ringHeight(plan, t) + RING_LIFT + dy;
@@ -111,17 +126,19 @@ export function buildRoundabouts(scene: Scene, plans: RingPlan[], c: RouteCorrid
     const lines = new MeshData();
     band(lines, 0, Math.PI * 2, ri + apron + LINE_IN - LINE_W / 2, ri + apron + LINE_IN + LINE_W / 2, 0.005, 1);
     banded(gaps, (t0, t1) => band(lines, t0, t1, ro - LINE_IN - LINE_W / 2, ro - LINE_IN + LINE_W / 2, 0.005, 1));
-    for (const a of plan.approaches) {
-      for (const arc of a.dashes) {
-        const rad = ro - LINE_IN;
-        const len = arc.span * rad;
-        const count = Math.floor((len + DASH_GAP) / (DASH + DASH_GAP));
-        const pad = (len - count * (DASH + DASH_GAP) + DASH_GAP) / 2;
-        for (let d = 0; d < count; d++) {
-          const s0 = (pad + d * (DASH + DASH_GAP)) / rad;
-          band(lines, arc.a + s0, arc.a + s0 + DASH / rad, rad - DASH_W / 2, rad + DASH_W / 2, 0.006, 1);
-        }
+    const dashed = (arc: Arc, dash: number, gap: number, w: number) => {
+      const rad = ro - LINE_IN;
+      const len = arc.span * rad;
+      const count = Math.floor((len + gap) / (dash + gap));
+      const pad = (len - count * (dash + gap) + gap) / 2;
+      for (let d = 0; d < count; d++) {
+        const s0 = (pad + d * (dash + gap)) / rad;
+        band(lines, arc.a + s0, arc.a + s0 + dash / rad, rad - w / 2, rad + w / 2, 0.006, 1);
       }
+    };
+    for (const a of plan.approaches) {
+      for (const arc of a.dashes) dashed(arc, DASH, DASH_GAP, DASH_W);
+      for (const arc of a.exits) dashed(arc, EXIT_DASH, EXIT_GAP, LINE_W);
     }
 
     // grey shoulder strip along the outer edge between the approaches and round their corners
@@ -161,6 +178,25 @@ export function buildRoundabouts(scene: Scene, plans: RingPlan[], c: RouteCorrid
           const ib = lines.vertex(a1[0], h(a1) + 0.005, a1[1]);
           if (prevL) lines.quad(prevL[0], prevL[1], ib, ia, 0, 1, 0);
           prevL = [ia, ib];
+        }
+      }
+      // edge lines, island outlines, hatching, centre dashes: strips along their polylines
+      for (const { pts, w } of a.paint) {
+        let prev: [number, number] | null = null;
+        for (let k = 0; k < pts.length; k++) {
+          const p = pts[k]!;
+          const pa = pts[Math.max(0, k - 1)]!;
+          const pb = pts[Math.min(pts.length - 1, k + 1)]!;
+          const dx = pb[0] - pa[0];
+          const dz = pb[1] - pa[1];
+          const l = Math.hypot(dx, dz) || 1;
+          const nx = (-dz / l) * (w / 2);
+          const nz = (dx / l) * (w / 2);
+          const y = h(p) + 0.006;
+          const ia = lines.vertex(p[0] - nx, y, p[1] - nz);
+          const ib = lines.vertex(p[0] + nx, y, p[1] + nz);
+          if (prev) lines.quad(prev[0], prev[1], ib, ia, 0, 1, 0);
+          prev = [ia, ib];
         }
       }
       for (const poly of a.islands) {
@@ -205,8 +241,8 @@ export function buildRoundabouts(scene: Scene, plans: RingPlan[], c: RouteCorrid
     // central island: kerb (face and top) and a grass mound
     let sum = 0;
     for (let q = 0; q < n; q++) sum += plan.ys[q]!;
-    const centre = isle.vertex(rb.x, sum / n + RING_LIFT + APRON_H + KERB_H + MOUND, rb.z);
     const base = apron > 0 ? APRON_H : 0;
+    const centre = isle.vertex(rb.x, sum / n + RING_LIFT + base + KERB_H + MOUND, rb.z);
     let prevK: number[] | null = null;
     let prevI: number | null = null;
     for (let q = 0; q <= n; q++) {
@@ -221,6 +257,37 @@ export function buildRoundabouts(scene: Scene, plans: RingPlan[], c: RouteCorrid
       if (prevI !== null) isle.tri(centre, gi, prevI, 0, 1, 0);
       prevK = k;
       prevI = gi;
+    }
+    // planting: shrubs and flower clumps on the island, on the mound
+    const rim = ri - KERB_W - 0.6;
+    if (rim > 1) {
+      const rng = createRng(0x4b1e + id * 7919);
+      const rimY = sum / n + RING_LIFT + base + KERB_H;
+      const yAt = (rad: number) => rimY + MOUND * (1 - rad / (ri - KERB_W));
+      const spot = () => {
+        const rad = rim * Math.sqrt(rng());
+        const phi = rng() * Math.PI * 2;
+        return { x: rb.x + rad * Math.cos(phi), z: rb.z + rad * Math.sin(phi), y: yAt(rad) };
+      };
+      const area = Math.PI * rim * rim;
+      for (let k = 0; k < Math.round(area * SHRUBS_PER_M2); k++) {
+        const p = spot();
+        const d = 0.7 + 1.1 * rng();
+        const sy = d * 0.7;
+        pushMatrix(rng() < 0.5 ? shrubDark : shrubMid, p.x, p.y + sy * 0.35, p.z, rng() * Math.PI * 2, 0, 0, d, sy, d * (0.85 + 0.15 * rng()));
+      }
+      // flowers in clumps of one colour
+      for (let k = 0; k < Math.round((area * FLOWERS_PER_M2) / 5); k++) {
+        const c0 = spot();
+        const list = flowers[Math.floor(rng() * FLOWERS.length)]!;
+        for (let j = 0; j < 5; j++) {
+          const x = c0.x + (rng() - 0.5) * 1.2;
+          const z = c0.z + (rng() - 0.5) * 1.2;
+          if (Math.hypot(x - rb.x, z - rb.z) > rim) continue;
+          const d = 0.25 + 0.2 * rng();
+          pushMatrix(list, x, yAt(Math.hypot(x - rb.x, z - rb.z)) + d * 0.2, z, rng() * Math.PI * 2, 0, 0, d, d * 0.6, d);
+        }
+      }
     }
 
     const out: Array<[MeshData, string, Material, boolean]> = [
@@ -242,5 +309,14 @@ export function buildRoundabouts(scene: Scene, plans: RingPlan[], c: RouteCorrid
       meshes.push(m);
     }
   });
+  const plants: Array<[Mesh, number[], StandardMaterial]> = [
+    [lumpySphere(scene, 'ring-shrub-dark', 1, 0x51, 0.14), shrubDark, plantMaterial(scene, 'ring-shrub-dark-mat', SHRUB_DARK)],
+    [lumpySphere(scene, 'ring-shrub-mid', 1, 0x52, 0.14), shrubMid, plantMaterial(scene, 'ring-shrub-mid-mat', SHRUB_MID)],
+    ...FLOWERS.map((rgb, k): [Mesh, number[], StandardMaterial] => [lumpySphere(scene, `ring-flowers-${k}`, 1, 0x60 + k, 0.3), flowers[k]!, plantMaterial(scene, `ring-flowers-${k}-mat`, rgb)]),
+  ];
+  for (const [mesh, matrices, mat] of plants) {
+    const m = finish(mesh, matrices, mat);
+    if (m) meshes.push(m);
+  }
   return meshes;
 }

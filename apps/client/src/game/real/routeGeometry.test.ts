@@ -7,8 +7,19 @@ import { Noise2D } from '../noise';
 import { crossSection, mouthMesh, mouthPoint, nodeMesh, planJunctions, polylineLength, sideRoadGround } from './junctions';
 import { ROAD_COLS, drawnRuns, runGeometry } from './ribbonGeometry';
 import { polygonArea, selfIntersects, subdivide, triangulate, type Vec2 } from './roadGeometry';
-import { inArc, planRoundabouts } from './roundaboutPlan';
+import { inArc, laneShifts, planRoundabouts } from './roundaboutPlan';
 import { corridorFromDisk } from './routeFixture';
+
+/** Whether p lies inside the polygon (even-odd rule). */
+function inside(poly: Vec2[], p: Vec2): boolean {
+  let hit = false;
+  for (let k = 0, j = poly.length - 1; k < poly.length; j = k++) {
+    const a = poly[k]!;
+    const b = poly[j]!;
+    if (a[1] > p[1] !== b[1] > p[1] && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]) hit = !hit;
+  }
+  return hit;
+}
 
 const ROUTES = ['lago-di-como', 'feldberg-taunus', 'alpe-dhuez', 'taunus-mammolshain'];
 
@@ -137,14 +148,28 @@ describe.each(ROUTES)('%s', (id) => {
       for (const a of ring.approaches) {
         expect(a.gap.span).toBeLessThan(Math.PI);
         // dashes lie within the approach's opening of the outer edge line
-        for (const d of a.dashes) {
+        for (const d of [...a.dashes, ...a.exits]) {
           expect(d.span).toBeLessThanOrEqual(a.gap.span + 1e-6);
           expect(inArc(a.gap, d.a + d.span / 2)).toBe(true);
+        }
+        // give-way and exit dashes lie side by side, never across each other
+        for (const d of a.dashes) for (const x of a.exits) expect(inArc(d, x.a + x.span / 2)).toBe(false);
+        for (const p of a.paint) {
+          expect(p.pts.length).toBeGreaterThan(1);
+          for (const q of p.pts) expect(Number.isFinite(q[0]) && Number.isFinite(q[1])).toBe(true);
         }
         // areas and islands are simple polygons
         expect(selfIntersects(a.poly)).toBe(false);
         expect(polygonArea(a.poly)).toBeGreaterThan(0);
-        for (const isle of a.islands) expect(selfIntersects(isle)).toBe(false);
+        for (const isle of a.islands) {
+          expect(selfIntersects(isle)).toBe(false);
+          expect(polygonArea(isle)).toBeGreaterThan(1);
+          // the island stands on the approach area (its middle, the kerb may touch the area's edge)
+          let cx = 0;
+          let cz = 0;
+          for (const p of isle) [cx, cz] = [cx + p[0] / isle.length, cz + p[1] / isle.length];
+          expect(inside(a.poly, [cx, cz])).toBe(true);
+        }
       }
       // the approaches do not overlap along the ring
       for (const a of ring.approaches) {
@@ -154,5 +179,38 @@ describe.each(ROUTES)('%s', (id) => {
       if (ring.ridden.some((v) => v)) expect(ring.approaches.length).toBeGreaterThanOrEqual(1);
     }
     expect(worst).toBeLessThan(0.05);
+  });
+
+  it('riders pass right of the splitter islands, in their own lane', () => {
+    const rings = planRoundabouts(c, data.roads, sideRoadGround(c, data.near));
+    const shift = laneShifts(c, rings);
+    const islands = rings.flatMap((r) => r.approaches.flatMap((a) => a.islands));
+    let hits = 0;
+    let where = '';
+    for (let r = 0; r < c.rows; r++) {
+      if (shift[r]! === 0) continue;
+      // riders 0.4–3 m right of the line (bots), the player at 1.4 m
+      for (const lat of [0.4, 1.4, 3]) {
+        const p = c.track.positionAt(r * c.rowLength, lat + shift[r]!);
+        if (islands.some((isle) => inside(isle, [p.x, p.z]))) {
+          hits++;
+          where = `${((r * c.rowLength) / 1000).toFixed(3)} km, ${lat} m`;
+        }
+      }
+    }
+    expect(hits, where).toBe(0);
+    // moved over, the riders are still on asphalt: the approach area, the ring or the road beyond the flare
+    const areas = rings.flatMap((r) => r.approaches.map((a) => a.poly));
+    let off = 0;
+    for (let r = 0; r < c.rows; r++) {
+      if (shift[r]! < 0.5) continue;
+      const p = c.track.positionAt(r * c.rowLength, 1.4 + shift[r]!);
+      const onRing = rings.some(({ rb }) => Math.abs(Math.hypot(p.x - rb.x, p.z - rb.z) - rb.r) < rb.hw);
+      if (!onRing && !areas.some((a) => inside(a, [p.x, p.z]))) {
+        off++;
+        where = `${((r * c.rowLength) / 1000).toFixed(3)} km, shift ${shift[r]!.toFixed(2)} m`;
+      }
+    }
+    expect(off, where).toBe(0);
   });
 });
