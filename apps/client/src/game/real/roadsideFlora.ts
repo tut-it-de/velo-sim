@@ -28,6 +28,19 @@ const WALL_TUFT_HEIGHT: [number, number] = [0.2, 0.45];
 /** Distance from the road edge (beyond the shoulder), metres. */
 const EDGE_NEAR = 0.2;
 const EDGE_FAR = 2.8;
+/** The looser band behind the verge: ferns in the woods, grass and flowers on open land. */
+const BACK_FAR = 22;
+const BACK_DENSITY: Partial<Record<number, number>> = {
+  [LAND_CLASS.forest]: 0.6,
+  [LAND_CLASS.grass]: 0.3,
+  [LAND_CLASS.park]: 0.2,
+  [LAND_CLASS.shrub]: 0.4,
+  [LAND_CLASS.orchard]: 0.25,
+  [LAND_CLASS.farmland]: 0.08,
+};
+const BACK_MAX = Math.max(...Object.values(BACK_DENSITY).map((d) => d ?? 0));
+const UNDERGROWTH_WIDTH: [number, number] = [0.7, 1.5];
+const UNDERGROWTH_HEIGHT: [number, number] = [0.45, 1.0];
 /** Alpha cut of the grass cards, same as the 3D leaves. */
 const CARD_ALPHA_CUT = 0.4;
 
@@ -48,6 +61,13 @@ function pickCell(rng: () => number, forest: boolean): number {
     return q < 0.6 ? 0 : q < 0.85 ? 1 : 2;
   }
   return r < 0.6 ? 0 : r < 0.85 ? 1 : r < 0.95 ? 2 : 3;
+}
+
+/** Undergrowth behind the verge: mostly fern in the woods, grass with some flowers elsewhere. */
+function pickBackCell(rng: () => number, forest: boolean): number {
+  const r = rng();
+  if (forest) return r < 0.65 ? 3 : r < 0.9 ? 0 : 1;
+  return r < 0.55 ? 0 : r < 0.8 ? 1 : 2;
 }
 
 /** One bush part: three crossed cards with the grass cell, foot at y = 0, v = 1 at the foot and v = 0 at the top. */
@@ -147,6 +167,7 @@ export async function buildRoadsideFlora(
       cellOf: (forest: boolean) => number,
       width: [number, number],
       height: [number, number],
+      back = false,
     ) => {
       const sg = side === 0 ? -1 : 1;
       for (let k = 0; k < n; k++) {
@@ -157,7 +178,15 @@ export async function buildRoadsideFlora(
         const z = frame.z + fz * along + sg * lz * o;
         if (field.isWater(x, z) || buildings.blocked(x, z, 0.8) || corridor.ringGap(x, z) < 0.3) continue;
         const y = corridor.surface(x, z);
-        const forest = field.classAt(x, z) === LAND_CLASS.forest;
+        const cls = field.classAt(x, z);
+        if (back) {
+          // natural ground only: no towns, no other road (hairpins), no walls or embankments
+          if (rng() * BACK_MAX >= (BACK_DENSITY[cls] ?? 0)) continue;
+          const hit = corridor.nearest(x, z, 8);
+          if (hit && Math.abs(hit.offset) - corridor.hw[hit.offset >= 0 ? 1 : 0]![hit.row]! - SHOULDER < 2.5) continue;
+          if (Math.abs(y - field.dem(x, z)) > 1.5) continue;
+        }
+        const forest = cls === LAND_CLASS.forest;
         const cell = cellOf(forest);
         const w = width[0] + rng() * (width[1] - width[0]);
         const hgt = height[0] + rng() * (height[1] - height[0]);
@@ -174,6 +203,8 @@ export async function buildRoadsideFlora(
       const roadEdge = corridor.hw[side]![r]! + SHOULDER;
       if (edge === EDGE.verge && !corridor.urban[r]) {
         scatter(side, countOf(setting.density), roadEdge + EDGE_NEAR, roadEdge + EDGE_FAR, (forest) => pickCell(rng, forest), BUSH_WIDTH, BUSH_HEIGHT);
+        // candidates at the highest density; each is kept by its land class (BACK_DENSITY)
+        scatter(side, countOf(2 * BACK_MAX * setting.density), roadEdge + EDGE_FAR, roadEdge + BACK_FAR, (forest) => pickBackCell(rng, forest), UNDERGROWTH_WIDTH, UNDERGROWTH_HEIGHT, true);
       } else if (edge === EDGE.wall) {
         // green and fern at the foot of the wall, on the road side (also in towns)
         const wallFace = roadEdge;

@@ -287,6 +287,8 @@ export class NearTrees {
       }
       const matrices = new Float32Array(list.length * 16);
       const colors = new Float32Array(list.length * 4);
+      // the autumn tint colours the leaves only; the bark keeps its colour and takes the brightness alone
+      const woodColors = new Float32Array(list.length * 4);
       const scale = new Vector3();
       const rotation = new Quaternion();
       const position = new Vector3();
@@ -298,11 +300,13 @@ export class NearTrees {
         position.set(t.x, t.y, t.z);
         Matrix.Compose(scale, rotation, position).copyToArray(matrices, i * 16);
         colors.set([t.tint[0], t.tint[1], t.tint[2], 1], i * 4);
+        const shade = Math.min(1.1, t.tint[1]);
+        woodColors.set([shade, shade, shade, 1], i * 4);
       });
-      for (const m of [part.wood, part.leaves]) {
+      for (const [m, c] of [[part.wood, woodColors], [part.leaves, colors]] as const) {
         m.setEnabled(true);
         m.thinInstanceSetBuffer('matrix', matrices, 16, true);
-        m.thinInstanceSetBuffer('color', colors, 4, true);
+        m.thinInstanceSetBuffer('color', c, 4, true);
       }
     }
   }

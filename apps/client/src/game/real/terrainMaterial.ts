@@ -71,7 +71,11 @@ const UPDATE_DIFFUSE = /* glsl */ `
 #endif
   // veloCut: road verges in a cutting (uv2.x from roadRibbon.ts) are rock as well
   float veloRock = max(smoothstep(0.3, 0.55, 1.0 - veloUp) * (1.0 - 0.7 * veloForest), veloCut);
-  veloCol = mix(veloCol, vec3(0.47, 0.45, 0.42) * (0.85 + 0.3 * veloNoise(veloP * 0.05)), veloRock);
+  vec3 veloStone = vec3(0.44, 0.42, 0.38) * (0.85 + 0.3 * veloNoise(veloP * 0.05));
+  // below the alpine zone the rock is patched with moss and lichen, not bare and pale
+  float veloMossy = smoothstep(0.3, 0.55, veloNoise(veloP * 0.07 + 1.3)) * (1.0 - smoothstep(1400.0, 1800.0, vPositionW.y));
+  veloStone = mix(veloStone, vec3(0.25, 0.3, 0.16) * (0.85 + 0.3 * veloNoise(veloP * 0.4)), 0.8 * veloMossy);
+  veloCol = mix(veloCol, veloStone, veloRock);
   // meadow (green, open ground): lush and drier patches instead of one flat green, and close up a grain of
   // blades and tufts, stretched in two directions so it does not tile or read as noise blobs
   float veloMeadow = smoothstep(0.015, 0.07, veloCol.g - max(veloCol.r, veloCol.b)) * (1.0 - veloForest) * (1.0 - veloRock);
@@ -81,7 +85,8 @@ const UPDATE_DIFFUSE = /* glsl */ `
     vec3 veloDry = veloCol * vec3(1.22, 1.1, 0.7);
     veloCol = mix(veloCol, mix(veloLush, veloDry, smoothstep(0.42, 0.78, veloPatch)), veloMeadow * 0.75);
 #ifdef VELO_DETAIL
-    float veloGrain = (1.0 - smoothstep(18.0, 75.0, veloDist)) * veloMeadow;
+    // fades out where a pixel covers several blades (flat view angles), which would alias into blotches
+    float veloGrain = (1.0 - smoothstep(18.0, 75.0, veloDist)) * veloMeadow * (1.0 - smoothstep(0.04, 0.12, length(fwidth(veloP))));
     if (veloGrain > 0.0) {
       float veloB1 = veloNoise(veloP * vec2(11.0, 3.4));
       float veloB2 = veloNoise(veloP * vec2(3.1, 12.0) + 5.3);
@@ -90,7 +95,8 @@ const UPDATE_DIFFUSE = /* glsl */ `
       // dark gaps between the blades, a few sunlit tips
       veloCol *= mix(1.0, 0.72 + 0.5 * veloBlades, veloGrain);
       vec2 veloBn = vec2(veloNoise(veloP * vec2(11.0, 3.4) + 0.4) - veloB1, veloNoise(veloP * vec2(3.1, 12.0) + 5.7) - veloB2);
-      normalW = normalize(normalW + vec3(veloBn.x, 0.0, veloBn.y) * 1.6 * veloGrain);
+      // weak: in the shade (sky light only) a stronger tilt reads as dark blotches across the lawn
+      normalW = normalize(normalW + vec3(veloBn.x, 0.0, veloBn.y) * 0.4 * veloGrain);
     }
 #endif
   }

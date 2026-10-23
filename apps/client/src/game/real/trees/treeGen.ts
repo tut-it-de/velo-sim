@@ -330,12 +330,13 @@ export function generateTree(p: SpeciesParams, seed: number): TreeGeometry {
     }
 
     for (const b of branches) {
+      // branches sit inside the crown, in the shade of the leaves: fully lit they read as orange sticks
       addTube(wood, b.path, b.radius, b.level > 1 ? 3 : p.sides[1], { col: barkCol, row: barkRow }, {
         H,
         level: b.level,
         levels,
         phase: b.phase,
-        brightness: 0.92 + 0.16 * rng(),
+        brightness: 0.42 + 0.12 * rng(),
       });
     }
 
