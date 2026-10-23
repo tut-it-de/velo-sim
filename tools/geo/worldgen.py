@@ -918,6 +918,8 @@ JOIN_LAP_START, JOIN_LAP_END, JOIN_ROAD_START, JOIN_ROAD_END = 1, 2, 4, 8
 ROUNDABOUT_LEN = (35.0, 190.0)
 ROUNDABOUT_ROUNDNESS = 0.86
 ROUNDABOUT_RADIUS_SPREAD = 0.2
+# loops of these classes are no roundabouts (car parks, farm and forest ways)
+ROUNDABOUT_NEVER = {'service', 'track', 'path', 'footway', 'cycleway', 'pedestrian', 'bridleway', 'steps'}
 
 
 def find_roundabouts(g, nb) -> list[dict]:
@@ -988,6 +990,13 @@ def find_roundabouts(g, nb) -> list[dict]:
             continue
         edges = {frozenset((u, v)) for u, v in zip(ring, ring[1:])}
         classes = [g.edges[tuple(e)]['cls'] for e in edges]
+        # Overture carries no junction=roundabout: a ring of streets of different classes is a loop round
+        # a block, a loop of service ways one in a car park, a play street loop with fewer than three
+        # roads leaving it a turning loop
+        nodes = set(ring)
+        arms = sum(1 for u in nodes for v in g[u] if v not in nodes)
+        if len(set(classes)) > 1 or classes[0] in ROUNDABOUT_NEVER or (arms < 3 and classes[0] == 'living_street'):
+            continue
         width = max(SIDE_ROAD_WIDTH.get(c, 5.0) for c in classes)
         hw = min(max(4.0, width / 2 + 0.5), 0.5 * r)
         found[frozenset(keys)] = {'x': cx, 'z': cz, 'r': r, 'hw': hw, 'edges': edges}
