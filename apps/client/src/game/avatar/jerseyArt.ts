@@ -941,6 +941,133 @@ function basePattern(ctx: Ctx, p: Palette): void {
   }
 }
 
+/** Wireframe globe: outline, meridians, parallels and two orbit rings, centred at (x, y) in texture px. */
+function globe(ctx: Ctx, x: number, y: number, r: number, color: string, lw: number, aspect: number): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(1, aspect);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lw;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = lw * 0.6;
+  ctx.save();
+  ctx.rotate(-0.35);
+  for (const k of [0.25, 0.55, 0.85]) {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * k, r, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  for (const t of [-0.6, -0.25, 0.1, 0.45]) {
+    const yy = t * r;
+    const w = Math.sqrt(Math.max(0, r * r - yy * yy));
+    ctx.beginPath();
+    ctx.ellipse(0, yy, w, w * 0.18, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+  for (const a of [0.5, -0.9]) {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 1.02, r * 0.38, a, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * Null 69 Normalized team kit: black race jersey, the globe emblem with the stacked name on the
+ * chest, NORMALIZED running down the front, N69N on the shoulders, the big 0/69 globe on the back
+ * and the Tut IT sponsor on the sleeves.
+ */
+function n69n(ctx: Ctx, p: Palette): void {
+  const pink = p.second;
+  const white = p.trim;
+  const sp = ctx as Ctx & { letterSpacing?: string };
+  band(ctx, 0, 1, p.base);
+  // fine mesh knit on the front panel, smooth side panels
+  for (let y = 0; y < TORSO_H; y += 4) {
+    ctx.fillStyle = shade(p.base, y % 8 ? 1.25 : 1.6);
+    ctx.fillRect(0, y, W, 1);
+  }
+  ctx.fillStyle = shade(p.base, 1.4);
+  wrapped(ctx, () => {
+    for (const u of [0, 0.5]) ctx.fillRect(X(u - 0.06), 0, X(0.12), TORSO_H);
+  });
+  const text = (t: string, u: number, s: number, h: number, color: string, o: { weight?: number; spacing?: number; sx?: number; rot?: number; align?: CanvasTextAlign; outline?: number } = {}) => {
+    ctx.save();
+    ctx.translate(X(u), Y(s));
+    ctx.scale(o.sx ?? 1.15, TORSO_ASPECT);
+    if (o.rot) ctx.rotate(o.rot);
+    ctx.textAlign = o.align ?? 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `${o.weight ?? 900} ${h}px ${FONT}`;
+    sp.letterSpacing = `${o.spacing ?? 0}px`;
+    if (o.outline) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = o.outline;
+      ctx.strokeText(t, 0, 0);
+    } else {
+      ctx.fillStyle = color;
+      ctx.fillText(t, 0, 0);
+    }
+    ctx.restore();
+  };
+
+  // --- front: emblem on the left chest (globe, the stacked name over its right half)
+  const eu = 0.315;
+  globe(ctx, X(eu), Y(0.74), 40, pink, 3, TORSO_ASPECT);
+  text('NULL', eu + 0.038, 0.79, 22, white, { align: 'left', sx: 1.25 });
+  text('69', eu + 0.04, 0.748, 30, pink, { align: 'left', sx: 1.3 });
+  text('NORM', eu + 0.038, 0.705, 20, white, { align: 'left', sx: 1.25 });
+  text('ALIZED', eu + 0.032, 0.672, 20, white, { align: 'left', sx: 1.2 });
+  // NORMALIZED in outline letters down the front, AMATEUR PACE beside it
+  text('NORMALIZED', 0.272, 0.32, 40, pink, { rot: Math.PI / 2, sx: 1, spacing: 2, outline: 2.4 });
+  text('AMATEUR PACE', 0.258, 0.425, 12, pink, { rot: Math.PI / 2, sx: 1, spacing: 1, weight: 800 });
+  // N69N over both shoulders, front and back
+  for (const u of [0.11, 0.39, 0.61, 0.89]) text('N69N', u, 0.89, 24, pink, { sx: 1.25, rot: u < 0.5 ? (u < 0.25 ? -0.25 : 0.25) : u < 0.75 ? -0.25 : 0.25 });
+
+  // --- back: EST 2025, the big globe with 0 over 69, NORMALIZED across it
+  const b = 0.75;
+  text('EST 2025', b, 0.86, 20, white, { spacing: 2, sx: 1.2 });
+  globe(ctx, X(b), Y(0.645), 112, pink, 4, TORSO_ASPECT);
+  // the pink name sweeps up under the lower half of the 69, the white digits sit on top
+  text('NORMALIZED', b + 0.01, 0.53, 50, pink, { rot: -0.3, sx: 1.15 });
+  text('0', b, 0.735, 136, white, { sx: 1.4 });
+  text('69', b, 0.575, 120, white, { sx: 1.3, spacing: -6 });
+  details(ctx, { ...p, logo: white }, p.base, false, false);
+
+  // --- sleeves: black with a grey cuff, Tut IT on the outside
+  sleeveBand(ctx, 0, 1, p.base);
+  sleeveBand(ctx, 0.88, 1, shade(p.base, 2.4));
+  for (const u of [0.25, 0.75]) {
+    ctx.save();
+    ctx.translate(X(u), TORSO_H + 0.52 * SLEEVE_H);
+    ctx.scale(1, SLEEVE_ASPECT * 1.9);
+    // the mark: two offset triangles like a folded flag
+    ctx.fillStyle = white;
+    ctx.beginPath();
+    ctx.moveTo(-74, -14);
+    ctx.lineTo(-56, -18);
+    ctx.lineTo(-56, -2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-70, 18);
+    ctx.lineTo(-70, -4);
+    ctx.lineTo(-54, 0);
+    ctx.lineTo(-62, 12);
+    ctx.closePath();
+    ctx.fill();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = `800 40px ${FONT}`;
+    sp.letterSpacing = '0px';
+    ctx.fillText('Tut IT', -46, 0);
+    ctx.restore();
+  }
+}
+
 const PATTERNS: Record<JerseyDesign['pattern'], (ctx: Ctx, p: Palette) => void> = {
   block,
   band: bandPattern,
@@ -957,6 +1084,7 @@ const PATTERNS: Record<JerseyDesign['pattern'], (ctx: Ctx, p: Palette) => void> 
   stamps,
   base: basePattern,
   athletic3,
+  n69n,
 };
 
 /** Paints the whole jersey texture (torso and sleeves) into a JERSEY_TEX² context. */

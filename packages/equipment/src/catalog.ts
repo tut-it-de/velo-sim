@@ -94,6 +94,8 @@ export interface WheelsItem extends BaseItem {
  * - `fragment`: angular shards in the second and trim colour over the base
  * - `rainbow`: five world-champion bands across the chest
  * - `split`: diagonal split, upper part base, lower part second colour, trim line between
+ * - `n69n`: the Null 69 Normalized team kit – black, globe emblems and lettering in the second
+ *   colour (pink) and trim (white), sponsor on the sleeves
  */
 export type JerseyPattern =
   | 'block'
@@ -110,7 +112,8 @@ export type JerseyPattern =
   | 'tonal'
   | 'stamps'
   | 'base'
-  | 'athletic3';
+  | 'athletic3'
+  | 'n69n';
 
 export interface JerseyDesign {
   pattern: JerseyPattern;
@@ -328,6 +331,7 @@ export const JERSEYS: JerseyItem[] = [
   naap('jersey-naap-proair3-acid', 'Pro Air 3.0 Acid', 'racefit', -0.003, 11_500, 'top', 'athletic3', ['#14181b', '#c4f59c', '#5b2d86'], '#c4f59c', '#14181b', 'MAAP Pro Air Jersey 3.0 Black Acid'),
   longSleeve(naap('jersey-naap-proair3-violett-ls', 'Pro Air 3.0 LS Violett', 'racefit', -0.003, 12_500, 'top', 'athletic3', ['#141416', '#d9b6f4', '#4b1d4a'], '#d9b6f4', '#141416', 'MAAP Pro Air LS Jersey 3.0 Black Violet')),
   naap('jersey-skinsuit-carbon', 'Fragment Navy', 'skinsuit', -0.004, 12_000, 'top', 'fragment', ['#1b2233', '#3c4a66', '#8fa3c2'], '#e9edf3', '#1b2233', 'MAAP Fragment'),
+  jersey('jersey-n69n', 'Null 69 Normalized', 'racefit', -0.002, 6_900, 'top', 'n69n', ['#0c0c0e', '#f3c6d8', '#f4f4f4'], '#f4f4f4', '#0c0c0e', undefined, 'N69N'),
   jersey('jersey-skinsuit-regenbogen', 'Skinsuit Regenbogen', 'skinsuit', -0.004, 15_000, 'top', 'rainbow', ['#f7f7f7', '#1d1d1d', '#1d1d1d'], '#1d1d1d', '#f7f7f7'),
 ];
 
