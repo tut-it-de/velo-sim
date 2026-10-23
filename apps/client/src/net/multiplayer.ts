@@ -1,5 +1,5 @@
 import { Emitter } from '@velo/ble';
-import { PROTOCOL_VERSION, type Emote, type LoadoutDTO, type RiderInfo, type RideSummaryDTO, type ServerMessage } from '@velo/protocol';
+import { PROTOCOL_VERSION, type Emote, type GroupStateDTO, type LoadoutDTO, type RiderInfo, type RideSummaryDTO, type ServerMessage } from '@velo/protocol';
 import { Store } from '../state/store';
 import { webSocketUrl } from './serverUrl';
 
@@ -37,6 +37,9 @@ type NetEvents = {
   joined: RiderInfo;
   left: string;
   emote: { from: string; e: Emote };
+  /** Group rides: lobby/start/end state and the group position (4 Hz). */
+  group: GroupStateDTO;
+  groupPos: { d: number; v: number; n: number };
   [key: string]: unknown;
 };
 
@@ -61,7 +64,7 @@ export class MultiplayerClient extends Emitter<NetEvents> {
 
   constructor(
     private readonly serverUrl: string,
-    private readonly hello: { name: string; country?: string; routeId: string; loadout: LoadoutDTO; weightKg: number; token?: string; simulated?: boolean },
+    private readonly hello: { name: string; country?: string; routeId: string; loadout: LoadoutDTO; weightKg: number; token?: string; simulated?: boolean; groupId?: string },
   ) {
     super();
   }
@@ -149,6 +152,12 @@ export class MultiplayerClient extends Emitter<NetEvents> {
         this.summaryWaiter?.(m.summary);
         this.summaryWaiter = undefined;
         break;
+      case 'group':
+        this.emit('group', m.group);
+        break;
+      case 'groupPos':
+        this.emit('groupPos', { d: m.d, v: m.v, n: m.n });
+        break;
       case 'error':
         this.patch({ status: 'error', error: m.message });
         break;
@@ -173,6 +182,16 @@ export class MultiplayerClient extends Emitter<NetEvents> {
 
   sendEmote(e: Emote): void {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ type: 'emote', e }));
+  }
+
+  /** Server clock (ms) – for countdowns to server times. */
+  serverNow(): number {
+    return Date.now() + this.clockOffset;
+  }
+
+  /** Group ride host: start the countdown / end the ride for everyone. */
+  sendGroup(type: 'groupStart' | 'groupEnd'): void {
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ type }));
   }
 
   /** Interpolated position of a remote rider (or extrapolated when samples are late). */

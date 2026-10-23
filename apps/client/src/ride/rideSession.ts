@@ -16,6 +16,7 @@ import type { RideSummaryDTO } from '@velo/protocol';
 import type { RiderLook } from '../game/rider';
 import type { RiderFrame } from '../game/world';
 import { botPosition, planBots, type BotPlan } from './bots';
+import type { RideAssist } from './groupAssist';
 import { getBest, submitResult } from '../state/records';
 import { settingsStore, type Settings } from '../state/settings';
 import { referenceFtp } from '../ftp/advisor';
@@ -123,6 +124,8 @@ export interface RideOptions {
   routesWithLap?: string[];
   /** Online room connection (multiplayer). */
   net?: MultiplayerClient;
+  /** Group ride "stay together": changes speed/position only, never the power. */
+  assist?: RideAssist;
 }
 
 /** Shortest signed distance between two lap positions on a loop. */
@@ -190,6 +193,9 @@ export class RideSession {
   private workoutKj = 0;
   private readonly firstLapOnRoute: boolean;
   readonly net?: MultiplayerClient;
+  private readonly assist?: RideAssist;
+  /** Laps already behind a late group rider at the start (not ridden). */
+  private lapOffset = 0;
 
   constructor(
     readonly routeId: string,
@@ -200,6 +206,7 @@ export class RideSession {
     this.setup = setupFor(settings, options.loadout ?? STARTER_LOADOUT);
     this.firstLapOnRoute = !(options.routesWithLap ?? []).includes(routeId);
     this.net = options.net;
+    this.assist = options.assist;
     this.recorder = new ActivityRecorder(settings.ftp);
     this.lastElevation = this.track.sample(0).y;
     if (options.workout) this.player = new WorkoutPlayer(options.workout, referenceFtp(settings));
@@ -277,6 +284,17 @@ export class RideSession {
     this.lastTrainerGrade = undefined;
     const m = deviceManager.metrics.get();
     this.snapshot.set(this.buildSnapshot(m.stale ? 0 : m.power, m.power3s, m.cadence, m.heartRate, m.stale));
+  }
+
+  /** Group ride: a late rider starts where the group is – not a teleport, the ride simply starts there. */
+  startFrom(distanceM: number): void {
+    if (this.movingMs > 0 || distanceM <= 0) return;
+    this.state = { speedMps: 0, distanceM };
+    this.renderDistance = distanceM;
+    this.skippedM = distanceM;
+    this.lapOffset = Math.floor(distanceM / this.track.length);
+    this.lastElevation = this.track.sample(distanceM).y;
+    this.segmentTracker = new SegmentTracker(this.track.segments, this.track.length, distanceM, 0);
   }
 
   start(): void {
@@ -359,7 +377,13 @@ export class RideSession {
 
     // Drafting: nearest rider ahead of me.
     this.draft = draftReduction(this.gapAhead(this.state.distanceM) - BIKE_LENGTH);
-    this.state = step(this.state, power, this.setup, { gradePercent: sample.gradePercent, draftReduction: this.draft }, dt);
+    const env = { gradePercent: sample.gradePercent, draftReduction: this.draft };
+    if (this.assist) {
+      const prev = this.state;
+      this.state = this.assist.constrain(prev, step(prev, power, this.setup, this.assist.environment(env, prev, now), dt), dt, now);
+    } else {
+      this.state = step(this.state, power, this.setup, env, dt);
+    }
     this.stepBots();
     this.net?.sendState(this.state.distanceM, this.state.speedMps, power, cadence, RIDER_LATERAL);
 
@@ -420,7 +444,7 @@ export class RideSession {
     }
 
     const lap = Math.floor(this.state.distanceM / this.track.length) + 1;
-    if (lap > this.lapTimes.length + 1) {
+    if (lap > this.lapTimes.length + this.lapOffset + 1) {
       const movingS = this.movingMs / 1000;
       this.lapTimes.push(movingS - this.lapStartMovingS);
       this.addOutcome({ id: 'lap', name: `Runde ${this.lapTimes.length}`, type: 'lap' }, movingS - this.lapStartMovingS);
@@ -439,14 +463,15 @@ export class RideSession {
       kilojoules: this.powerSum / 1000,
       workoutKilojoules: this.workoutKj,
       workoutCompleted: !!this.player?.state.finished,
-      lapsCompleted: this.lapTimes.length,
+      // with the group help only the work counts (the server books it the same way)
+      lapsCompleted: this.assist ? 0 : this.lapTimes.length,
       firstLapOnRoute: this.firstLapOnRoute,
       personalBests: this.segmentResults.filter((r) => r.saved).length,
     });
   }
 
   private addOutcome(segment: SegmentOutcome['segment'], timeS: number): void {
-    const res = submitResult(this.routeId, segment.id, timeS, this.noCredit);
+    const res = submitResult(this.routeId, segment.id, timeS, this.noCredit || !!this.assist);
     const outcome: SegmentOutcome = { segment, timeS, previousBestS: res.previous?.timeS, isPb: res.isPb, saved: res.saved, at: Date.now() };
     this.segmentResults.push(outcome);
     this.lastResult = outcome;
