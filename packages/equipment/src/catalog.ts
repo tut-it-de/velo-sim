@@ -231,7 +231,7 @@ export const BIKES: BikeItem[] = [
   bike('bike-spezion-allora', 'Spezion', 'Allora Sport', 'entry', 'allround', 0.01, 8.0, 5_000, '#c41e3a', '#ffffff', ALU({ slope: 0.04, paint: 'split' }), 'Specialized Allez'),
   bike('bike-gigant-kontend', 'Gigant', 'Kontend AR', 'entry', 'endurance', 0.012, 8.2, 4_500, '#4682b4', '#ffffff', ALU({ slope: 0.12 }), 'Giant Contend'),
   bike('bike-treck-domano', 'Treck', 'Domano AL 2', 'entry', 'endurance', 0.012, 8.4, 4_000, '#708090', '#ffcc00', ALU({ slope: 0.05, stays: 'dropped' }), 'Trek Domane AL'),
-  bike('bike-basis', 'Velo', 'Basis', 'start', 'allround', 0.014, 8.6, 0, '#20232a', '#ff7a1a', ALU({ slope: 0.02 })),
+  bike('bike-basis', 'Velo', 'Basis', 'start', 'allround', 0.014, 8.6, 0, '#20232a', '#3a8ee6', ALU({ slope: 0.02 })),
 ];
 
 const decal = (text: string, sub: string, color: string, accent: string, style: RimDecal['style'], count = 2): RimDecal => ({ text, sub, color, accent, style, count });
@@ -251,7 +251,7 @@ const wheels = (
 
 export const WHEELS: WheelsItem[] = [
   wheels('wheels-basis', 'Velo', 'Basis Alu', 'start', 22, 0.008, 2.0, 0, {
-    rim: '#2b2e33', finish: 'alu', hub: '#2b2e33', spoke: '#1a1a1a', decal: decal('VELO', 'BASIS', '#c9ccd1', '#ff7a1a', 'block', 2),
+    rim: '#2b2e33', finish: 'alu', hub: '#2b2e33', spoke: '#1a1a1a', decal: decal('VELO', 'BASIS', '#c9ccd1', '#3a8ee6', 'block', 2),
   }),
   wheels('wheels-fulkrum-r5', 'Fulkrum', 'Racing 5', 'entry', 25, 0.005, 1.65, 3_000, {
     rim: '#1c1c1e', finish: 'alu', hub: '#1c1c1e', spoke: '#141414', decal: decal('FULKRUM', 'RACING 5', '#f2f2f2', '#d62828', 'italic', 2),
@@ -309,13 +309,13 @@ const naap = (...args: Parameters<typeof jersey>): JerseyItem => {
 const longSleeve = (item: JerseyItem): JerseyItem => ({ ...item, look: { ...item.look, design: { ...item.look.design, longSleeve: true } } });
 
 export const JERSEYS: JerseyItem[] = [
-  jersey('jersey-club-orange', 'Club Orange', 'club', 0.003, 0, 'start', 'block', ['#ff6b1a', '#24262c', '#24262c'], '#ffffff', '#ffffff'),
+  jersey('jersey-club-orange', 'Club Blau', 'club', 0.003, 0, 'start', 'block', ['#2f7fd8', '#24262c', '#24262c'], '#ffffff', '#ffffff'),
   jersey('jersey-club-blau', 'Club Blau', 'club', 0.003, 600, 'entry', 'band', ['#1f5fa8', '#f4f4f2', '#1f5fa8'], '#f4f4f2', '#1f5fa8'),
   jersey('jersey-retro-wolle', 'Retro Wolle', 'retro', 0.005, 1_500, 'entry', 'retro', ['#9e1b22', '#efe7d6', '#1d1d1d'], '#efe7d6', '#efe7d6'),
   jersey('jersey-retro-bianchi', 'Retro Himmelblau', 'retro', 0.005, 1_500, 'entry', 'retro', ['#7fd1c7', '#111111', '#111111'], '#111111', '#111111'),
   naap('jersey-club-flieder', 'Training Flieder', 'club', 0.003, 1_800, 'entry', 'band', ['#b9a7d6', '#2c2a3a', '#efeaf6'], '#2c2a3a', '#efeaf6', 'MAAP Training'),
   naap('jersey-naap-base', 'Pro Base Antarktis', 'club', 0.003, 2_200, 'entry', 'base', ['#ecebe6', '#1e2a44', '#d9d7d0'], '#1e2a44', '#ecebe6', 'MAAP Evade Pro Base'),
-  naap('jersey-standard-schwarz', 'Halftone Nacht', 'standard', 0, 2_000, 'mid', 'halftone', ['#17181c', '#ff6b1a', '#2a2c33'], '#ff6b1a', '#17181c', 'MAAP Halftone'),
+  naap('jersey-standard-schwarz', 'Halftone Nacht', 'standard', 0, 2_000, 'mid', 'halftone', ['#17181c', '#74c0fc', '#2a2c33'], '#74c0fc', '#17181c', 'MAAP Halftone'),
   naap('jersey-standard-gruen', 'Topo Salbei', 'standard', 0, 2_500, 'mid', 'topo', ['#7f8f74', '#c9d3bd', '#3e4a3a'], '#eef1ea', '#eef1ea', 'MAAP Adapt'),
   naap('jersey-standard-sand', 'Alt-Road Sand', 'standard', 0, 3_000, 'mid', 'split', ['#d8c8a8', '#4f5a3c', '#1d1d1d'], '#1d1d1d', '#4f5a3c', 'MAAP Alt_Road'),
   naap('jersey-naap-aeon-lavendel', 'Aeon Lavendelgrau', 'standard', 0, 3_500, 'mid', 'tonal', ['#a8a3b9', '#9893aa', '#8c87a0'], '#4a4560', '#a8a3b9', 'MAAP Apex Aeon'),
@@ -351,7 +351,7 @@ const helmet = (
 ): HelmetItem => ({ id, type: 'helmet', brand, model, tier, cdaDelta, weightKg, price, look: { shape, shell, accent, vents }, inspiredBy });
 
 export const HELMETS: HelmetItem[] = [
-  helmet('helmet-basis', 'Velo', 'Basis', 'start', 'road', 0, 0.32, 0, '#f2f2f2', '#ff7a1a'),
+  helmet('helmet-basis', 'Velo', 'Basis', 'start', 'road', 0, 0.32, 0, '#f2f2f2', '#3a8ee6'),
   helmet('helmet-bubble-mint', 'Velo', 'Stadt Mint', 'entry', 'bubble', 0.004, 0.42, 600, '#9be3c8', '#ffffff', '#2a2d31'),
   helmet('helmet-retro-leder', 'Velo', 'Leder-Haarnetz 1984', 'entry', 'retro', 0.006, 0.25, 900, '#4a2c1a', '#c79a5b', '#2b1a10'),
   helmet('helmet-mtb-trail', 'Gyro', 'Trail MIPS', 'entry', 'mtb', 0.003, 0.38, 1_400, '#2d3a2f', '#e8b931', '#141414', 'Giro Manifest'),

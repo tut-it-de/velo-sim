@@ -88,3 +88,35 @@ export function timeInZones(power: ArrayLike<number>, ftp: number): number[] {
   for (let i = 0; i < power.length; i++) out[powerZone(power[i]!, ftp).zone - 1]! += 1;
   return out;
 }
+
+export interface HeartRateZone {
+  zone: number;
+  name: string;
+  /** Upper bound as fraction of the maximum heart rate (exclusive); Infinity for the last zone. */
+  max: number;
+  color: string;
+}
+
+/** Five heart rate zones by share of the maximum heart rate. */
+export const HEART_RATE_ZONES: HeartRateZone[] = [
+  { zone: 1, name: 'Regeneration', max: 0.6, color: '#8b949e' },
+  { zone: 2, name: 'Grundlage', max: 0.7, color: '#3b82f6' },
+  { zone: 3, name: 'Tempo', max: 0.8, color: '#22c55e' },
+  { zone: 4, name: 'Schwelle', max: 0.9, color: '#f97316' },
+  { zone: 5, name: 'Maximum', max: Infinity, color: '#ef4444' },
+];
+
+export function heartRateZone(bpm: number, maxHr: number): HeartRateZone {
+  const rel = maxHr > 0 ? bpm / maxHr : 0;
+  return HEART_RATE_ZONES.find((z) => rel < z.max) ?? HEART_RATE_ZONES[HEART_RATE_ZONES.length - 1]!;
+}
+
+/** Seconds spent in each heart rate zone (index 0 = Z1); samples without a heart rate are left out. */
+export function timeInHeartRateZones(heartRate: ArrayLike<number | undefined>, maxHr: number): number[] {
+  const out = HEART_RATE_ZONES.map(() => 0);
+  for (let i = 0; i < heartRate.length; i++) {
+    const bpm = heartRate[i];
+    if (bpm && bpm > 0) out[heartRateZone(bpm, maxHr).zone - 1]! += 1;
+  }
+  return out;
+}

@@ -177,7 +177,7 @@ export class Cyclist {
     body.ellipsoid(H.add(v(0, -0.035, -0.062)), v(0.066, 0.05, 0.045), hex('#3b2a20'), undefined, 10, 8);
 
     // Helmet: shape and colours from the helmet item (helmets.ts).
-    buildHelmet(shell, H, look.helmetLook ?? { shape: 'road', shell: look.helmet ?? '#f2f2f2', accent: '#ff7a1a', vents: '#1e2024' });
+    buildHelmet(shell, H, look.helmetLook ?? { shape: 'road', shell: look.helmet ?? '#f2f2f2', accent: '#3a8ee6', vents: '#1e2024' });
     // Straps and glasses.
     const strapCol = hex('#202124');
     for (const sx of [-1, 1]) {

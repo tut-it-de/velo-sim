@@ -24,7 +24,7 @@ export function FtpSetupDialog({ onDone, onClose, reason }: { onDone: () => void
         <h2>Wie fit bist du?</h2>
         <p className="muted small">
           {reason ?? 'Workouts richten sich nach deiner FTP – der Leistung, die du etwa eine Stunde halten kannst.'} Wähl eine grobe Stufe. Nach ein
-          paar Fahrten schätzt Velo Sim deine FTP selbst und passt sie an.
+          paar Fahrten schätzt WFR deine FTP selbst und passt sie an.
         </p>
         <div className="row ftp-own">
           <label className="muted small">Dein Gewicht:</label>
@@ -204,7 +204,7 @@ export function FtpMissingNotice({ onSetup }: { onSetup: () => void }) {
   return (
     <div className="notice row" style={{ justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
       <span>
-        <strong>FTP noch nicht bestimmt.</strong> Fahr den Rampentest (feste Watt) oder einfach ein paar Fahrten – Velo Sim schätzt sie dann selbst.
+        <strong>FTP noch nicht bestimmt.</strong> Fahr den Rampentest (feste Watt) oder einfach ein paar Fahrten – WFR schätzt sie dann selbst.
       </span>
       <button className="primary" onClick={onSetup}>
         Grob einschätzen

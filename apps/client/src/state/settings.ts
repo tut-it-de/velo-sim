@@ -11,6 +11,8 @@ export interface Settings {
   heightCm: number;
   /** Functional Threshold Power in watts — workouts are defined relative to it. 0 = not known yet (see ftp/ftpStore). */
   ftp: number;
+  /** Maximum heart rate in bpm for the heart rate zones; 0 = not known (the ride report then assumes 190). */
+  maxHeartRate: number;
   /** 0…1 — how much of the virtual grade the trainer simulates (Zwift default 50 %). */
   trainerDifficulty: number;
   /** Use the built-in simulated trainer instead of Bluetooth. */
@@ -47,6 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
   weightKg: 75,
   heightCm: 178,
   ftp: 0,
+  maxHeartRate: 0,
   trainerDifficulty: 0.5,
   useSimulator: false,
   preferCadenceSensor: true,

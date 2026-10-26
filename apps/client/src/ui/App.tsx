@@ -22,6 +22,7 @@ import { RidePage } from './RidePage';
 import { SettingsPage } from './SettingsPage';
 import { ShiftingPage } from './ShiftingPage';
 import { useSimulatorKeys } from './useSimulatorKeys';
+import { BrandMark } from './BrandMark';
 
 const PAGES: Array<{ id: Exclude<Page, 'login'>; label: string; icon: IconName }> = [
   { id: 'ride', label: 'Fahren', icon: 'routes' },
@@ -87,9 +88,11 @@ export function App() {
   return (
     <div className={`app${immersive ? ' immersive' : ''}`}>
       <aside className="sidebar" hidden={immersive}>
-        <button className="brand" onClick={() => setPage('ride')} aria-label="Velo Sim – Fahren">
-          <span className="brand-mark">V</span>
-          <span className="brand-name">Velo Sim</span>
+        <button className="brand" onClick={() => setPage('ride')} aria-label="WFR – Fahren">
+          <BrandMark />
+          <span className="brand-name">
+            WFR
+          </span>
         </button>
         <nav className="side-nav">
           {PAGES.map((p) => (

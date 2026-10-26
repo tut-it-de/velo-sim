@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { RideSnapshot, SegmentOutcome } from '../ride/rideSession';
 import { formatDuration } from './components';
 
-const TYPE_COLOR = { climb: '#c62828', sprint: '#2e7d32', descent: '#1565c0', lap: '#ff7a1a' } as const;
+const TYPE_COLOR = { climb: '#c62828', sprint: '#2e7d32', descent: '#1565c0', lap: '#4dabf7' } as const;
 const TYPE_LABEL = { climb: 'Bergwertung', sprint: 'Sprint', descent: 'Abfahrt', lap: 'Runde' } as const;
 
 function delta(s: number): string {

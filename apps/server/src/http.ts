@@ -310,7 +310,7 @@ async function handleStrava(ctx: ApiContext, req: IncomingMessage, res: ServerRe
       if (fit.length < 14 || fit.subarray(8, 12).toString('latin1') !== '.FIT') throw new HttpError(400, 'Keine gültige FIT-Datei');
       const externalId = String(b.externalId ?? '').replace(/[^\w.-]/g, '').slice(0, 80) || `velo-sim-${Date.now()}`;
       const result = await strava.upload(user.id, new Uint8Array(fit), {
-        name: String(b.name ?? 'Velo Sim Fahrt').slice(0, 120),
+        name: String(b.name ?? 'WFR-Fahrt').slice(0, 120),
         description: b.description ? String(b.description).slice(0, 2000) : undefined,
         externalId,
       });

@@ -1,5 +1,6 @@
-import { encodeFitActivity, powerCurve, type ActivitySummary } from '@velo/metrics';
+import { encodeFitActivity, powerCurve, timeInHeartRateZones, timeInZones, type ActivitySummary } from '@velo/metrics';
 import type { RideResult } from '../ride/rideSession';
+import { settingsStore } from './settings';
 import { Store, loadJson, saveJson } from './store';
 
 export interface StoredActivity {
@@ -24,6 +25,8 @@ export interface StoredActivity {
   segments?: Array<{ id: string; name: string; type: string; timeS: number; isPb: boolean; improved?: boolean }>;
   /** Workout ridden in this ride; `test`: a finished FTP test. */
   workout?: { name: string; completed: boolean; test?: boolean };
+  /** Seconds in each power zone (with a known FTP) and heart rate zone (with a heart rate strap), for the Strava text. */
+  zones?: { power?: number[]; heartRate?: number[]; maxHr?: number };
   /** Group ride this ride was part of (invite code and name). */
   group?: { id: string; name: string };
   strava?: {
@@ -109,6 +112,7 @@ export async function saveActivity(result: RideResult, simulated: boolean, title
       isPb: r.saved,
       improved: r.saved && r.previousBestS !== undefined && r.timeS < r.previousBestS,
     })),
+    zones: rideZones(result),
     workout: result.workout && { name: result.workout.name, completed: result.workout.completed, test: !!result.workout.test?.ftp },
     group,
   };
@@ -119,6 +123,17 @@ export async function saveActivity(result: RideResult, simulated: boolean, title
   }
   activitiesStore.set([activity, ...activitiesStore.get().filter((a) => a.id !== activity.id)]);
   return activity;
+}
+
+function rideZones(result: RideResult): StoredActivity['zones'] {
+  const ftp = result.summary.ftp || settingsStore.get().ftp;
+  const hr = result.samples.map((x) => x.heartRate);
+  const maxHr = settingsStore.get().maxHeartRate || Math.max(190, result.summary.maxHeartRate ?? 0);
+  return {
+    power: ftp > 0 ? timeInZones(result.samples.map((x) => x.power), ftp) : undefined,
+    heartRate: hr.some((v) => (v ?? 0) > 0) ? timeInHeartRateZones(hr, maxHr) : undefined,
+    maxHr,
+  };
 }
 
 /** Fields that only describe this device's copy – changing them does not need a new upload. */

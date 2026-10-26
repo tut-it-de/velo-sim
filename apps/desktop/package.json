@@ -2,7 +2,7 @@
   "name": "@velo/desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Velo Sim – Desktop-App (Windows/macOS)",
+  "description": "WFR – Was für Rolle!! – Desktop-App (Windows/macOS)",
   "main": "main.cjs",
   "author": "tut-it-de",
   "scripts": {
@@ -18,7 +18,7 @@
   },
   "build": {
     "appId": "de.tutit.velosim",
-    "productName": "Velo Sim",
+    "productName": "WFR",
     "directories": {
       "output": "release"
     },
@@ -39,8 +39,8 @@
         "dmg"
       ],
       "extendInfo": {
-        "NSBluetoothAlwaysUsageDescription": "Velo Sim verbindet sich per Bluetooth mit deinem Smart-Trainer, Herzfrequenz- und Kadenzsensor.",
-        "NSBluetoothPeripheralUsageDescription": "Velo Sim verbindet sich per Bluetooth mit deinem Smart-Trainer, Herzfrequenz- und Kadenzsensor."
+        "NSBluetoothAlwaysUsageDescription": "WFR verbindet sich per Bluetooth mit deinem Smart-Trainer, Herzfrequenz- und Kadenzsensor.",
+        "NSBluetoothPeripheralUsageDescription": "WFR verbindet sich per Bluetooth mit deinem Smart-Trainer, Herzfrequenz- und Kadenzsensor."
       }
     },
     "win": {

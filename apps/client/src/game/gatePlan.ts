@@ -11,7 +11,7 @@ export interface GateSpec {
   color: string;
 }
 
-export const START_COLOR = '#ff7a1a';
+export const START_COLOR = '#4dabf7';
 export const SEGMENT_COLORS: Record<RouteSegment['type'], string> = { climb: '#c62828', sprint: '#2e7d32', descent: '#1565c0' };
 const LABEL: Record<RouteSegment['type'], string> = { climb: 'BERGWERTUNG', sprint: 'SPRINT', descent: 'ABFAHRT' };
 /** Arches closer than this become one arch. */

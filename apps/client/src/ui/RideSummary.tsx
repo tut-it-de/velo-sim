@@ -15,12 +15,15 @@ import { unlockedBy } from '../net/achievements';
 import { pageStore } from '../state/ui';
 import { isLoggedIn } from '../net/api';
 import { useStore } from '../state/store';
+import { useMemo } from 'react';
+import { RideReportCard, reportData } from './RideReportCard';
 
 export function RideSummary({ result, activity, ftpAdvice, onClose }: { result: RideResult; activity: StoredActivity; ftpAdvice?: FtpAdvice; onClose: () => void }) {
   const s = result.summary;
   const garage = useStore(garageStore);
   const live = useStore(activitiesStore).find((a) => a.id === activity.id) ?? activity;
   const earned = total(result.earnings);
+  const report = useMemo(() => reportData(result, activity.title, activity.startTime), [result, activity.title, activity.startTime]);
   const rows: Array<[string, string]> = [
     ['Zeit (in Bewegung)', formatDuration(s.durationS)],
     ['Distanz', `${(s.distanceM / 1000).toFixed(2)} km`],
@@ -39,13 +42,14 @@ export function RideSummary({ result, activity, ftpAdvice, onClose }: { result: 
   ];
   return (
     <div className="modal-backdrop">
-      <div className="modal" style={{ width: 'min(560px, calc(100vw - 32px))' }}>
+      <div className="modal" style={{ width: 'min(860px, calc(100vw - 32px))' }}>
         <h2>Fahrt beendet 🎉</h2>
         <div className="muted small" style={{ marginBottom: 12 }}>
           {activity.title}
           {activity.simulated && ' · mit Simulator gefahren'}
         </div>
-        <div className="summary-grid">
+        <RideReportCard data={report} fileName={fitFileName(live).replace(/\.fit$/, '') + '-bericht.png'} />
+        <div className="summary-grid" style={{ marginTop: 16 }}>
           {rows.map(([k, v]) => (
             <div key={k}>
               <div className="muted small">{k}</div>

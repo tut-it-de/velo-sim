@@ -18,6 +18,9 @@ if (process.platform === 'linux') {
   app.commandLine.appendSwitch('enable-experimental-web-platform-features');
 }
 
+// The app was called "Velo Sim": its rides, settings and garage stay in that folder after the rename to WFR.
+app.setPath('userData', path.join(app.getPath('appData'), 'Velo Sim'));
+
 /** @type {((deviceId: string) => void) | null} */
 let pendingBluetoothCallback = null;
 
@@ -28,7 +31,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 600,
     backgroundColor: '#0d1117',
-    title: 'Velo Sim',
+    title: 'WFR – Was für Rolle!!',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

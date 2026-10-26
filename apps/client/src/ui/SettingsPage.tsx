@@ -73,6 +73,8 @@ export function SettingsPage() {
             <NumberField k="weightKg" min={35} max={160} step={0.5} />
             <label>Größe (cm)</label>
             <NumberField k="heightCm" min={130} max={215} />
+            <label>Max. Herzfrequenz (bpm, 0 = unbekannt)</label>
+            <NumberField k="maxHeartRate" min={0} max={230} />
           </div>
         </div>
         <FtpCard />

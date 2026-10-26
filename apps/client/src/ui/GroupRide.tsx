@@ -32,7 +32,7 @@ function CopyRow({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
-      if (navigator.share && /Mobi|iPad|iPhone|Android/i.test(navigator.userAgent)) await navigator.share({ title: 'Gruppenfahrt in Velo Sim', text: `Fahr mit! Code ${code}`, url: link });
+      if (navigator.share && /Mobi|iPad|iPhone|Android/i.test(navigator.userAgent)) await navigator.share({ title: 'Gruppenfahrt in WFR – Was für Rolle!!', text: `Fahr mit! Code ${code}`, url: link });
       else {
         await navigator.clipboard.writeText(link);
         setCopied(true);

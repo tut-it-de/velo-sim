@@ -3,6 +3,7 @@ import { accountStore, login, logout, register } from '../net/api';
 import { settingsStore, updateSettings } from '../state/settings';
 import { useStore } from '../state/store';
 import { pageStore } from '../state/ui';
+import { BrandMark } from './BrandMark';
 
 /**
  * Sign in or create an account on the game server. With an account the server books the Taler
@@ -60,8 +61,10 @@ export function LoginPage() {
     <div className="page">
       <div className="page-inner auth">
         <div className="auth-brand">
-          <span className="brand-mark">V</span>
-          <span className="brand-name">Velo Sim</span>
+          <BrandMark />
+          <span className="brand-name">
+            WFR
+          </span>
         </div>
         <h1>{register_ ? 'Konto erstellen' : 'Anmelden'}</h1>
         <p className="muted">

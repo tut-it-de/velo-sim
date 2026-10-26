@@ -1,3 +1,4 @@
+import { HEART_RATE_ZONES, POWER_ZONES } from '@velo/metrics';
 import { Capacitor } from '@capacitor/core';
 import { activitiesStore, updateActivity, type StoredActivity } from '../state/activities';
 import { Store, loadJson, saveJson } from '../state/store';
@@ -84,15 +85,38 @@ export async function disconnectStrava(): Promise<void> {
   stravaStore.set(await call<StravaStatus>('/api/strava/disconnect', {}));
 }
 
-function describeRide(a: StoredActivity): string {
+const ZONE_SQUARES = ['⬜', '🟦', '🟩', '🟨', '🟧', '🟥'];
+
+function clock(s: number): string {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h ? `${h}:${String(m).padStart(2, '0')} h` : `${m}:${String(Math.round(s % 60)).padStart(2, '0')} min`;
+}
+
+/** One line per zone the ride spent time in: "🟦 Z2 Grundlage 20:30 min (45 %)". */
+function zoneLines(seconds: number[], zones: Array<{ zone: number; name: string }>, squares: string[]): string[] {
+  const total = seconds.reduce((a, b) => a + b, 0);
+  if (!total) return [];
+  return seconds.flatMap((s, i) => (s >= 30 ? [`${squares[i]} Z${zones[i]!.zone} ${zones[i]!.name} ${clock(s)} (${Math.round((s / total) * 100)} %)`] : []));
+}
+
+/** The ride report as text: Strava takes no pictures from apps like this one, but a description. */
+export function describeRide(a: StoredActivity): string {
   const s = a.summary;
   const parts = [
-    `${(s.distanceM / 1000).toFixed(1)} km auf der ${a.routeName}`,
-    `Ø ${Math.round(s.avgPower)} W · NP ${Math.round(s.normalizedPower)} W · TSS ${Math.round(s.tss)}`,
+    `${(s.distanceM / 1000).toFixed(1)} km auf der ${a.routeName} · ${Math.round(s.ascentM)} hm`,
+    `⚡ Ø ${Math.round(s.avgPower)} W · NP ${Math.round(s.normalizedPower)} W · max ${Math.round(s.maxPower)} W · TSS ${Math.round(s.tss)}`,
   ];
+  if (s.avgHeartRate) parts.push(`❤️ Ø ${Math.round(s.avgHeartRate)} bpm · max ${Math.round(s.maxHeartRate ?? 0)} bpm`);
+  if (s.avgCadence) parts.push(`🔄 Ø ${Math.round(s.avgCadence)} rpm · 🔥 ${Math.round(s.calories)} kcal`);
+  if (a.workout) parts.push(`🏋️ Workout „${a.workout.name}“ ${a.workout.completed ? 'geschafft' : 'vorzeitig beendet'}`);
+  const power = a.zones?.power && zoneLines(a.zones.power, POWER_ZONES, ZONE_SQUARES);
+  if (power?.length) parts.push('', '📊 Leistungszonen', ...power);
+  const hr = a.zones?.heartRate && zoneLines(a.zones.heartRate, HEART_RATE_ZONES, ['⬜', '🟦', '🟩', '🟧', '🟥']);
+  if (hr?.length) parts.push('', `❤️ Herzfrequenzzonen (max. ${a.zones?.maxHr} bpm)`, ...hr);
   const pbs = (a.segments ?? []).filter((x) => x.isPb).map((x) => x.name);
-  if (pbs.length) parts.push(`🏆 Bestzeiten: ${pbs.join(', ')}`);
-  parts.push('Gefahren mit Velo Sim');
+  if (pbs.length) parts.push('', `🏆 Bestzeiten: ${pbs.join(', ')}`);
+  parts.push('', 'Gefahren mit WFR – Was für Rolle!!');
   return parts.join('\n');
 }
 

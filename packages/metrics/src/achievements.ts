@@ -70,7 +70,7 @@ const TIER_REWARDS = [250, 500, 1000];
 
 /** The badge catalogue in display order (route badges are added per route). */
 const BADGES = {
-  'first-ride': { title: 'Erste Fahrt', description: 'Deine erste Fahrt auf Velo Sim.', icon: '🚲', reward: 100 },
+  'first-ride': { title: 'Erste Fahrt', description: 'Deine erste Fahrt auf WFR.', icon: '🚲', reward: 100 },
   'km-100': { title: '100 km', description: 'Insgesamt 100 km gefahren.', icon: '🥉', reward: 200 },
   'km-1000': { title: '1.000 km', description: 'Insgesamt 1.000 km gefahren.', icon: '🥈', reward: 1000 },
   'km-10000': { title: '10.000 km', description: 'Insgesamt 10.000 km gefahren.', icon: '🥇', reward: 5000 },

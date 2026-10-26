@@ -2,7 +2,7 @@ import { adviceAfterRide } from '../ftp/ftpStore';
 import type { FtpAdvice } from '../ftp/advisor';
 import { FtpSetupDialog } from './FtpUi';
 import { referenceFtp } from '../ftp/advisor';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { accountStore, fetchOnline, isLoggedIn, refreshAccount, serverBase } from '../net/api';
 import { MultiplayerClient } from '../net/multiplayer';
 import { maybeAutoUpload } from '../net/strava';
@@ -87,6 +87,8 @@ export function RidePage({ view }: { view: 'ride' | 'workouts' }) {
 const STYLE_LABEL: Record<RouteStyle, string> = { coast: 'Küste', hills: 'Hügel', alpine: 'Alpin', lake: 'See' };
 const STYLE_HUE: Record<RouteStyle, string> = { coast: '#22b8cf', hills: '#51cf66', alpine: '#b197fc', lake: '#4dabf7' };
 const DIFFICULTY_LABEL = ['Leicht', 'Moderat', 'Mittel', 'Schwer', 'Sehr schwer'];
+/** Pip colour per difficulty, green for easy to red for very hard. */
+const DIFFICULTY_HUE = ['#40c057', '#94d82d', '#fab005', '#ff6b6b', '#e03131'];
 type RouteFilter = 'all' | 'real' | 'fantasy' | 'flat' | 'climb';
 const FILTERS: Array<{ id: RouteFilter; label: string }> = [
   { id: 'all', label: 'Alle' },
@@ -108,7 +110,12 @@ function difficulty(t: Track): number {
 
 function DifficultyPips({ value }: { value: number }) {
   return (
-    <span className="pips" title={`Schwierigkeit ${value} von 5`} aria-label={`Schwierigkeit ${value} von 5`}>
+    <span
+      className="pips"
+      style={{ '--hue': DIFFICULTY_HUE[value - 1] } as CSSProperties}
+      title={`Schwierigkeit ${value} von 5`}
+      aria-label={`Schwierigkeit ${value} von 5`}
+    >
       {[1, 2, 3, 4, 5].map((i) => (
         <span key={i} className={i <= value ? 'on' : ''} />
       ))}

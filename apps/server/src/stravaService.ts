@@ -118,7 +118,7 @@ export class StravaService {
 export function callbackPage(ok: boolean, message: string): string {
   const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
   return `<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Velo Sim – Strava</title>
+<title>WFR – Strava</title>
 <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0d1117;color:#e6edf3;font-family:system-ui,sans-serif}
 .box{max-width:420px;padding:28px;border:1px solid #2a313c;border-radius:12px;background:#161b22;text-align:center}
 h1{font-size:22px;margin:0 0 10px;color:${ok ? '#fc4c02' : '#f85149'}}p{color:#8b949e;line-height:1.5}</style></head>

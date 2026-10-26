@@ -49,8 +49,8 @@ export function ElevationProfile({ track, positionM, height = 90, showSegments =
     >
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#ff7a1a" stopOpacity="0.55" />
-          <stop offset="100%" stopColor="#ff7a1a" stopOpacity="0.08" />
+          <stop offset="0%" stopColor="#74c0fc" stopOpacity="0.55" />
+          <stop offset="100%" stopColor="#74c0fc" stopOpacity="0.08" />
         </linearGradient>
       </defs>
       {showSegments &&
@@ -66,14 +66,14 @@ export function ElevationProfile({ track, positionM, height = 90, showSegments =
           />
         ))}
       <path d={area} fill={`url(#${gradId})`} />
-      <path d={path} fill="none" stroke="#ff9a4a" strokeWidth={2} vectorEffect="non-scaling-stroke" />
+      <path d={path} fill="none" stroke="#a5d8ff" strokeWidth={2} vectorEffect="non-scaling-stroke" />
       {markers.map((m) => (
         <circle key={m.id} cx={x(m.positionM)} cy={yAt(m.positionM)} r={4} fill={m.color} stroke="#0d1117" strokeWidth={1} vectorEffect="non-scaling-stroke" />
       ))}
       {positionM !== undefined && (
         <>
           <line x1={x(positionM)} x2={x(positionM)} y1={0} y2={height} stroke="#ffffff" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
-          <circle cx={x(positionM)} cy={yAt(positionM)} r={6} fill="#ffffff" stroke="#ff7a1a" strokeWidth={3} vectorEffect="non-scaling-stroke" />
+          <circle cx={x(positionM)} cy={yAt(positionM)} r={6} fill="#ffffff" stroke="#74c0fc" strokeWidth={3} vectorEffect="non-scaling-stroke" />
         </>
       )}
       {hover !== null && (

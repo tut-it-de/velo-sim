@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'de.tutit.velosim',
-  appName: 'Velo Sim',
+  appName: 'WFR',
   webDir: 'dist',
   ios: {
     contentInset: 'never',

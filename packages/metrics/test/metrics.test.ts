@@ -7,8 +7,10 @@ import {
   fitCrc,
   intensityFactor,
   kilojoules,
+  heartRateZone,
   normalizedPower,
   powerZone,
+  timeInHeartRateZones,
   timeInZones,
   trainingStressScore,
 } from '../src';
@@ -44,6 +46,13 @@ describe('power metrics', () => {
     expect(powerZone(230, 200).zone).toBe(5);
     expect(powerZone(300, 200).zone).toBe(6);
     expect(timeInZones([100, 200, 200, 300], 200)).toEqual([1, 0, 0, 2, 0, 1]);
+  });
+
+  it('heart rate zones by share of the maximum, gaps left out', () => {
+    expect(heartRateZone(100, 200).zone).toBe(1);
+    expect(heartRateZone(150, 200).zone).toBe(3);
+    expect(heartRateZone(190, 200).zone).toBe(5);
+    expect(timeInHeartRateZones([110, undefined, 130, 0, 175, 185], 200)).toEqual([1, 1, 0, 1, 1]);
   });
 });
 

@@ -81,6 +81,10 @@ try {
   const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
   const evaluate = async (expression) => (await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sessionId)).result.value;
   await send('Runtime.enable', {}, sessionId);
+  // a guest with an FTP: no login page, no FTP question in front of the world
+  await send('Page.navigate', { url: BASE }, sessionId);
+  await sleep(1500);
+  await evaluate(`localStorage.setItem('velo.settings.v1', JSON.stringify({ guest: true, ftp: 230, weightKg: 75 }))`);
   await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId);
   mkdirSync(OUT, { recursive: true });
 
