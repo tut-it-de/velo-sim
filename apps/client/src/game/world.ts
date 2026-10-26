@@ -211,6 +211,11 @@ export class GameWorld {
     this.others.get(id)?.vape();
   }
 
+  /** How many other riders the quality profile draws at most (classic worlds have none). */
+  get maxRiders(): number {
+    return this.quality?.riders ?? 14;
+  }
+
   /** Other riders (bots now, multiplayer later). */
   ensureRider(id: string, look: RiderLook): RiderAvatar {
     let r = this.others.get(id);

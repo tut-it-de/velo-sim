@@ -506,7 +506,7 @@ function RideView({
         w = created;
         const drawn = new Set<string>();
         const syncBots = () => {
-          const next = s.botsToDraw(drawn);
+          const next = s.botsToDraw(drawn, created.maxRiders);
           for (const b of s.bots) {
             if (next.has(b.id) && !drawn.has(b.id)) created.ensureRider(b.id, b.look);
             else if (!next.has(b.id) && drawn.has(b.id)) created.removeRider(b.id);

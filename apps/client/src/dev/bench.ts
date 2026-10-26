@@ -39,7 +39,7 @@ interface Velo {
     teleport(m: number): void;
     state: { speedMps: number; distanceM: number };
     bots: Bot[];
-    botsToDraw(drawn: ReadonlySet<string>): Set<string>;
+    botsToDraw(drawn: ReadonlySet<string>, max?: number): Set<string>;
   };
 }
 

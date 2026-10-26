@@ -561,9 +561,9 @@ export class RideSession {
 
   /**
    * Bots close enough to draw: up to `max` within `nearM`, keeping those already drawn up to `keepM`
-   * (50 full avatars would be too much for a tablet).
+   * (50 full avatars would be too much for a tablet; the quality profile sets `max`).
    */
-  botsToDraw(drawn: ReadonlySet<string>, nearM = 280, keepM = 380, max = 14): Set<string> {
+  botsToDraw(drawn: ReadonlySet<string>, max = 14, nearM = 280, keepM = 380): Set<string> {
     const near = this.bots
       .map((b) => ({ id: b.id, gap: Math.abs(b.state.distanceM - this.state.distanceM) }))
       .filter((b) => b.gap < (drawn.has(b.id) ? keepM : nearM))
