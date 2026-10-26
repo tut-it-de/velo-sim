@@ -40,7 +40,7 @@ const DEV = new URLSearchParams(location.search);
 const DEV_RIDE = ROUTES.some((r) => r.id === DEV.get('ride')) ? DEV.get('ride')! : null;
 
 export function RidePage({ view }: { view: 'ride' | 'workouts' }) {
-  const [phase, setPhase] = useState<Phase>(DEV_RIDE ? { kind: 'ride', routeId: DEV_RIDE, bots: false } : { kind: 'select' });
+  const [phase, setPhase] = useState<Phase>(DEV_RIDE ? { kind: 'ride', routeId: DEV_RIDE, bots: DEV.get('bots') === '1' } : { kind: 'select' });
 
   useEffect(() => {
     uiStore.set({ immersive: phase.kind === 'ride' });

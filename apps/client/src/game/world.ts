@@ -128,7 +128,7 @@ export class GameWorld {
     setupImagePipeline(this.scene, this.camera, quality);
     if (quality.level === 'ultra') this.speedBlur = new SpeedBlur(this.camera);
     this.real = await RealWorld.build(this.scene, this.track, quality, onProgress);
-    this.real.addRider(this.rider);
+    this.real.addRider(this.rider, true);
     onProgress?.('Shader werden kompiliert …');
   }
 

@@ -12,7 +12,7 @@ import {
 } from '@babylonjs/core';
 import type { Track } from '@velo/routes';
 import { buildRaceGates, type GateSite } from '../props';
-import type { RiderAvatar } from '../rider';
+import { BLOB_ALPHA, type RiderAvatar } from '../rider';
 import { buildBuildings } from './buildings';
 import { buildLandmarks } from './landmarks';
 import { LakeTraffic } from './lakeTraffic';
@@ -61,6 +61,9 @@ function lodMasters(meshes: Mesh[]): Mesh[] {
   return meshes.filter((m) => !children.has(m));
 }
 
+/** Riders with a real shadow at a time, my own included. */
+const SHADOW_RIDERS = 4;
+
 /**
  * The real-world scene for a route with map data (terrain from elevation models, OpenStreetMap
  * buildings, trees and streets, the lake with reflections, sky with clouds and rider shadows).
@@ -69,7 +72,10 @@ export class RealWorld {
   private shadow: ShadowGenerator | null = null;
   /** Cascaded shadows follow the camera; the single shadow map of the older profiles follows the sun. */
   private cascaded = false;
-  private readonly casters = new Set<Mesh>();
+  /** Riders drawn in the scene, my own, and those that cast a real shadow now. */
+  private readonly riders = new Set<RiderAvatar>();
+  private me: RiderAvatar | null = null;
+  private readonly casting = new Set<RiderAvatar>();
   /** 3D trees next to the road (hoch and ultra only). */
   private nearTrees: NearTrees | null = null;
   /** Sailing boats and the ferry on the lake (all levels except niedrig). */
@@ -238,27 +244,59 @@ export class RealWorld {
     return { lake: this.data.lake, places: this.data.places, attribution: this.data.attribution };
   }
 
-  /** Riders cast real shadows when the quality profile has shadow maps; the blob stays as contact shadow. */
-  addRider(avatar: RiderAvatar): void {
+  /**
+   * Riders cast real shadows when the quality profile has shadow maps: my own rider (`own`) and the few
+   * nearest others (see updateRiderShadows); the blob stays as contact shadow and is the only one of the rest.
+   */
+  addRider(avatar: RiderAvatar, own = false): void {
     if (!this.shadow) return;
-    (avatar.blob.material as { alpha: number }).alpha = 0.16;
-    const map = this.shadow.getShadowMap();
-    for (const m of avatar.bodyMeshes) {
-      if (this.casters.has(m)) continue;
-      this.casters.add(m);
-      map?.renderList?.push(m);
-    }
+    this.riders.add(avatar);
+    if (!own) return;
+    this.me = avatar;
+    // a shadow map with nothing in it never becomes ready, and the scene waits for it before the first frame
+    this.setCasting(avatar, true);
   }
 
   removeRider(avatar: RiderAvatar): void {
+    this.riders.delete(avatar);
+    this.setCasting(avatar, false);
+  }
+
+  /**
+   * Every caster is drawn a second time into the shadow map, and a rider is 15 draw calls: only me and the
+   * nearest SHADOW_RIDERS - 1 others within reach of the shadows cast one. Riders that already cast count as
+   * a bit nearer, so two riders at about the same distance do not swap their shadows back and forth.
+   */
+  private updateRiderShadows(rider: Vector3): void {
+    if (!this.shadow) return;
+    const reach = this.cascaded ? 30 : 14;
+    const near = [...this.riders]
+      .filter((a) => a !== this.me)
+      .map((a) => ({ a, d: Vector3.Distance(a.root.position, rider) * (this.casting.has(a) ? 0.85 : 1) }))
+      .filter((x) => x.d < reach)
+      .sort((x, y) => x.d - y.d)
+      .slice(0, SHADOW_RIDERS - 1);
+    const want = new Set(near.map((x) => x.a));
+    if (this.me) want.add(this.me);
+    for (const a of this.casting) if (!want.has(a)) this.setCasting(a, false);
+    for (const a of want) if (!this.casting.has(a)) this.setCasting(a, true);
+  }
+
+  private setCasting(avatar: RiderAvatar, on: boolean): void {
+    if (on === this.casting.has(avatar)) return;
     const list = this.shadow?.getShadowMap()?.renderList;
-    for (const m of avatar.bodyMeshes) {
-      this.casters.delete(m);
-      if (list) {
-        const k = list.indexOf(m);
-        if (k >= 0) list.splice(k, 1);
+    if (on) {
+      this.casting.add(avatar);
+      list?.push(...avatar.bodyMeshes);
+    } else {
+      this.casting.delete(avatar);
+      for (const m of avatar.bodyMeshes) {
+        const k = list?.indexOf(m) ?? -1;
+        if (k >= 0) list!.splice(k, 1);
       }
     }
+    // the blob is lighter under a real shadow
+    (avatar.blob.material as { alpha: number }).alpha = on ? 0.16 : BLOB_ALPHA;
   }
 
   /** Per frame: animated water and clouds, shadow frustum follows the rider. */
@@ -269,6 +307,7 @@ export class RealWorld {
     this.nearTrees?.update(camera);
     this.vegetation.setNearFade(camera, this.nearTrees?.fade ?? { inner: 0, outer: 0 });
     if (this.shadow && !this.cascaded) this.sun.position.copyFrom(rider).subtractInPlace(SUN_DIR.scale(70));
+    this.updateRiderShadows(rider);
   }
 
   /** Materials that animate every frame must not stay frozen after `scene.freezeMaterials()`. */

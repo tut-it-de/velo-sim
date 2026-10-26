@@ -5,6 +5,22 @@ import { VapeAction } from './avatar/vape';
 
 export interface RiderLook extends BikeLook, CyclistLook {}
 
+/** Opacity of the contact shadow where it is the only shadow. */
+export const BLOB_ALPHA = 0.28;
+
+/**
+ * Detail goes with the distance to the camera, in m: pedals and the small metal parts first, then the
+ * rims (the tyres stay) and the contact shadow, then saddle, bar and bottles and the helmet. A far rider
+ * is frame, tyres, body and limbs: 6 draw calls instead of 17.
+ */
+const LOD_DISTANCE: Array<[RegExp, number]> = [
+  [/-pedal-mesh$/, 25],
+  [/-(metal|wheel-metal|crankset)$/, 45],
+  [/-rim$/, 60],
+  [/-(parts|helmet)$/, 110],
+];
+const BLOB_DISTANCE = 60;
+
 /**
  * Cyclist on a road bike, both built procedurally from real frame geometry and body proportions.
  * Local frame: +z forward, y up, origin on the ground between the wheels. Legs follow the cranks via IK.
@@ -38,16 +54,17 @@ export class RiderAvatar {
     const sm = new StandardMaterial(`${name}-shadow`, scene);
     sm.diffuseColor = Color3.Black();
     sm.specularColor = Color3.Black();
-    sm.alpha = 0.28;
+    sm.alpha = BLOB_ALPHA;
     sm.zOffset = -4;
     shadow.material = sm;
     shadow.parent = this.root;
     this.blob = shadow;
+    shadow.addLODLevel(BLOB_DISTANCE, null);
 
     for (const m of this.root.getChildMeshes()) {
       m.isPickable = false;
-      // Small parts vanish with distance: chain, cassette, rotors, cranks and pedals.
-      if (m instanceof Mesh && /-(metal|wheel-metal|crankset|pedal-mesh)$/.test(m.name)) m.addLODLevel(m.name.endsWith('pedal-mesh') ? 25 : 45, null);
+      const lod = LOD_DISTANCE.find(([re]) => re.test(m.name));
+      if (lod && m instanceof Mesh) m.addLODLevel(lod[1], null);
     }
     this.updatePose();
   }
