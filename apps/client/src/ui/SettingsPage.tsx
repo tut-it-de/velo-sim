@@ -22,6 +22,7 @@ import { useStore } from '../state/store';
 import { pageStore } from '../state/ui';
 import { COUNTRIES, Flag } from './Flag';
 import { Toggle } from './components';
+import { trainerFeelGrade } from '../ride/rideSession';
 
 function NumberField({ k, min, max, step = 1 }: { k: keyof Settings; min: number; max: number; step?: number }) {
   const settings = useStore(settingsStore);
@@ -96,7 +97,9 @@ export function SettingsPage() {
               />
               <span>{Math.round(s.trainerDifficulty * 100)} %</span>
               <span className="muted small">
-                {s.trainerDifficulty === 0 ? 'flach – Steigungen nur optisch' : `8 % Steigung fühlen sich wie ${(8 * s.trainerDifficulty).toFixed(1)} % an`}
+                {s.trainerDifficulty === 0
+                  ? 'flach – Steigungen nur optisch'
+                  : `8 % bergauf fühlen sich wie ${trainerFeelGrade(8, s.trainerDifficulty).toFixed(1)} % an, 8 % bergab wie ${trainerFeelGrade(-8, s.trainerDifficulty).toFixed(1)} % (wie bei Zwift: bergab nur halb). Tempo und Zeit ändern sich nicht.`}
               </span>
             </div>
             <label>Kadenzquelle</label>

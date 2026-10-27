@@ -123,6 +123,11 @@ export const GEARS = Array.from({ length: 24 }, (_, i) => 0.75 * (5 / 0.75) ** (
 /** The gear that matches the plain route grade (ratio ≈ 2.3, like 50×22). */
 export const NEUTRAL_GEAR = GEARS.reduce((best, r, i) => (Math.abs(Math.log(r / 2.3)) < Math.abs(Math.log(GEARS[best - 1]! / 2.3)) ? i + 1 : best), 1);
 /** Grade offset in % for a gear: about −7 % in the easiest, +4.7 % in the heaviest. */
+/**
+ * Grade the trainer simulates, as in Zwift: uphill scaled by the trainer difficulty, downhill first
+ * halved and then scaled, so at the default 50 % a −8 % descent feels like −2 % and nobody spins out.
+ */
+export const trainerFeelGrade = (gradePercent: number, difficulty: number) => (gradePercent < 0 ? gradePercent / 2 : gradePercent) * difficulty;
 export const gearGradeOffset = (gear: number) => 6 * Math.log(GEARS[gear - 1]! / GEARS[NEUTRAL_GEAR - 1]!);
 const BIKE_LENGTH = 1.8;
 const RIDER_LATERAL = 1.4;
@@ -597,7 +602,7 @@ export class RideSession {
   private updateTrainer(gradePercent: number, now: number): void {
     if (!deviceManager.canSim) return;
     this.lastErgTarget = undefined;
-    const withGear = gradePercent * this.settings.trainerDifficulty + gearGradeOffset(this.gear);
+    const withGear = trainerFeelGrade(gradePercent, this.settings.trainerDifficulty) + gearGradeOffset(this.gear);
     const scaled = Math.round(Math.min(20, Math.max(-10, withGear)) * 10) / 10;
     const changed = this.lastTrainerGrade === undefined || Math.abs(scaled - this.lastTrainerGrade) >= 0.2;
     if (now - this.lastTrainerUpdate < 1000 || (!changed && now - this.lastTrainerUpdate < 5000)) return;
