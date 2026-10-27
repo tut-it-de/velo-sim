@@ -217,9 +217,12 @@ function AccountCard() {
       <div className="card">
         <h2>Konto</h2>
         <p className="muted small">Du fährst als Gast: Fahrten, Garage und Watt-Taler bleiben nur auf diesem Gerät. Mit Konto folgen sie dir auf jedes Gerät.</p>
-        <button className="primary" onClick={() => pageStore.set('login')}>
-          Anmelden oder Konto erstellen
-        </button>
+        <div className="row">
+          <button className="primary" onClick={() => pageStore.set('login')}>
+            Anmelden oder Konto erstellen
+          </button>
+          <button onClick={() => logout()}>Abmelden</button>
+        </div>
       </div>
     );
   }
