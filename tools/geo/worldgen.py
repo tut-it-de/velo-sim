@@ -82,6 +82,9 @@ class Config:
     # Building palette in the client: 'italian' | 'german' | 'alpine'
     architecture: str = 'german'
     max_grade: float = 0.14
+    # extra smoothing of the road profile (Gaussian σ in metres along the lap; 0 = none), for flat worlds
+    # where the terrain model's noise would otherwise add up to many small climbs
+    road_smooth_m: float = 0.0
     road_classes: set[str] = field(default_factory=lambda: set(ROAD_CLASSES))
     near_margin: float = 3000.0
     near_step: float = 12.0
@@ -760,6 +763,8 @@ def build(cfg: Config, make_lap: Callable, make_segments: Callable[[Context], li
 
     # ---- road profile (needs the land classes)
     elev = unify_passes(path, road_profile(path, near_dem, near, lake_local))
+    if cfg.road_smooth_m > 0:
+        elev = circular_gauss(elev, cfg.road_smooth_m / STEP)
     elev = circular_gauss(limit_grade(elev, cfg.max_grade * STEP), 2.0)
 
     # ---- segments

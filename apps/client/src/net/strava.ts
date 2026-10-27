@@ -23,6 +23,10 @@ export interface StravaUpload {
 
 // Kept on the device, so a ride offline still knows that it should go to Strava later.
 export const stravaStore = new Store<StravaStatus>(loadJson('velo.strava.v1', { configured: false, connected: false }));
+// signed out: no Strava connection shown on this device any more (it stays with the account on the server)
+accountStore.subscribe(() => {
+  if (!accountStore.get().user && stravaStore.get().connected) stravaStore.set({ ...stravaStore.get(), connected: false, athleteName: undefined });
+});
 stravaStore.subscribe(() => saveJson('velo.strava.v1', stravaStore.get()));
 
 const OFFLINE = 'Server nicht erreichbar';

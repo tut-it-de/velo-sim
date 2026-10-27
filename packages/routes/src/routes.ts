@@ -2,6 +2,7 @@ import { TAUNUS_MAMMOLSHAIN_LENGTH_M, TAUNUS_MAMMOLSHAIN_PATH, TAUNUS_MAMMOLSHAI
 import { ALPE_D_HUEZ_LENGTH_M, ALPE_D_HUEZ_PATH, ALPE_D_HUEZ_SEGMENTS } from './data/alpeDHuez';
 import { FELDBERG_TAUNUS_LENGTH_M, FELDBERG_TAUNUS_PATH, FELDBERG_TAUNUS_SEGMENTS } from './data/feldbergTaunus';
 import { LAGO_DI_COMO_LENGTH_M, LAGO_DI_COMO_PATH, LAGO_DI_COMO_SEGMENTS } from './data/lagoDiComo';
+import { MOENCHBRUCH_LENGTH_M, MOENCHBRUCH_PATH, MOENCHBRUCH_SEGMENTS } from './data/moenchbruch';
 import { Track } from './track';
 import type { RouteDefinition, RoutePath } from './types';
 
@@ -214,6 +215,19 @@ export const TAUNUS_MAMMOLSHAIN: RouteDefinition = {
   segments: TAUNUS_MAMMOLSHAIN_SEGMENTS,
 };
 
+export const MOENCHBRUCH: RouteDefinition = {
+  id: 'moenchbruch',
+  name: 'Mönchbruch-Runde',
+  description:
+    'Flache Runde in der Rhein-Main-Ebene ab Mörfelden: durch den Wald des Mönchbruchs Richtung Rüsselsheim-Königstädten, über Nauheim und Groß-Gerau zurück. Kaum Höhenmeter, viel Wald – zum Rollen, für Tempo und Intervalle.',
+  region: 'Hessisches Ried · Deutschland',
+  style: 'hills',
+  lengthM: MOENCHBRUCH_LENGTH_M,
+  path: decodePath(MOENCHBRUCH_PATH),
+  world: 'moenchbruch',
+  segments: MOENCHBRUCH_SEGMENTS,
+};
+
 // --- Fantasy circuits: invented worlds in the style of kart racers -----------------------------
 
 export const REGENBOGEN_BOULEVARD: RouteDefinition = {
@@ -370,6 +384,7 @@ export const ROUTES: RouteDefinition[] = [
   FELDBERG_TAUNUS,
   TAUNUS_MAMMOLSHAIN,
   ALPE_D_HUEZ,
+  MOENCHBRUCH,
   KUESTENRUNDE,
   HUEGELRUNDE,
   BERGRUNDE,

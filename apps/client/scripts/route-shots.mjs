@@ -20,6 +20,7 @@ const SHOTS = {
   'feldberg-taunus': 9.5,
   'alpe-dhuez': 9,
   'taunus-mammolshain': 7.5,
+  moenchbruch: 4,
   kuestenrunde: 1.6,
   huegelrunde: 9.8,
   bergrunde: 5.5,

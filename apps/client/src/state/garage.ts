@@ -34,6 +34,11 @@ const DEFAULT: GarageState = {
 export const garageStore = new Store<GarageState>(loadJson(KEY, DEFAULT));
 garageStore.subscribe(() => saveJson(KEY, garageStore.get()));
 
+/** Back to the starter kit (signing out: the next rider on this device starts fresh). */
+export function resetGarage(): void {
+  garageStore.set({ ...DEFAULT, loadout: { ...DEFAULT.loadout } });
+}
+
 export function balance(state = garageStore.get()): number {
   if (settingsStore.get().adminMode) return Infinity;
   return state.ledger.reduce((a, e) => a + e.amount, 0);

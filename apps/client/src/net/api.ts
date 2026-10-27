@@ -1,10 +1,11 @@
 import type { Loadout } from '@velo/equipment';
-import { garageStore, type GarageState } from '../state/garage';
-import { settingsStore } from '../state/settings';
+import { garageStore, resetGarage, type GarageState } from '../state/garage';
+import { DEFAULT_SETTINGS, settingsStore } from '../state/settings';
+import { recordsStore } from '../state/records';
 import { Store, loadJson, saveJson } from '../state/store';
 import { fixedServer } from './serverUrl';
 import { applyRemoteFtp, ftpStore, onFtpChange } from '../ftp/ftpStore';
-import type { FtpState } from '../ftp/advisor';
+import { EMPTY_FTP_STATE, type FtpState } from '../ftp/advisor';
 
 export interface AccountUser {
   id: string;
@@ -107,8 +108,19 @@ export async function renameAccount(name: string): Promise<void> {
   accountStore.set({ ...accountStore.get(), user: r.user });
 }
 
+/**
+ * Signs out for real: forgets the token and everything personal on this device (name, body data, FTP,
+ * garage, bests); the rides stay in the account and come back on the next sign-in. Device settings
+ * (graphics, trainer, data fields) stay. Back on the sign-in page, not as a guest.
+ */
 export function logout(): void {
   accountStore.set({});
+  const s = settingsStore.get();
+  const d = DEFAULT_SETTINGS;
+  settingsStore.set({ ...s, riderName: d.riderName, country: d.country, weightKg: d.weightKg, heightCm: d.heightCm, ftp: 0, maxHeartRate: 0, guest: false, adminMode: false });
+  ftpStore.set({ ...EMPTY_FTP_STATE });
+  recordsStore.set({});
+  resetGarage();
 }
 
 export const isAdminUser = (state: AccountState = accountStore.get()) => !!state.user?.admin;
